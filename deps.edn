@@ -1,0 +1,13 @@
+{:paths ["src" "resources"]
+ :deps {org.clojure/clojure {:mvn/version "1.12.1"}
+        com.github.seancorfield/next.jdbc {:mvn/version "1.3.1070"}
+        org.postgresql/postgresql {:mvn/version "42.7.8"}}
+ :aliases
+ {:dev {:extra-paths ["dev"]}
+  :lint {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2025.10.23"}}
+         :main-opts ["-m" "clj-kondo.main"]}
+  :script {:extra-paths ["scripts"]}
+  :test {:extra-paths ["test"]
+         :main-opts ["-m" "bisql.test-runner"]}
+  :test-db {:extra-paths ["test"]
+            :main-opts ["-m" "bisql.test-db-runner"]}}}

@@ -1,0 +1,49 @@
+{:paths ["src" "scripts" "resources"]
+ :min-bb-version "1.3.189"
+ :deps {dev.weavejester/cljfmt {:mvn/version "0.16.3"}}
+ :tasks
+ {:init (do
+          (def source-paths ["src" "test" "scripts"]))
+
+  lint {:doc "Run clj-kondo on project sources"
+        :task (apply clojure "-M:lint" "--lint" source-paths)}
+
+  format {:doc "Fix Clojure formatting with cljfmt"
+          :requires ([cljfmt.report :as report]
+                     [cljfmt.tool :as fmt])
+          :task (fmt/fix {:paths source-paths
+                          :report report/clojure})}
+
+  format-check {:doc "Check Clojure formatting with cljfmt"
+                :requires ([cljfmt.report :as report]
+                           [cljfmt.tool :as fmt])
+                :task (fmt/check {:paths source-paths
+                                  :report report/clojure})}
+
+  test {:doc "Run tests"
+        :task (clojure "-M:test")}
+
+  test-db {:doc "Reset sample schema and run integration tests against local PostgreSQL"
+           :depends [db-reset]
+           :task (clojure "-M:test-db")}
+
+  verify {:doc "Run format check, lint, and tests"
+          :depends [format-check lint test]}
+
+  fix {:doc "Run format, lint, and tests"
+       :depends [format lint test]}
+
+  db-reset {:doc "Reset local PostgreSQL sample schema and seed data"
+            :task (shell "bb scripts/db/reset_postgres_sample.bb")}
+
+  crud-generate {:doc "Generate CRUD SQL files from local PostgreSQL"
+                 :task (clojure "-M:script" "-m" "db.generate-crud-files")}
+
+  demo {:doc "Run example scripts for manual verification"
+        :task (shell "bb scripts/demo/core.bb")}
+
+  demo-preview {:doc "Write demo output to docs/rendering-examples.md and open it"
+                :task (do
+                        (shell "mkdir" "-p" "docs")
+                        (shell "sh" "-lc" "printf '# Rendering Examples\n' > docs/rendering-examples.md && bb scripts/demo/core.bb >> docs/rendering-examples.md")
+                        (shell "open" "docs/rendering-examples.md"))}}}

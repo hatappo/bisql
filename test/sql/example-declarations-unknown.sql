@@ -1,0 +1,4 @@
+/*:foo
+bar
+*/
+SELECT 1
