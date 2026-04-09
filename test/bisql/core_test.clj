@@ -8,12 +8,12 @@
 (bisql/defrender "/sql/example-multi-queries.sql")
 
 (defn- query-fn
-  [sym]
-  (var-get (ns-resolve 'bisql.core-test sym)))
+  [ns-sym sym]
+  (var-get (ns-resolve ns-sym sym)))
 
 (defn- query-var-meta
-  [sym]
-  (meta (ns-resolve 'bisql.core-test sym)))
+  [ns-sym sym]
+  (meta (ns-resolve ns-sym sym)))
 
 (deftest public-api-vars-exist
   (testing "core namespace exposes the planned public API"
@@ -44,19 +44,19 @@
            (str/trim (:sql-template result))))))
 
 (deftest defrender-defines-a-render-function
-  (let [result ((query-fn 'example-declarations-valid) {:id 42})]
+  (let [result ((query-fn 'sql 'example-declarations-valid) {:id 42})]
     (is (= "SELECT * FROM users WHERE id = ?" (:sql result)))
     (is (= [42] (:params result)))
     (is (= "example-declarations-valid" (:query-name result)))))
 
 (deftest defrender-attaches-template-metadata-to-var
-  (let [metadata (query-var-meta 'get-by-id)]
+  (let [metadata (query-var-meta 'sql.postgresql.public.users 'get-by-id)]
     (is (= "get-by-id" (:query-name metadata)))
     (is (= "sql/postgresql/public/users/get-by-id.sql" (:resource-path metadata)))
     (is (= "SELECT * FROM users WHERE id = /*$id*/ 1" (str/trim (:sql-template metadata))))))
 
 (deftest defrender-merges-declarations-into-var-metadata
-  (let [metadata (query-var-meta 'example-declarations-valid)]
+  (let [metadata (query-var-meta 'sql 'example-declarations-valid)]
     (is (= "Loads a user by id." (:doc metadata)))
     (is (= :one (:cardinality metadata)))
     (is (= [:example :user] (:tags metadata)))
@@ -64,15 +64,15 @@
     (is (= "example-declarations-valid" (:query-name metadata)))))
 
 (deftest defrender-defines-one-function-per-query
-  (let [by-id ((query-fn 'find-user-by-id) {:id 42})
-        by-email ((query-fn 'find-user-by-email) {:email "user@example.com"})]
+  (let [by-id ((query-fn 'sql 'find-user-by-id) {:id 42})
+        by-email ((query-fn 'sql 'find-user-by-email) {:email "user@example.com"})]
     (is (= "SELECT * FROM users WHERE id = ?" (:sql by-id)))
     (is (= [42] (:params by-id)))
     (is (= "SELECT * FROM users WHERE email = ?" (:sql by-email)))
     (is (= ["user@example.com"] (:params by-email)))))
 
 (deftest defrender-attaches-query-declarations-to-var-metadata
-  (let [metadata (query-var-meta 'find-user-by-email)]
+  (let [metadata (query-var-meta 'sql 'find-user-by-email)]
     (is (= "find-user-by-email" (:query-name metadata)))
     (is (= 'find-user-by-email (:name metadata)))))
 
@@ -103,7 +103,7 @@
 
 (deftest defrender-rejects-var-name-collisions-when-loading-a-directory
   (let [error (try
-                (let [_ (macroexpand '(bisql.core/defrender "/sql/directory-collision"))]
+                (let [_ (macroexpand '(bisql.core/defrender "/sql/directory-collision-same-namespace"))]
                   nil)
                 (catch clojure.lang.ExceptionInfo ex
                   ex)
@@ -113,12 +113,12 @@
     (is (= "Multiple queries resolve to the same var name."
            (ex-message error)))
     (is (= 'get-by-id (:var-name data)))
-    (is (some #{"sql/directory-collision/a/get-by-id.sql"} (:resource-paths data)))
-    (is (some #{"sql/directory-collision/b/get-by-id.sql"} (:resource-paths data)))))
+    (is (some #{"sql/directory-collision-same-namespace/first.sql"} (:resource-paths data)))
+    (is (some #{"sql/directory-collision-same-namespace/second.sql"} (:resource-paths data)))))
 
 (deftest defrender-rejects-var-name-collisions
   (let [error (try
-                (binding [*ns* (the-ns 'bisql.core-test)]
+                (binding [*ns* (the-ns 'sql.postgresql.public.users)]
                   (eval '(bisql.core/defrender "/sql/postgresql/public/users/get-by-id.sql")))
                 nil
                 (catch clojure.lang.Compiler$CompilerException ex

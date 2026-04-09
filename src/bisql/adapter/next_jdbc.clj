@@ -49,15 +49,20 @@
   ([]
    (let [ns-sym (ns-name *ns*)
          entries (define/definition-entries ns-sym nil)]
-     (define/ensure-unique-var-names! ns-sym entries)
-     `(do ~@(mapv (fn [{:keys [template var-name metadata]}]
-                    `(def ~(with-meta var-name metadata)
-                       (with-meta
-                         (fn
-                           ([datasource#] (exec! datasource# (with-meta ~template ~metadata) {}))
-                           ([datasource# template-params#]
-                            (exec! datasource# (with-meta ~template ~metadata) template-params#)))
-                         ~metadata)))
+     (define/ensure-unique-var-names! entries)
+     `(do ~@(mapv (fn [{:keys [template target-ns var-name metadata]}]
+                    (let [template-data (list 'quote template)
+                          metadata-data (list 'quote metadata)]
+                      `(define/define-function-var!
+                         '~target-ns
+                         '~var-name
+                         ~metadata-data
+                         (with-meta
+                           (fn
+                             ([datasource#] (exec! datasource# (with-meta ~template-data ~metadata-data) {}))
+                             ([datasource# template-params#]
+                              (exec! datasource# (with-meta ~template-data ~metadata-data) template-params#)))
+                           ~metadata-data))))
                   entries))))
   ([path]
    (when-not (string? path)
@@ -77,13 +82,18 @@
                       :type (type options)})))
    (let [ns-sym (ns-name *ns*)
          entries (define/definition-entries ns-sym path)]
-     (define/ensure-unique-var-names! ns-sym entries)
-     `(do ~@(mapv (fn [{:keys [template var-name metadata]}]
-                    `(def ~(with-meta var-name metadata)
-                       (with-meta
-                         (fn
-                           ([datasource#] (exec! datasource# (with-meta ~template ~metadata) {}))
-                           ([datasource# template-params#]
-                            (exec! datasource# (with-meta ~template ~metadata) template-params#)))
-                         ~metadata)))
+     (define/ensure-unique-var-names! entries)
+     `(do ~@(mapv (fn [{:keys [template target-ns var-name metadata]}]
+                    (let [template-data (list 'quote template)
+                          metadata-data (list 'quote metadata)]
+                      `(define/define-function-var!
+                         '~target-ns
+                         '~var-name
+                         ~metadata-data
+                         (with-meta
+                           (fn
+                             ([datasource#] (exec! datasource# (with-meta ~template-data ~metadata-data) {}))
+                             ([datasource# template-params#]
+                              (exec! datasource# (with-meta ~template-data ~metadata-data) template-params#)))
+                           ~metadata-data))))
                   entries)))))

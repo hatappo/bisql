@@ -16,27 +16,44 @@
   [query-name]
   (symbol query-name))
 
+(defn- target-namespace-symbol
+  [resource-path]
+  (let [parent-path (some-> resource-path io/file .getParent str)
+        namespace-path (some-> parent-path
+                              (str/replace "\\" "/")
+                              (str/replace "/" ".")
+                              (str/replace "_" "-"))]
+    (symbol namespace-path)))
+
 (defn ensure-var-name-available!
-  [ns-sym var-name resource-path query-name]
-  (when-let [existing (ns-resolve ns-sym var-name)]
-    (throw (ex-info "Query function var name already exists."
-                    {:namespace (str ns-sym)
-                     :var-name var-name
-                     :resource-path resource-path
-                     :query-name query-name
-                     :existing existing}))))
+  [target-ns var-name resource-path query-name]
+  (when-let [ns-obj (find-ns target-ns)]
+    (when-let [existing (ns-resolve ns-obj var-name)]
+      (throw (ex-info "Query function var name already exists."
+                      {:namespace (str target-ns)
+                       :var-name var-name
+                       :resource-path resource-path
+                       :query-name query-name
+                       :existing existing})))))
 
 (defn ensure-unique-var-names!
-  [ns-sym entries]
-  (doseq [[var-name grouped] (group-by :var-name entries)]
+  [entries]
+  (doseq [[[target-ns var-name] grouped] (group-by (juxt :target-ns :var-name) entries)]
     (when (> (count grouped) 1)
       (throw (ex-info "Multiple queries resolve to the same var name."
-                      {:namespace (str ns-sym)
+                      {:namespace (str target-ns)
                        :var-name var-name
                        :resource-paths (mapv :resource-path grouped)
                        :query-names (mapv :query-name grouped)})))
     (let [{:keys [resource-path query-name]} (first grouped)]
-      (ensure-var-name-available! ns-sym var-name resource-path query-name))))
+      (ensure-var-name-available! target-ns var-name resource-path query-name))))
+
+(defn define-function-var!
+  [target-ns var-name metadata f]
+  (let [ns-obj (or (find-ns target-ns) (create-ns target-ns))
+        v (intern ns-obj (with-meta var-name metadata) f)]
+    (alter-meta! v merge metadata)
+    v))
 
 (defn- sql-filename?
   [path]
@@ -102,9 +119,11 @@
   (->> (templates-for-definition ns-sym path)
        (mapv (fn [template]
                (let [analyzed-template (query/analyze-template template)
+                     target-ns (target-namespace-symbol (:resource-path analyzed-template))
                      var-name (var-symbol-from-query-name (:query-name analyzed-template))
                      metadata (query-function-metadata analyzed-template)]
                  {:template analyzed-template
+                  :target-ns target-ns
                   :var-name var-name
                   :metadata metadata
                   :resource-path (:resource-path analyzed-template)

@@ -542,7 +542,8 @@ classpath 上の `sql/...` から SQL ファイルを読み込み、パース済
 その namespace 由来ディレクトリ配下として解決する。`/` から始まるパスを渡した
 場合は classpath root からの絶対パスとして解決する。ファイルではなくディレクトリを
 渡した場合は、その配下の `.sql` ファイルを再帰的に走査し、見つかった query を
-すべて定義する。
+すべて定義する。現在の namespace は探索起点に使うだけで、実際の関数は見つかった
+SQL ファイルのパスから導出される namespace に定義される。
 
 `defrender` が `query-name` を解決する優先順位は次のとおり:
 
@@ -562,9 +563,11 @@ classpath 上の `sql/...` から SQL ファイルを読み込み、パース済
 例:
 
 ```clojure
-(require '[bisql.adapter.next-jdbc :as bisql.jdbc])
+(ns sql.postgresql.public.users
+  (:require [bisql.core :as bisql]
+            [bisql.adapter.next-jdbc :as bisql.jdbc]))
 
-(defquery "/sql/postgresql/public/users/users-crud.sql")
+(bisql/defquery)
 
 (bisql.jdbc/exec! datasource get-by-id {:id 42})
 ```

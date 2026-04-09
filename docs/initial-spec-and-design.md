@@ -533,7 +533,9 @@ and loads every `.sql` file under that directory recursively. When a relative
 path is passed, it is resolved under that namespace-derived directory. When a
 path starts with `/`, it is resolved from the classpath root. If a directory is
 passed instead of a file, it loads every `.sql` file under that directory
-recursively and defines all queries found there.
+recursively and defines all queries found there. The current namespace is only
+used to discover files. Each discovered SQL file defines its functions into the
+namespace derived from that SQL file path.
 
 `defrender` resolves `query-name` with this priority:
 
@@ -554,9 +556,11 @@ Execution lives behind adapter namespaces.
 Example:
 
 ```clojure
-(require '[bisql.adapter.next-jdbc :as bisql.jdbc])
+(ns sql.postgresql.public.users
+  (:require [bisql.core :as bisql]
+            [bisql.adapter.next-jdbc :as bisql.jdbc]))
 
-(defquery "/sql/postgresql/public/users/users-crud.sql")
+(bisql/defquery)
 
 (bisql.jdbc/exec! datasource get-by-id {:id 42})
 ```
