@@ -334,6 +334,9 @@ so the `core` namespace can stay focused on loading, analyzing, rendering, and f
 `next.jdbc/execute!` from the query function metadata's `:cardinality` value.
 If `:cardinality` is not specified, it defaults to `:many`.
 
+For scalar bind variables, `bisql/default` renders SQL `DEFAULT` and `bisql/ALL`
+renders SQL `ALL`. This is useful for patterns such as `LIMIT ALL`.
+
 ## TODO
 
 - Restrict `bisql/default` to valid SQL value contexts if context-aware rendering becomes necessary.

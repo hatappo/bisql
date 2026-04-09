@@ -19,6 +19,9 @@
 (def default
   query/default)
 
+(def ALL
+  query/ALL)
+
 (def generate-crud
   crud/generate-crud)
 

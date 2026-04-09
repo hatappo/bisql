@@ -24,6 +24,7 @@
     (is (:macro (meta #'bisql/defrender)))
     (is (:macro (meta #'bisql/defquery)))
     (is (some? bisql/default))
+    (is (some? bisql/ALL))
     (is (fn? bisql/generate-crud))
     (is (fn? bisql/render-crud-files))
     (is (fn? bisql/write-crud-files!))
@@ -157,6 +158,13 @@
     (is (= "INSERT INTO users (email, status) VALUES (?, DEFAULT)" (:sql result)))
     (is (= ["alice@example.com"] (:params result)))))
 
+(deftest render-query-supports-all-bind-value
+  (let [result (bisql/render-query
+                {:sql-template "SELECT * FROM users LIMIT /*$limit*/100"}
+                {:limit bisql/ALL})]
+    (is (= "SELECT * FROM users LIMIT ALL" (:sql result)))
+    (is (= [] (:params result)))))
+
 (deftest render-query-supports-literal-string-binding
   (let [result (bisql/render-query
                 {:sql-template "SELECT * FROM users WHERE type = /*^type*/'A'"}
@@ -229,6 +237,20 @@
                 (catch clojure.lang.ExceptionInfo ex
                   ex))]
     (is (= "DEFAULT is not allowed inside collection binding."
+           (ex-message error)))
+    (is (= :ids (:parameter (ex-data error))))
+    (is (= "$" (:sigil (ex-data error))))
+    (is (= true (:collection? (ex-data error))))))
+
+(deftest render-query-rejects-all-in-collection-binding
+  (let [error (try
+                (bisql/render-query
+                 {:sql-template "SELECT * FROM users WHERE id IN /*$ids*/(1,2,3)"}
+                 {:ids [1 bisql/ALL 3]})
+                nil
+                (catch clojure.lang.ExceptionInfo ex
+                  ex))]
+    (is (= "ALL is not allowed inside collection binding."
            (ex-message error)))
     (is (= :ids (:parameter (ex-data error))))
     (is (= "$" (:sigil (ex-data error))))

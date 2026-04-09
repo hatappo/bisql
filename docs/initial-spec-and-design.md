@@ -161,6 +161,21 @@ INSERT INTO users (status) VALUES (/*$status*/'active')
 INSERT INTO users (status) VALUES (DEFAULT)
 ```
 
+### `ALL`
+
+When a scalar bind variable receives `bisql/ALL`, it is rendered as SQL `ALL`
+instead of `?`.
+
+```clojure
+{:limit bisql/ALL}
+```
+
+Example:
+
+```sql
+SELECT * FROM users LIMIT ALL
+```
+
 Initial implementation notes:
 
 - Supported only for scalar `$` bindings

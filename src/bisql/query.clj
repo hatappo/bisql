@@ -10,6 +10,9 @@
 (def default
   (Object.))
 
+(def ALL
+  (Object.))
+
 (def ^:private missing ::missing)
 
 (defn- skip-leading-whitespace
@@ -348,6 +351,10 @@
   [value]
   (identical? value default))
 
+(defn- all-value?
+  [value]
+  (identical? value ALL))
+
 (defn- render-bind-variable
   [template-params parameter-name collection?]
   (let [value (parameter-value template-params parameter-name)]
@@ -355,6 +362,10 @@
       (do
         (when (default-value? value)
           (throw (ex-info "DEFAULT is not allowed in collection binding."
+                          {:parameter (parameter-key parameter-name)
+                           :value value})))
+        (when (all-value? value)
+          (throw (ex-info "ALL is not allowed in collection binding."
                           {:parameter (parameter-key parameter-name)
                            :value value})))
         (when-not (sequential? value)
@@ -365,6 +376,10 @@
           (throw (ex-info "DEFAULT is not allowed inside collection binding."
                           {:parameter (parameter-key parameter-name)
                            :value value})))
+        (when (some all-value? value)
+          (throw (ex-info "ALL is not allowed inside collection binding."
+                          {:parameter (parameter-key parameter-name)
+                           :value value})))
         (when (empty? value)
           (throw (ex-info "Collection binding does not allow empty values."
                           {:parameter (parameter-key parameter-name)})))
@@ -372,9 +387,14 @@
                    (str/join ", " (repeat (count value) "?"))
                    ")")
          :params (vec value)})
-      (if (default-value? value)
+      (cond
+        (default-value? value)
         {:sql "DEFAULT"
          :params []}
+        (all-value? value)
+        {:sql "ALL"
+         :params []}
+        :else
         {:sql "?"
          :params [value]}))))
 
