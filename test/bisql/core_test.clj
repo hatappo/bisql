@@ -834,3 +834,25 @@
            (ex-message error)))
     (is (= :items (:parameter (ex-data error))))
     (is (= :item (:item (ex-data error))))))
+
+(deftest render-query-rejects-empty-for-block-in-values-clause
+  (let [error (try
+                (bisql/render-query
+                 {:sql-template (str/join "\n"
+                                          ["INSERT INTO users (email, status)"
+                                           "VALUES"
+                                           "/*%for row in rows */"
+                                           "("
+                                           "  /*$row.email*/'a@example.com',"
+                                           "  /*$row.status*/'active'"
+                                           "),"
+                                           "/*%end */"
+                                           "RETURNING *"])}
+                 {:rows []})
+                nil
+                (catch clojure.lang.ExceptionInfo ex
+                  ex))]
+    (is (= "Empty for block is not allowed in VALUES clause."
+           (ex-message error)))
+    (is (= :rows (:parameter (ex-data error))))
+    (is (= :row (:item (ex-data error))))))

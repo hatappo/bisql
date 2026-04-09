@@ -54,6 +54,7 @@
       (is (= "postgresql" (:dialect result)))
       (is (= "public" (:schema result)))
       (is (contains? names "insert"))
+      (is (contains? names "insert-many"))
       (is (contains? names "update-by-id"))
       (is (contains? names "update-by-email"))
       (is (contains? names "delete-by-id"))
@@ -99,6 +100,34 @@
                       "  /*$total-amount*/1,\n"
                       "  /*$created-at*/CURRENT_TIMESTAMP\n"
                       ")\n"
+                      "RETURNING *")
+                 (:sql-template template)))))
+      (testing "insert-many template renders bulk values with for rows"
+        (let [template (some #(when (and (= "orders" (:table %))
+                                         (= "insert-many" (:name %)))
+                                %)
+                             templates)]
+          (is (= "insert-many" (:query-name template)))
+          (is (= {:cardinality :many} (:meta template)))
+          (is (= ["user_id" "order_number" "state" "total_amount" "created_at"]
+                 (:columns template)))
+          (is (= (str "INSERT INTO orders (\n"
+                      "  user_id,\n"
+                      "  order_number,\n"
+                      "  state,\n"
+                      "  total_amount,\n"
+                      "  created_at\n"
+                      ")\n"
+                      "VALUES\n"
+                      "/*%for row in rows */\n"
+                      "(\n"
+                      "  /*$row.user-id*/1,\n"
+                      "  /*$row.order-number*/'sample',\n"
+                      "  /*$row.state*/'sample',\n"
+                      "  /*$row.total-amount*/1,\n"
+                      "  /*$row.created-at*/CURRENT_TIMESTAMP\n"
+                      "),\n"
+                      "/*%end */\n"
                       "RETURNING *")
                  (:sql-template template)))))
       (testing "update template uses plain bind variables"
@@ -232,9 +261,13 @@
                                   :meta {:cardinality :one}
                                   :sql-template "SELECT * FROM users WHERE id = /*$id*/1"}
                                  {:table "users"
-                                  :name "insert"
+                                 :name "insert"
                                   :meta {:cardinality :one}
                                   :sql-template "INSERT INTO users (...) VALUES (...) RETURNING *"}
+                                 {:table "users"
+                                  :name "insert-many"
+                                  :meta {:cardinality :many}
+                                  :sql-template "INSERT INTO users (...) VALUES /*%for row in rows */(...),/*%end */ RETURNING *"}
                                  {:table "orders"
                                   :name "get-by-id"
                                   :meta {:cardinality :one}
@@ -253,7 +286,10 @@
                 "SELECT * FROM users WHERE id = /*$id*/1\n\n"
                 "/*:name insert */\n"
                 "/*:cardinality :one */\n"
-                "INSERT INTO users (...) VALUES (...) RETURNING *")
+                "INSERT INTO users (...) VALUES (...) RETURNING *\n\n"
+                "/*:name insert-many */\n"
+                "/*:cardinality :many */\n"
+                "INSERT INTO users (...) VALUES /*%for row in rows */(...),/*%end */ RETURNING *")
            (:content users-file)))
     (is (= (str "/*:name get-by-id */\n"
                 "/*:cardinality :one */\n"
@@ -288,9 +324,13 @@
                                   :meta {:cardinality :one}
                                   :sql-template "SELECT * FROM users WHERE id = /*$id*/1"}
                                  {:table "users"
-                                  :name "insert"
+                                 :name "insert"
                                   :meta {:cardinality :one}
                                   :sql-template "INSERT INTO users (...) VALUES (...) RETURNING *"}
+                                 {:table "users"
+                                  :name "insert-many"
+                                  :meta {:cardinality :many}
+                                  :sql-template "INSERT INTO users (...) VALUES /*%for row in rows */(...),/*%end */ RETURNING *"}
                                  {:table "orders"
                                   :name "get-by-id"
                                   :meta {:cardinality :one}

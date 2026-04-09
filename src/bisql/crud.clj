@@ -279,6 +279,30 @@
     ")"
     "RETURNING *"]))
 
+(defn- insert-many-template
+  [table columns]
+  (str/join
+   "\n"
+   [(str "INSERT INTO " table " (")
+    (str/join "\n" (map-indexed (fn [idx column]
+                                  (str "  "
+                                       (:column_name column)
+                                       (when (< idx (dec (count columns))) ",")))
+                                columns))
+    ")"
+    "VALUES"
+    "/*%for row in rows */"
+    "("
+    (str/join "\n" (map-indexed (fn [idx column]
+                                  (str "  "
+                                       "/*$row." (kebab-name (:column_name column)) "*/"
+                                       (sample-token column)
+                                       (when (< idx (dec (count columns))) ",")))
+                                columns))
+    "),"
+    "/*%end */"
+    "RETURNING *"]))
+
 (defn- delete-template
   [table predicate-columns]
   (str/join "\n"
@@ -309,17 +333,24 @@
              (where-clause predicate-columns)
              "RETURNING *"]))
 
-(defn- generate-insert-template
+(defn- generate-insert-templates
   [schema table columns]
   (let [insert-columns (filterv insertable-column? columns)]
     (when (seq insert-columns)
-      (named-template-entry schema
-                            table
-                            :insert
-                            "insert"
-                            (mapv :column_name insert-columns)
-                            (insert-template table insert-columns)
-                            :meta {:cardinality :one}))))
+      [(named-template-entry schema
+                             table
+                             :insert
+                             "insert"
+                             (mapv :column_name insert-columns)
+                             (insert-template table insert-columns)
+                             :meta {:cardinality :one})
+       (named-template-entry schema
+                             table
+                             :insert
+                             "insert-many"
+                             (mapv :column_name insert-columns)
+                             (insert-many-template table insert-columns)
+                             :meta {:cardinality :many})])))
 
 (defn- generate-delete-templates
   [schema table columns-by-name unique-column-groups]
@@ -504,8 +535,7 @@
                       index-column-groups (->> (get indexes-by-table table [])
                                                (mapv :column_names))]
                   (concat
-                   (when-let [insert-template (generate-insert-template schema table columns)]
-                     [insert-template])
+                   (generate-insert-templates schema table columns)
                    (generate-update-templates schema table columns columns-by-name unique-column-groups)
                    (generate-delete-templates schema table columns-by-name unique-column-groups)
                    (generate-get-templates schema table columns-by-name unique-column-groups)

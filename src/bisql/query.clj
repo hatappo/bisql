@@ -456,6 +456,12 @@
    (or (re-matches #"(?s).*(?:^|\n)[ \t]*SET[ \t\r\n]*$" (str out))
        (re-matches #"(?s).*SET[ \t\r\n]*$" (str out)))))
 
+(defn- trailing-values-clause?
+  [out]
+  (boolean
+   (or (re-matches #"(?s).*(?:^|\n)[ \t]*VALUES[ \t\r\n]*$" (str out))
+       (re-matches #"(?s).*VALUES[ \t\r\n]*$" (str out)))))
+
 (defn- consume-leading-conditional-operator
   [sql cursor]
   (let [remaining (subs sql cursor)]
@@ -716,6 +722,10 @@
                         (do
                           (when (trailing-set-clause? out)
                             (throw (ex-info "Empty for block is not allowed in SET clause."
+                                            {:parameter (parameter-key collection-name)
+                                             :item (keyword item-name)})))
+                          (when (trailing-values-clause? out)
+                            (throw (ex-info "Empty for block is not allowed in VALUES clause."
                                             {:parameter (parameter-key collection-name)
                                              :item (keyword item-name)})))
                           (remove-trailing-clause-keyword out)

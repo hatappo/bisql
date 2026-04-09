@@ -84,6 +84,9 @@ This writes files such as:
 - `src/sql/postgresql/public/users.clj`
 - `src/sql/postgresql/public/orders.clj`
 
+Generated CRUD SQL includes templates such as `insert`, `insert-many`, `get-by-*`,
+`update-by-*`, `delete-by-*`, and `list-by-*`.
+
 Each generated namespace file loads the matching SQL directory, for example:
 
 ```clj
@@ -257,6 +260,5 @@ If `:cardinality` is not specified, it defaults to `:many`.
 ## TODO
 
 - Restrict `bisql/default` to valid SQL value contexts if context-aware rendering becomes necessary.
-- Add a first-class, readable way to express multi-row `INSERT ... VALUES (...), (...), ...`.
 - Compile analyzed SQL templates into reusable renderer functions for lower runtime overhead.
 - Expand CRUD generation output and integration coverage further.
