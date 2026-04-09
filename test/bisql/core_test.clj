@@ -170,6 +170,7 @@
                        "OFFSET /*$offset*/0"]))
         variable-nodes (->> (:nodes ir)
                             (filter #(= :variable (:op %))))]
+    (is (= :select (:statement-kind ir)))
     (is (= [{:parameter-name "id" :context :where}
             {:parameter-name "limit" :context :limit}
             {:parameter-name "offset" :context :offset}]
@@ -188,7 +189,14 @@
         branch-body (get-in if-node [:branches 0 :body])
         variable-node (some #(when (= :variable (:op %)) %) branch-body)]
     (is (= :where (:context if-node)))
+    (is (= :select (:statement-kind if-node)))
     (is (= :where (:context variable-node)))))
+
+(deftest parse-template-annotates-statement-kind
+  (is (= :select (:statement-kind (bisql/parse-template "SELECT * FROM users"))))
+  (is (= :insert (:statement-kind (bisql/parse-template "INSERT INTO users (email) VALUES (/*$email*/'a')"))))
+  (is (= :update (:statement-kind (bisql/parse-template "UPDATE users SET email = /*$email*/'a'"))))
+  (is (= :delete (:statement-kind (bisql/parse-template "DELETE FROM users WHERE id = /*$id*/1")))))
 
 (deftest render-compiled-query-matches-render-query
   (let [template (bisql/analyze-template

@@ -499,9 +499,18 @@
 (def ^:private clause-context-pattern
   #"(?is)\b(WHERE|HAVING|SET|VALUES|LIMIT|OFFSET)\b")
 
+(def ^:private statement-kind-pattern
+  #"(?is)^\s*(SELECT|INSERT|UPDATE|DELETE)\b")
+
 (defn- keyword->context
   [s]
   (-> s str/lower-case keyword))
+
+(defn- statement-kind-from-sql
+  [sql]
+  (some->> (re-find statement-kind-pattern sql)
+           second
+           keyword->context))
 
 (defn- update-context-from-sql
   [current-context sql]
@@ -511,35 +520,42 @@
       current-context)))
 
 (defn- annotate-node-contexts
-  [nodes initial-context]
+  [nodes statement-kind initial-clause-context]
   (loop [remaining nodes
-         context initial-context
+         clause-context initial-clause-context
          annotated []]
     (if-let [node (first remaining)]
       (let [remaining (rest remaining)]
         (case (:op node)
           :text
-          (let [annotated-node (assoc node :context context)
-                next-context (update-context-from-sql context (:sql node))]
+          (let [annotated-node (assoc node
+                                      :context clause-context
+                                      :statement-kind statement-kind)
+                next-context (update-context-from-sql clause-context (:sql node))]
             (recur remaining next-context (conj annotated annotated-node)))
 
           :variable
-          (recur remaining context (conj annotated (assoc node :context context)))
+          (recur remaining clause-context
+                 (conj annotated (assoc node
+                                        :context clause-context
+                                        :statement-kind statement-kind)))
 
           :if
           (let [annotated-node (assoc node
-                                      :context context
+                                      :context clause-context
+                                      :statement-kind statement-kind
                                       :branches (mapv (fn [{:keys [expr body]}]
                                                         {:expr expr
-                                                         :body (annotate-node-contexts body context)})
+                                                         :body (annotate-node-contexts body statement-kind clause-context)})
                                                       (:branches node)))]
-            (recur remaining context (conj annotated annotated-node)))
+            (recur remaining clause-context (conj annotated annotated-node)))
 
           :for
           (let [annotated-node (assoc node
-                                      :context context
-                                      :body (annotate-node-contexts (:body node) context))]
-            (recur remaining context (conj annotated annotated-node)))))
+                                      :context clause-context
+                                      :statement-kind statement-kind
+                                      :body (annotate-node-contexts (:body node) statement-kind clause-context))]
+            (recur remaining clause-context (conj annotated annotated-node)))))
       annotated)))
 
 (defn- parse-control-directive
@@ -689,8 +705,10 @@
   "Parses a declaration-free SQL template string into an intermediate representation."
   [sql]
   {:pre [(string? sql)]}
-  {:op :template
-   :nodes (annotate-node-contexts (parse-template-nodes sql) nil)})
+  (let [statement-kind (statement-kind-from-sql sql)]
+    {:op :template
+     :statement-kind statement-kind
+     :nodes (annotate-node-contexts (parse-template-nodes sql) statement-kind nil)}))
 
 (defn- selected-conditional-branch
   [branches template-params]

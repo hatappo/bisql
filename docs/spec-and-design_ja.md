@@ -560,7 +560,8 @@ classpath 上の `sql/...` から SQL ファイルを読み込み、パース済
 ```
 
 この IR 層は、将来の compiled renderer の土台として位置づける。
-初期 IR は、` :where`, `:having`, `:set`, `:values`, `:limit`, `:offset`
+初期 IR は、statement kind (`:select`, `:insert`, `:update`, `:delete`) と、
+` :where`, `:having`, `:set`, `:values`, `:limit`, `:offset`
 のような clause 単位の文脈も node に注釈する。
 
 ## 6.3 関数定義

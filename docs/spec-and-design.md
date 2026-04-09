@@ -552,8 +552,9 @@ rendered SQL shape as the internal renderer step:
 ```
 
 This IR layer is intended to be the foundation for future compiled renderers.
-The initial IR also annotates nodes with clause-level context such as
-`:where`, `:having`, `:set`, `:values`, `:limit`, and `:offset`.
+The initial IR also annotates nodes with statement kind (`:select`, `:insert`,
+`:update`, `:delete`) and clause-level context such as `:where`, `:having`,
+`:set`, `:values`, `:limit`, and `:offset`.
 
 ## 6.3 Function Definition
 
