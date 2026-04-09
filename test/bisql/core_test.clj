@@ -160,6 +160,36 @@
     (is (= (:sql result) (str/trim (:sql rendered))))
     (is (= (:params result) (:bind-params rendered)))))
 
+(deftest parse-template-annotates-variable-contexts
+  (let [ir (bisql/parse-template
+            (str/join "\n"
+                      ["SELECT *"
+                       "FROM users"
+                       "WHERE id = /*$id*/1"
+                       "LIMIT /*$limit*/100"
+                       "OFFSET /*$offset*/0"]))
+        variable-nodes (->> (:nodes ir)
+                            (filter #(= :variable (:op %))))]
+    (is (= [{:parameter-name "id" :context :where}
+            {:parameter-name "limit" :context :limit}
+            {:parameter-name "offset" :context :offset}]
+           (mapv #(select-keys % [:parameter-name :context]) variable-nodes)))))
+
+(deftest parse-template-annotates-branch-bodies-with-clause-context
+  (let [ir (bisql/parse-template
+            (str/join "\n"
+                      ["SELECT *"
+                       "FROM users"
+                       "WHERE"
+                       "/*%if active */"
+                       "  active = /*$active*/true"
+                       "/*%end */"]))
+        if-node (some #(when (= :if (:op %)) %) (:nodes ir))
+        branch-body (get-in if-node [:branches 0 :body])
+        variable-node (some #(when (= :variable (:op %)) %) branch-body)]
+    (is (= :where (:context if-node)))
+    (is (= :where (:context variable-node)))))
+
 (deftest render-compiled-query-matches-render-query
   (let [template (bisql/analyze-template
                   {:sql-template "SELECT * FROM users WHERE id = /*$id*/1"})

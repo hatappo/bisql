@@ -496,6 +496,52 @@
                second)
       s))
 
+(def ^:private clause-context-pattern
+  #"(?is)\b(WHERE|HAVING|SET|VALUES|LIMIT|OFFSET)\b")
+
+(defn- keyword->context
+  [s]
+  (-> s str/lower-case keyword))
+
+(defn- update-context-from-sql
+  [current-context sql]
+  (let [matches (re-seq clause-context-pattern sql)]
+    (if-let [matched (last matches)]
+      (keyword->context (second matched))
+      current-context)))
+
+(defn- annotate-node-contexts
+  [nodes initial-context]
+  (loop [remaining nodes
+         context initial-context
+         annotated []]
+    (if-let [node (first remaining)]
+      (let [remaining (rest remaining)]
+        (case (:op node)
+          :text
+          (let [annotated-node (assoc node :context context)
+                next-context (update-context-from-sql context (:sql node))]
+            (recur remaining next-context (conj annotated annotated-node)))
+
+          :variable
+          (recur remaining context (conj annotated (assoc node :context context)))
+
+          :if
+          (let [annotated-node (assoc node
+                                      :context context
+                                      :branches (mapv (fn [{:keys [expr body]}]
+                                                        {:expr expr
+                                                         :body (annotate-node-contexts body context)})
+                                                      (:branches node)))]
+            (recur remaining context (conj annotated annotated-node)))
+
+          :for
+          (let [annotated-node (assoc node
+                                      :context context
+                                      :body (annotate-node-contexts (:body node) context))]
+            (recur remaining context (conj annotated annotated-node)))))
+      annotated)))
+
 (defn- parse-control-directive
   [matcher]
   {:directive (.group matcher 1)
@@ -644,7 +690,7 @@
   [sql]
   {:pre [(string? sql)]}
   {:op :template
-   :nodes (parse-template-nodes sql)})
+   :nodes (annotate-node-contexts (parse-template-nodes sql) nil)})
 
 (defn- selected-conditional-branch
   [branches template-params]
