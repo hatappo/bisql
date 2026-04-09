@@ -176,6 +176,19 @@
    :templates templates
    :content (str/join "\n\n" (map query-block templates))})
 
+(def ^:private crud-kind-order
+  {:insert 0
+   :get 1
+   :list 2
+   :update 3
+   :delete 4})
+
+(defn- sort-templates-for-file
+  [templates]
+  (sort-by (juxt #(get crud-kind-order (:kind %) Long/MAX_VALUE)
+                 :name)
+           templates))
+
 (defn render-crud-files
   "Groups generated CRUD templates into one SQL file per table."
   [{:keys [dialect schema templates]}]
@@ -188,7 +201,7 @@
                        (table-file-entry dialect
                                          schema
                                          table
-                                         (sort-by :name table-templates)))))} )
+                                         (sort-templates-for-file table-templates)))))} )
 
 (defn write-crud-files!
   "Writes generated CRUD templates as one SQL file per table."

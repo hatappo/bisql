@@ -298,18 +298,22 @@
   (let [crud-result {:dialect "postgresql"
                      :schema "public"
                      :templates [{:table "users"
+                                  :kind :get
                                   :name "get-by-id"
                                   :meta {:cardinality :one}
                                   :sql-template "SELECT * FROM users WHERE id = /*$id*/1"}
                                  {:table "users"
+                                  :kind :insert
                                  :name "insert"
                                   :meta {:cardinality :one}
                                   :sql-template "INSERT INTO users (...) VALUES (...) RETURNING *"}
                                  {:table "users"
+                                  :kind :insert
                                   :name "insert-many"
                                   :meta {:cardinality :many}
                                   :sql-template "INSERT INTO users (...) VALUES /*%for row in rows */(...),/*%end */ RETURNING *"}
                                  {:table "orders"
+                                  :kind :get
                                   :name "get-by-id"
                                   :meta {:cardinality :one}
                                   :sql-template "SELECT * FROM orders WHERE id = /*$id*/1"}]}
@@ -322,15 +326,15 @@
     (is (= ["postgresql/public/orders/orders-crud.sql"
             "postgresql/public/users/users-crud.sql"]
            (mapv :path files)))
-    (is (= (str "/*:name get-by-id */\n"
-                "/*:cardinality :one */\n"
-                "SELECT * FROM users WHERE id = /*$id*/1\n\n"
-                "/*:name insert */\n"
+    (is (= (str "/*:name insert */\n"
                 "/*:cardinality :one */\n"
                 "INSERT INTO users (...) VALUES (...) RETURNING *\n\n"
                 "/*:name insert-many */\n"
                 "/*:cardinality :many */\n"
-                "INSERT INTO users (...) VALUES /*%for row in rows */(...),/*%end */ RETURNING *")
+                "INSERT INTO users (...) VALUES /*%for row in rows */(...),/*%end */ RETURNING *\n\n"
+                "/*:name get-by-id */\n"
+                "/*:cardinality :one */\n"
+                "SELECT * FROM users WHERE id = /*$id*/1")
            (:content users-file)))
     (is (= (str "/*:name get-by-id */\n"
                 "/*:cardinality :one */\n"
