@@ -20,6 +20,8 @@
     (is (fn? bisql/load-query))
     (is (fn? bisql/load-queries))
     (is (fn? bisql/analyze-template))
+    (is (fn? bisql/parse-template))
+    (is (fn? bisql/evaluate-ir))
     (is (fn? bisql/render-query))
     (is (:macro (meta #'bisql/defrender)))
     (is (:macro (meta #'bisql/defquery)))
@@ -135,6 +137,15 @@
                 {:id 42})]
     (is (= "SELECT * FROM users WHERE id = ?" (:sql result)))
     (is (= [42] (:params result)))))
+
+(deftest evaluate-ir-matches-render-query-for-scalar-bind
+  (let [sql-template "SELECT * FROM users WHERE id = /*$id*/1"
+        ir (bisql/parse-template sql-template)
+        rendered (bisql/evaluate-ir ir {:id 42})
+        result (bisql/render-query {:sql-template sql-template} {:id 42})]
+    (is (= :template (:op ir)))
+    (is (= (:sql result) (str/trim (:sql rendered))))
+    (is (= (:params result) (:bind-params rendered)))))
 
 (deftest render-query-supports-in-binding
   (let [result (bisql/render-query
@@ -455,6 +466,20 @@
                       "  AND name = ?"])
            (:sql result)))
     (is (= ["Alice"] (:params result)))))
+
+(deftest evaluate-ir-matches-render-query-for-if-blocks
+  (let [sql-template (str/join "\n"
+                               ["SELECT *"
+                                "FROM users"
+                                "WHERE 1 = 1"
+                                "/*%if name */"
+                                "  AND name = /*$name*/'foo'"
+                                "/*%end */"])
+        ir (bisql/parse-template sql-template)
+        rendered (bisql/evaluate-ir ir {:name "Alice"})
+        result (bisql/render-query {:sql-template sql-template} {:name "Alice"})]
+    (is (= (:sql result) (str/trim (:sql rendered))))
+    (is (= (:params result) (:bind-params rendered)))))
 
 (deftest render-query-omits-if-blocks-when-condition-is-false
   (let [result (bisql/render-query
@@ -782,6 +807,25 @@
                       "WHERE id = ?"])
            (:sql result)))
     (is (= ["Alice" "active" 42] (:params result)))))
+
+(deftest evaluate-ir-matches-render-query-for-for-blocks
+  (let [sql-template (str/join "\n"
+                               ["UPDATE users"
+                                "SET"
+                                "/*%for item in items */"
+                                "  /*!item.name*/ = /*$item.value*/'sample',"
+                                "/*%end */"
+                                "WHERE id = /*$id*/1"])
+        ir (bisql/parse-template sql-template)
+        rendered (bisql/evaluate-ir ir {:id 42
+                                        :items [{:name "display_name" :value "Alice"}
+                                                {:name "status" :value "active"}]})
+        result (bisql/render-query {:sql-template sql-template}
+                                   {:id 42
+                                    :items [{:name "display_name" :value "Alice"}
+                                            {:name "status" :value "active"}]})]
+    (is (= (:sql result) (str/trim (:sql rendered))))
+    (is (= (:params result) (:bind-params rendered)))))
 
 (deftest render-query-removes-where-for-empty-for-block
   (let [result (bisql/render-query

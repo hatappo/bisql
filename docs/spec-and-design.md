@@ -533,6 +533,24 @@ Renders template SQL into:
  :params [1]}
 ```
 
+The initial compiler foundation also exposes:
+
+```clojure
+(parse-template "SELECT * FROM users WHERE id = /*$id*/1")
+(evaluate-ir ir {:id 1})
+```
+
+`parse-template` converts a declaration-free SQL template string into an
+intermediate representation. `evaluate-ir` evaluates that IR and returns the
+same rendered SQL shape as the internal renderer step:
+
+```clojure
+{:sql "SELECT * FROM users WHERE id = ?"
+ :bind-params [1]}
+```
+
+This IR layer is intended to be the foundation for future compiled renderers.
+
 ## 6.3 Function Definition
 
 ```clojure

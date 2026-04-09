@@ -542,6 +542,23 @@ classpath 上の `sql/...` から SQL ファイルを読み込み、パース済
  :params [1]}
 ```
 
+コンパイラ実装の土台として、次も公開する:
+
+```clojure
+(parse-template "SELECT * FROM users WHERE id = /*$id*/1")
+(evaluate-ir ir {:id 1})
+```
+
+`parse-template` は declaration を除いた SQL template 文字列を中間表現へ変換する。
+`evaluate-ir` はその IR を評価し、内部 renderer 段階と同じ形を返す:
+
+```clojure
+{:sql "SELECT * FROM users WHERE id = ?"
+ :bind-params [1]}
+```
+
+この IR 層は、将来の compiled renderer の土台として位置づける。
+
 ## 6.3 関数定義
 
 ```clojure

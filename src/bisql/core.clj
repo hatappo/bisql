@@ -13,6 +13,12 @@
 (def analyze-template
   query/analyze-template)
 
+(def parse-template
+  query/parse-template)
+
+(def evaluate-ir
+  query/evaluate-ir)
+
 (def render-query
   query/render-query)
 
