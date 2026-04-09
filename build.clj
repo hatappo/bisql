@@ -3,14 +3,7 @@
             [deps-deploy.deps-deploy :as dd]))
 
 (def lib 'io.github.hatappo/bisql)
-(def version (or (System/getenv "BISQL_VERSION")
-                 "0.1.0-SNAPSHOT"))
 (def class-dir "target/classes")
-(def jar-file (format "target/%s-%s.jar" (name lib) version))
-(def pom-file (format "%s/META-INF/maven/%s/%s/pom.xml"
-                      class-dir
-                      (namespace lib)
-                      (name lib)))
 (def basis (delay (b/create-basis {:project "deps.edn"})))
 (def scm-url "https://github.com/hatappo/bisql")
 
@@ -23,17 +16,42 @@
      [:url "https://opensource.org/licenses/MIT"]]]
    [:scm
     [:url scm-url]
-    [:connection (str "scm:git:" scm-url ".git")]
-    [:developerConnection "scm:git:git@github.com:hatappo/bisql.git"]
-    [:tag (or (System/getenv "GITHUB_REF_NAME")
+   [:connection (str "scm:git:" scm-url ".git")]
+   [:developerConnection "scm:git:git@github.com:hatappo/bisql.git"]
+   [:tag (or (System/getenv "GITHUB_REF_NAME")
               "HEAD")]]])
+
+(defn- required-version
+  [{:keys [version]}]
+  (or version
+      (throw (ex-info ":version is required."
+                      {}))))
+
+(defn- jar-file-path
+  [version]
+  (format "target/%s-%s.jar" (name lib) version))
+
+(defn- pom-file-path
+  []
+  (format "%s/META-INF/maven/%s/%s/pom.xml"
+          class-dir
+          (namespace lib)
+          (name lib)))
+
+(defn- resolved-clojars-repository
+  []
+  (:repository (#'deps-deploy.deps-deploy/preprocess-options
+                {:repository "clojars"})))
 
 (defn clean
   [_]
   (b/delete {:path "target"}))
 
 (defn jar
-  [_]
+  [opts]
+  (let [version (required-version opts)
+        jar-file (jar-file-path version)
+        pom-file (pom-file-path)]
   (clean nil)
   (b/copy-dir {:src-dirs ["src" "resources"]
                :target-dir class-dir})
@@ -46,19 +64,20 @@
   (b/jar {:class-dir class-dir
           :jar-file jar-file})
   {:jar-file jar-file
-   :pom-file pom-file})
+   :pom-file pom-file}))
 
 (defn install
-  [_]
-  (let [{:keys [jar-file pom-file]} (jar nil)]
+  [opts]
+  (let [{:keys [jar-file pom-file]} (jar opts)]
     (dd/deploy {:installer :local
                 :artifact jar-file
                 :pom-file pom-file})))
 
 (defn deploy
-  [_]
-  (let [{:keys [jar-file pom-file]} (jar nil)]
+  [opts]
+  (let [{:keys [jar-file pom-file]} (jar opts)]
     (dd/deploy {:installer :remote
                 :artifact jar-file
                 :pom-file pom-file
+                :repository (resolved-clojars-repository)
                 :sign-releases? false})))

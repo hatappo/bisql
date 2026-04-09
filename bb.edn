@@ -3,7 +3,15 @@
  :deps {dev.weavejester/cljfmt {:mvn/version "0.16.3"}}
  :tasks
  {:init (do
-          (def source-paths ["src" "test" "scripts"]))
+          (def source-paths ["src" "test" "scripts"])
+          (defn normalize-build-args [args]
+            (let [args (vec args)]
+              (if (and (seq args)
+                       (not (.startsWith ^String (first args) ":")))
+                (into [":version" (pr-str (first args))] (subvec args 1))
+                args)))
+          (defn build-task [subcommand]
+            (apply clojure "-T:build" subcommand (normalize-build-args *command-line-args*))))
 
   lint {:doc "Run clj-kondo on project sources"
         :task (apply clojure "-M:lint" "--lint" source-paths)}
@@ -45,11 +53,23 @@
   gen-ns {:doc "Generate query namespace files from local PostgreSQL"
           :task (clojure "-M" "-m" "bisql.cli" "gen-ns")}
 
+  jar {:doc "Build the jar via build.clj; accepts `bb jar 0.1.0` or raw build args"
+       :task (build-task "jar")}
+
+  install {:doc "Install to local Maven cache via build.clj; accepts `bb install 0.1.0` or raw build args"
+           :task (build-task "install")}
+
+  deploy {:doc "Deploy to Clojars via build.clj; accepts `bb deploy 0.1.0` or raw build args"
+          :task (build-task "deploy")}
+
+  token {:doc "Open ~/.m2/settings.xml for editing the temporary Clojars token"
+         :task (shell "open" (str (System/getProperty "user.home") "/.m2/settings.xml"))}
+
   demo {:doc "Run example scripts for manual verification"
         :task (shell "bb scripts/demo/core.bb")}
 
-  demo-preview {:doc "Write demo output to docs/rendering-examples.md and open it"
+  demo-preview {:doc "Write demo output to docs/spec-rendering-examples.md and open it"
                 :task (do
                         (shell "mkdir" "-p" "docs")
-                        (shell "sh" "-lc" "printf '# Rendering Examples\n' > docs/rendering-examples.md && bb scripts/demo/core.bb >> docs/rendering-examples.md")
-                        (shell "open" "docs/rendering-examples.md"))}}}
+                        (shell "sh" "-lc" "printf '# Rendering Examples\n' > docs/spec-rendering-examples.md && bb scripts/demo/core.bb >> docs/spec-rendering-examples.md")
+                        (shell "open" "docs/spec-rendering-examples.md"))}}}
