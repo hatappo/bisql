@@ -624,6 +624,10 @@ clojure -M -m bisql.cli gen-ns --config bisql.edn
 
 The config file is an EDN map with `:db` and `:generate` sections. Generated templates show default values as commented examples. Commands still work without a config file because the precedence order is CLI options > environment variables > config file > defaults.
 
+`gen-ns` is an optional helper. It is useful for projects that prefer explicit
+namespace files and want to avoid defining functions into namespaces that were
+not declared in source ahead of time.
+
 **Reasoning:**
 - Keeps the API surface small
 - Separates loading, rendering, execution adapters, and generation concerns

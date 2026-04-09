@@ -178,6 +178,10 @@ The same options can also be passed through environment variables such as
 
 The precedence order is CLI options > environment variables > config file > defaults.
 
+`gen-ns` is an optional helper for projects that prefer explicit namespace
+files over letting a shallow `(defquery)` define functions into namespaces that
+were not declared ahead of time.
+
 ## Development
 
 ### Prerequisites
