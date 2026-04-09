@@ -34,14 +34,15 @@
 
 (defn- where-clause
   [columns]
-  (str/join "\n"
-            (map-indexed
-             (fn [idx column]
-               (str (if (zero? idx) "WHERE " "  AND ")
-                    (:column_name column)
-                    " = "
-                    (bind-comment column)))
-             columns)))
+  (when (seq columns)
+    (str/join "\n"
+              (map-indexed
+               (fn [idx column]
+                 (str (if (zero? idx) "WHERE " "  AND ")
+                      (:column_name column)
+                      " = "
+                      (bind-comment column)))
+               columns))))
 
 (defn- order-by-clause
   [columns]
@@ -393,8 +394,8 @@
                   (fn [column-group]
                     (let [column-group (normalize-column-names column-group)
                           prefix-lengths (if strict-prefix?
-                                           (range 1 (count column-group))
-                                           (range 1 (inc (count column-group))))]
+                                           (range 0 (count column-group))
+                                           (range 0 (inc (count column-group))))]
                       (map (fn [prefix-length]
                              {:prefix-column-names (subvec column-group 0 prefix-length)
                               :order-column-names (subvec column-group prefix-length)})
@@ -404,7 +405,9 @@
                          {})
                  vals))
           (list-template-base-name [prefix-column-names]
-            (str "list-by-" (joined-name prefix-column-names)))
+            (if (seq prefix-column-names)
+              (str "list-by-" (joined-name prefix-column-names))
+              "list"))
           (list-template-name [{:keys [prefix-column-names order-column-names]} colliding-base-names]
             (let [base-name (list-template-base-name prefix-column-names)]
               (if (and (contains? colliding-base-names base-name)

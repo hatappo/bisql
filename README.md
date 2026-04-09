@@ -151,7 +151,7 @@ Depending on the tables present in the target database, this writes files such a
 - `src/sql/postgresql/public/orders/orders-crud.sql`
 
 Generated CRUD SQL includes templates such as `insert`, `insert-many`, `get-by-*`,
-`update-by-*`, `delete-by-*`, and `list-by-*`.
+`update-by-*`, `delete-by-*`, `list`, and `list-by-*`.
 
 These generated queries are meant to cover the typical index-friendly SQL patterns
 you would usually write by hand. In practice, that often means you do not need to
@@ -170,6 +170,7 @@ For the sample tables above, this typically includes:
 - `users/delete-by-email`
 - `orders/insert`
 - `orders/insert-many`
+- `orders/list`
 - `orders/get-by-id`
 - `orders/update-by-id`
 - `orders/delete-by-id`
@@ -192,9 +193,8 @@ Then execute one of the generated functions:
                         :user "bisql"
                         :password "bisql"}))
 
-(orders/list-by-state datasource {:state "paid"
-                                  :limit 20
-                                  :offset 0})
+(orders/list datasource {:limit 20
+                         :offset 0})
 ```
 
 SQL templates are resolved from the classpath under the logical `sql` base path.
