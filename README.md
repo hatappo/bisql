@@ -2,6 +2,37 @@
 
 Bisql (pronunce `bάɪsɪkl` 🚲️ ) is a 2-way SQL toolkit for Clojure.
 
+This project is still early and should be treated as alpha software.
+
+## Installation
+
+The planned public coordinate is:
+
+```clojure
+io.github.hatappo/bisql
+```
+
+After publishing, add it to `deps.edn`:
+
+```clojure
+{:deps {io.github.hatappo/bisql {:mvn/version "RELEASE_VERSION"}}}
+```
+
+If you want a shorter CLI entrypoint, you can also add an alias:
+
+```clojure
+{:aliases
+ {:bisql {:main-opts ["-m" "bisql.cli"]}}}
+```
+
+Then commands such as these become available:
+
+```sh
+clojure -M:bisql gen-config
+clojure -M:bisql gen-crud
+clojure -M:bisql gen-ns
+```
+
 ## Getting Started
 
 ### 1. Create a Minimal Table
@@ -187,11 +218,9 @@ were not declared ahead of time.
 ### Prerequisites
 
 ```sh
-brew install clojure/tools/clojure
-# If you don't use Mac, see https://clojure.org/guides/install_clojure
-
-brew install borkdude/brew/babashka
-# If you don't use Mac, see https://github.com/babashka/babashka#installation
+mise install # to install Java(JDK)
+brew install clojure/tools/clojure # or see https://clojure.org/guides/install_clojure
+brew install borkdude/brew/babashka # or see https://github.com/babashka/babashka#installation
 ```
 
 ### Setup
@@ -253,6 +282,21 @@ gen-crud      Generate CRUD SQL files from local PostgreSQL
 gen-ns        Generate query namespace files from local PostgreSQL
 demo         Run example scripts for manual verification
 demo-preview Write demo output to docs/rendering-examples.md and open it
+```
+
+### Packaging
+
+Build and install the library locally:
+
+```sh
+clojure -T:build jar
+clojure -T:build install
+```
+
+Deploy to a remote Maven repository such as Clojars:
+
+```sh
+BISQL_VERSION=0.1.0 clojure -T:build deploy
 ```
 
 ### Rendering Examples
