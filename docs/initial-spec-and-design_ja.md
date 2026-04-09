@@ -796,24 +796,27 @@ WHERE customer_id = ?
 
 ---
 
-## 7.8 LIMIT（必須）
+## 7.8 LIMIT と OFFSET（必須）
 
-すべての `list-by-*` 関数は `limit` を必須とする。
+すべての `list-by-*` 関数は `limit` と `offset` を必須とする。
 
 ```clojure
 (list-by-customer-id db {:customer-id 10
-                         :limit 100})
+                         :limit 100
+                         :offset 0})
 ```
 
 ### ルール
 
 - 正の整数でなければならない
+- `offset` は 0 以上の整数でなければならない
 - 初期実装では無制限オプションを持たない
 
 **理由:**
 
 - 意図しないフルスキャンを防ぐ
 - 結果件数への意識を強制する
+- 生成クエリのページネーション形を統一できる
 - 効率的なアクセスパターンを促す
 
 ---

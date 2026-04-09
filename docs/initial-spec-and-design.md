@@ -786,23 +786,26 @@ WHERE customer_id = ?
 
 ---
 
-## 7.8 LIMIT (Required)
+## 7.8 LIMIT and OFFSET (Required)
 
-All `list-by-*` functions require a `limit`.
+All `list-by-*` functions require a `limit` and an `offset`.
 
 ```clojure
 (list-by-customer-id db {:customer-id 10
-                         :limit 100})
+                         :limit 100
+                         :offset 0})
 ```
 
 ### Rules
 
 - Must be a positive integer
+- `offset` must be zero or a positive integer
 - No "unbounded" option in initial implementation
 
 **Reasoning:**
 - Prevent accidental full scans
 - Enforce awareness of result size
+- Make pagination shape consistent across generated queries
 - Encourage efficient access patterns
 
 ---

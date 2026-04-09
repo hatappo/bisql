@@ -50,7 +50,9 @@
 
 (defn- list-limit-clause
   []
-  "LIMIT /*$limit*/100")
+  (str/join "\n"
+            ["LIMIT /*$limit*/100"
+             "OFFSET /*$offset*/0"]))
 
 (defn- select-template
   [table predicate-columns order-columns]

@@ -164,7 +164,8 @@ Then execute one of the generated functions:
                         :password "bisql"}))
 
 (orders/list-by-state datasource {:state "paid"
-                                  :limit 20})
+                                  :limit 20
+                                  :offset 0})
 ```
 
 SQL templates are resolved from the classpath under the logical `sql` base path.
@@ -292,7 +293,7 @@ You can also pass a relative or absolute path.
 (bisql/defrender "/sql/postgresql/public/users")
 
 (get-by-id {:id 42})
-(list-by-status {:status "active" :limit 100})
+(list-by-status {:status "active" :limit 100 :offset 0})
 ```
 
 The same `defrender` also works for multi-query files:

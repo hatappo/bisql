@@ -150,7 +150,8 @@
           (is (= (str "SELECT * FROM orders\n"
                       "WHERE state = /*$state*/'sample'\n"
                       "ORDER BY created_at\n"
-                      "LIMIT /*$limit*/100")
+                      "LIMIT /*$limit*/100\n"
+                      "OFFSET /*$offset*/0")
                  (:sql-template template)))))
       (testing "composite unique and composite index generate expected templates"
         (let [get-template (some #(when (= "get-by-user-id-and-device-identifier" (:name %)) %) templates)
@@ -198,38 +199,45 @@
           (is (= (str "SELECT * FROM user_devices\n"
                       "WHERE user_id = /*$user-id*/1\n"
                       "ORDER BY device_identifier\n"
-                      "LIMIT /*$limit*/100")
+                      "LIMIT /*$limit*/100\n"
+                      "OFFSET /*$offset*/0")
                  (:sql-template list-by-user-id-from-unique-template)))
           (is (= (str "SELECT * FROM user_devices\n"
                       "WHERE user_id = /*$user-id*/1\n"
                       "ORDER BY last_seen_at\n"
-                      "LIMIT /*$limit*/100")
+                      "LIMIT /*$limit*/100\n"
+                      "OFFSET /*$offset*/0")
                  (:sql-template list-by-user-id-from-index-template)))
           (is (= (str "SELECT * FROM user_devices\n"
                       "WHERE user_id = /*$user-id*/1\n"
                       "  AND last_seen_at = /*$last-seen-at*/CURRENT_TIMESTAMP\n"
-                      "LIMIT /*$limit*/100")
+                      "LIMIT /*$limit*/100\n"
+                      "OFFSET /*$offset*/0")
                  (:sql-template list-by-user-id-and-last-seen-at-template)))
           (is (= (str "SELECT * FROM user_devices\n"
                       "WHERE status = /*$status*/'sample'\n"
                       "ORDER BY last_seen_at\n"
-                      "LIMIT /*$limit*/100")
+                      "LIMIT /*$limit*/100\n"
+                      "OFFSET /*$offset*/0")
                  (:sql-template list-by-status-from-two-column-index)))
           (is (= (str "SELECT * FROM user_devices\n"
                       "WHERE status = /*$status*/'sample'\n"
                       "ORDER BY device_type, last_seen_at\n"
-                      "LIMIT /*$limit*/100")
+                      "LIMIT /*$limit*/100\n"
+                      "OFFSET /*$offset*/0")
                  (:sql-template list-by-status-from-three-column-index)))
           (is (= (str "SELECT * FROM user_devices\n"
                       "WHERE status = /*$status*/'sample'\n"
                       "  AND device_type = /*$device-type*/'sample'\n"
                       "ORDER BY last_seen_at\n"
-                      "LIMIT /*$limit*/100")
+                      "LIMIT /*$limit*/100\n"
+                      "OFFSET /*$offset*/0")
                  (:sql-template list-by-status-and-device-type-template)))
           (is (= (str "SELECT * FROM user_devices\n"
                       "WHERE status = /*$status*/'sample'\n"
                       "  AND last_seen_at = /*$last-seen-at*/CURRENT_TIMESTAMP\n"
-                      "LIMIT /*$limit*/100")
+                      "LIMIT /*$limit*/100\n"
+                      "OFFSET /*$offset*/0")
                  (:sql-template list-with-order-template)))))
       (testing "composite primary key generates get, update, and delete templates"
         (let [get-template (some #(when (= "get-by-user-id-and-role-code" (:name %)) %) templates)
