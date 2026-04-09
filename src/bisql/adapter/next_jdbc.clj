@@ -14,6 +14,10 @@
          (contains? queryish :params))
     queryish
 
+    (and (map? queryish)
+         (contains? queryish :renderer))
+    (query/render-compiled-query queryish (:renderer queryish) template-params)
+
     (map? queryish)
     (query/render-query queryish template-params)
 
@@ -50,19 +54,24 @@
    (let [ns-sym (ns-name *ns*)
          entries (define/definition-entries ns-sym nil)]
      (define/ensure-unique-var-names! entries)
-     `(do ~@(mapv (fn [{:keys [template target-ns var-name metadata]}]
+     `(do ~@(mapv (fn [{:keys [template ir target-ns var-name metadata]}]
                     (let [template-data (list 'quote template)
+                          ir-data (list 'quote ir)
                           metadata-data (list 'quote metadata)]
-                      `(define/define-function-var!
-                         '~target-ns
-                         '~var-name
-                         ~metadata-data
-                         (with-meta
-                           (fn
-                             ([datasource#] (exec! datasource# (with-meta ~template-data ~metadata-data) {}))
-                             ([datasource# template-params#]
-                              (exec! datasource# (with-meta ~template-data ~metadata-data) template-params#)))
-                           ~metadata-data))))
+                      `(let [renderer# (query/compile-ir ~ir-data)
+                             compiled-template# (with-meta
+                                                  (assoc ~template-data :renderer renderer#)
+                                                  ~metadata-data)]
+                         (define/define-function-var!
+                           '~target-ns
+                           '~var-name
+                           ~metadata-data
+                           (with-meta
+                             (fn
+                               ([datasource#] (exec! datasource# compiled-template# {}))
+                               ([datasource# template-params#]
+                                (exec! datasource# compiled-template# template-params#)))
+                             ~metadata-data)))))
                   entries))))
   ([path]
    (when-not (string? path)
@@ -83,17 +92,22 @@
    (let [ns-sym (ns-name *ns*)
          entries (define/definition-entries ns-sym path)]
      (define/ensure-unique-var-names! entries)
-     `(do ~@(mapv (fn [{:keys [template target-ns var-name metadata]}]
+     `(do ~@(mapv (fn [{:keys [template ir target-ns var-name metadata]}]
                     (let [template-data (list 'quote template)
+                          ir-data (list 'quote ir)
                           metadata-data (list 'quote metadata)]
-                      `(define/define-function-var!
-                         '~target-ns
-                         '~var-name
-                         ~metadata-data
-                         (with-meta
-                           (fn
-                             ([datasource#] (exec! datasource# (with-meta ~template-data ~metadata-data) {}))
-                             ([datasource# template-params#]
-                              (exec! datasource# (with-meta ~template-data ~metadata-data) template-params#)))
-                           ~metadata-data))))
+                      `(let [renderer# (query/compile-ir ~ir-data)
+                             compiled-template# (with-meta
+                                                  (assoc ~template-data :renderer renderer#)
+                                                  ~metadata-data)]
+                         (define/define-function-var!
+                           '~target-ns
+                           '~var-name
+                           ~metadata-data
+                           (with-meta
+                             (fn
+                               ([datasource#] (exec! datasource# compiled-template# {}))
+                               ([datasource# template-params#]
+                                (exec! datasource# compiled-template# template-params#)))
+                             ~metadata-data)))))
                   entries)))))

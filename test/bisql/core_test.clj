@@ -21,7 +21,9 @@
     (is (fn? bisql/load-queries))
     (is (fn? bisql/analyze-template))
     (is (fn? bisql/parse-template))
+    (is (fn? bisql/compile-ir))
     (is (fn? bisql/evaluate-ir))
+    (is (fn? bisql/render-compiled-query))
     (is (fn? bisql/render-query))
     (is (:macro (meta #'bisql/defrender)))
     (is (:macro (meta #'bisql/defquery)))
@@ -83,6 +85,7 @@
   (let [expanded (macroexpand '(bisql.core/defrender "/sql/directory-success"))
         expanded-str (pr-str expanded)]
     (is (= 'do (first expanded)))
+    (is (str/includes? expanded-str "compile-ir"))
     (is (str/includes? expanded-str "sql/directory-success/get-user-by-id"))
     (is (str/includes? expanded-str "sql/directory-success/nested/list-users"))))
 
@@ -146,6 +149,26 @@
     (is (= :template (:op ir)))
     (is (= (:sql result) (str/trim (:sql rendered))))
     (is (= (:params result) (:bind-params rendered)))))
+
+(deftest compile-ir-matches-render-query-for-scalar-bind
+  (let [sql-template "SELECT * FROM users WHERE id = /*$id*/1"
+        ir (bisql/parse-template sql-template)
+        renderer (bisql/compile-ir ir)
+        rendered (renderer {:id 42})
+        result (bisql/render-query {:sql-template sql-template} {:id 42})]
+    (is (fn? renderer))
+    (is (= (:sql result) (str/trim (:sql rendered))))
+    (is (= (:params result) (:bind-params rendered)))))
+
+(deftest render-compiled-query-matches-render-query
+  (let [template (bisql/analyze-template
+                  {:sql-template "SELECT * FROM users WHERE id = /*$id*/1"})
+        renderer (bisql/compile-ir (bisql/parse-template (:sql-template template)))
+        rendered (bisql/render-compiled-query template renderer {:id 42})
+        result (bisql/render-query {:sql-template "SELECT * FROM users WHERE id = /*$id*/1"}
+                                   {:id 42})]
+    (is (= (:sql result) (:sql rendered)))
+    (is (= (:params result) (:params rendered)))))
 
 (deftest render-query-supports-in-binding
   (let [result (bisql/render-query
@@ -477,6 +500,21 @@
                                 "/*%end */"])
         ir (bisql/parse-template sql-template)
         rendered (bisql/evaluate-ir ir {:name "Alice"})
+        result (bisql/render-query {:sql-template sql-template} {:name "Alice"})]
+    (is (= (:sql result) (str/trim (:sql rendered))))
+    (is (= (:params result) (:bind-params rendered)))))
+
+(deftest compile-ir-matches-render-query-for-if-blocks
+  (let [sql-template (str/join "\n"
+                               ["SELECT *"
+                                "FROM users"
+                                "WHERE 1 = 1"
+                                "/*%if name */"
+                                "  AND name = /*$name*/'foo'"
+                                "/*%end */"])
+        ir (bisql/parse-template sql-template)
+        renderer (bisql/compile-ir ir)
+        rendered (renderer {:name "Alice"})
         result (bisql/render-query {:sql-template sql-template} {:name "Alice"})]
     (is (= (:sql result) (str/trim (:sql rendered))))
     (is (= (:params result) (:bind-params rendered)))))
@@ -820,6 +858,26 @@
         rendered (bisql/evaluate-ir ir {:id 42
                                         :items [{:name "display_name" :value "Alice"}
                                                 {:name "status" :value "active"}]})
+        result (bisql/render-query {:sql-template sql-template}
+                                   {:id 42
+                                    :items [{:name "display_name" :value "Alice"}
+                                            {:name "status" :value "active"}]})]
+    (is (= (:sql result) (str/trim (:sql rendered))))
+    (is (= (:params result) (:bind-params rendered)))))
+
+(deftest compile-ir-matches-render-query-for-for-blocks
+  (let [sql-template (str/join "\n"
+                               ["UPDATE users"
+                                "SET"
+                                "/*%for item in items */"
+                                "  /*!item.name*/ = /*$item.value*/'sample',"
+                                "/*%end */"
+                                "WHERE id = /*$id*/1"])
+        ir (bisql/parse-template sql-template)
+        renderer (bisql/compile-ir ir)
+        rendered (renderer {:id 42
+                            :items [{:name "display_name" :value "Alice"}
+                                    {:name "status" :value "active"}]})
         result (bisql/render-query {:sql-template sql-template}
                                    {:id 42
                                     :items [{:name "display_name" :value "Alice"}

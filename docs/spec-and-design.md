@@ -537,12 +537,14 @@ The initial compiler foundation also exposes:
 
 ```clojure
 (parse-template "SELECT * FROM users WHERE id = /*$id*/1")
+(compile-ir ir)
 (evaluate-ir ir {:id 1})
 ```
 
 `parse-template` converts a declaration-free SQL template string into an
-intermediate representation. `evaluate-ir` evaluates that IR and returns the
-same rendered SQL shape as the internal renderer step:
+intermediate representation. `compile-ir` compiles that IR into a reusable
+renderer function. `evaluate-ir` evaluates the IR directly and returns the same
+rendered SQL shape as the internal renderer step:
 
 ```clojure
 {:sql "SELECT * FROM users WHERE id = ?"

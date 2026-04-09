@@ -4,8 +4,8 @@
             [clojure.string :as str])
   (:import [java.io PushbackReader StringReader]))
 
-(declare render-template)
 (declare parse-template)
+(declare compile-ir)
 (declare evaluate-ir)
 (declare parse-template-nodes)
 (declare parse-variable-nodes)
@@ -718,101 +718,140 @@
     (let [[matched _ _ _] match]
       (subs sql (count matched)))))
 
+(defn compile-ir
+  "Compiles parsed template IR into a reusable renderer function."
+  [ir]
+  {:pre [(map? ir)]}
+  (letfn [(compile-nodes [nodes]
+            (let [compiled-nodes
+                  (mapv (fn [node]
+                          (case (:op node)
+                            :text
+                            (let [sql (:sql node)]
+                              (fn [out _bind-params _params skip-leading-operator?]
+                                (let [sql (if skip-leading-operator?
+                                            (if-let [trimmed (consume-leading-conditional-operator-from-text sql)]
+                                              trimmed
+                                              (do
+                                                (remove-trailing-clause-keyword out)
+                                                sql))
+                                            sql)]
+                                  (.append out ^String sql)
+                                  false)))
+
+                            :variable
+                            (let [parameter-name (:parameter-name node)
+                                  sigil (:sigil node)
+                                  collection? (:collection? node)
+                                  context (variable-context parameter-name sigil collection?)]
+                              (fn [out bind-params params skip-leading-operator?]
+                                (when skip-leading-operator?
+                                  (remove-trailing-clause-keyword out))
+                                (let [rendered (try
+                                                 (render-variable params sigil parameter-name collection?)
+                                                 (catch clojure.lang.ExceptionInfo ex
+                                                   (throw (ex-info (ex-message ex)
+                                                                   (merge context (ex-data ex))
+                                                                   ex))))]
+                                  (.append out ^String (:sql rendered))
+                                  (reduce conj! bind-params (:params rendered))
+                                  false)))
+
+                            :if
+                            (let [compiled-branches
+                                  (mapv (fn [{:keys [expr body]}]
+                                          {:expr expr
+                                           :renderer (compile-nodes body)})
+                                        (:branches node))]
+                              (fn [out bind-params params skip-leading-operator?]
+                                (when skip-leading-operator?
+                                  (remove-trailing-clause-keyword out))
+                                (if-let [{:keys [renderer]}
+                                         (selected-conditional-branch compiled-branches params)]
+                                  (do
+                                    (append-fragment! out
+                                                      bind-params
+                                                      (normalize-fragment-for-context
+                                                       out
+                                                       (renderer params)))
+                                    false)
+                                  true)))
+
+                            :for
+                            (let [collection-name (:collection-name node)
+                                  item-name (:item-name node)
+                                  body-renderer (compile-nodes (:body node))]
+                              (fn [out bind-params params skip-leading-operator?]
+                                (let [items (parameter-value params collection-name)]
+                                  (when-not (sequential? items)
+                                    (throw (ex-info "For block requires a sequential value."
+                                                    {:parameter (parameter-key collection-name)
+                                                     :value items})))
+                                  (if (seq items)
+                                    (do
+                                      (doseq [[idx item] (map-indexed vector items)]
+                                        (let [item-params (assoc params (keyword item-name) item)
+                                              rendered-fragment (body-renderer item-params)
+                                              rendered-fragment (if (= idx (dec (count items)))
+                                                                  (update rendered-fragment :sql trim-trailing-for-separator)
+                                                                  rendered-fragment)]
+                                          (append-fragment! out
+                                                            bind-params
+                                                            (normalize-fragment-for-context out rendered-fragment))))
+                                      false)
+                                    (do
+                                      (when (and (not skip-leading-operator?)
+                                                 (trailing-set-clause? out))
+                                        (throw (ex-info "Empty for block is not allowed in SET clause."
+                                                        {:parameter (parameter-key collection-name)
+                                                         :item (keyword item-name)})))
+                                      (when (and (not skip-leading-operator?)
+                                                 (trailing-values-clause? out))
+                                        (throw (ex-info "Empty for block is not allowed in VALUES clause."
+                                                        {:parameter (parameter-key collection-name)
+                                                         :item (keyword item-name)})))
+                                      true)))))))
+                        nodes)]
+              (fn [params]
+                (let [out (StringBuilder.)
+                      bind-params (transient [])]
+                  (loop [remaining compiled-nodes
+                         skip-leading-operator? false]
+                    (if-let [compiled-node (first remaining)]
+                      (let [remaining (rest remaining)]
+                        (recur remaining
+                               (compiled-node out bind-params params skip-leading-operator?)))
+                      (do
+                        (when skip-leading-operator?
+                          (remove-trailing-clause-keyword out))
+                        {:sql (str out)
+                         :bind-params (persistent! bind-params)})))))))]
+    (compile-nodes (:nodes ir))))
+
 (defn evaluate-ir
   "Evaluates parsed template IR and returns rendered SQL plus bind parameters."
   [ir template-params]
   {:pre [(map? ir) (map? template-params)]}
-  (letfn [(evaluate-nodes [nodes params]
-            (let [out (StringBuilder.)
-                  bind-params (transient [])]
-              (loop [remaining nodes
-                     skip-leading-operator? false]
-                (if-let [node (first remaining)]
-                  (let [remaining (rest remaining)]
-                    (when skip-leading-operator?
-                      (when-not (= :text (:op node))
-                        (remove-trailing-clause-keyword out)))
-                    (case (:op node)
-                      :text
-                      (let [sql (:sql node)
-                            sql (if skip-leading-operator?
-                                  (if-let [trimmed (consume-leading-conditional-operator-from-text sql)]
-                                    trimmed
-                                    (do
-                                      (remove-trailing-clause-keyword out)
-                                      sql))
-                                  sql)]
-                        (.append out ^String sql)
-                        (recur remaining false))
+  ((compile-ir ir) template-params))
 
-                      :variable
-                      (let [context (variable-context (:parameter-name node)
-                                                      (:sigil node)
-                                                      (:collection? node))
-                            rendered (try
-                                       (render-variable params
-                                                        (:sigil node)
-                                                        (:parameter-name node)
-                                                        (:collection? node))
-                                       (catch clojure.lang.ExceptionInfo ex
-                                         (throw (ex-info (ex-message ex)
-                                                         (merge context (ex-data ex))
-                                                         ex))))]
-                        (.append out ^String (:sql rendered))
-                        (reduce conj! bind-params (:params rendered))
-                        (recur remaining false))
-
-                      :if
-                      (if-let [{:keys [body]} (selected-conditional-branch (:branches node) params)]
-                        (do
-                          (append-fragment! out
-                                            bind-params
-                                            (normalize-fragment-for-context
-                                             out
-                                             (evaluate-nodes body params)))
-                          (recur remaining false))
-                        (recur remaining true))
-
-                      :for
-                      (let [items (parameter-value params (:collection-name node))]
-                        (when-not (sequential? items)
-                          (throw (ex-info "For block requires a sequential value."
-                                          {:parameter (parameter-key (:collection-name node))
-                                           :value items})))
-                        (if (seq items)
-                          (do
-                            (doseq [[idx item] (map-indexed vector items)]
-                              (let [item-params (assoc params (keyword (:item-name node)) item)
-                                    rendered-fragment (evaluate-nodes (:body node) item-params)
-                                    rendered-fragment (if (= idx (dec (count items)))
-                                                        (update rendered-fragment :sql trim-trailing-for-separator)
-                                                        rendered-fragment)]
-                                (append-fragment! out
-                                                  bind-params
-                                                  (normalize-fragment-for-context out rendered-fragment))))
-                            (recur remaining false))
-                          (do
-                            (when (and (not skip-leading-operator?)
-                                       (trailing-set-clause? out))
-                              (throw (ex-info "Empty for block is not allowed in SET clause."
-                                              {:parameter (parameter-key (:collection-name node))
-                                               :item (keyword (:item-name node))})))
-                            (when (and (not skip-leading-operator?)
-                                       (trailing-values-clause? out))
-                              (throw (ex-info "Empty for block is not allowed in VALUES clause."
-                                              {:parameter (parameter-key (:collection-name node))
-                                               :item (keyword (:item-name node))})))
-                            (recur remaining true))))))
-                  (do
-                    (when skip-leading-operator?
-                      (remove-trailing-clause-keyword out))
-                    {:sql (str out)
-                     :bind-params (persistent! bind-params)})))))]
-    (evaluate-nodes (:nodes ir) template-params)))
-
-(defn- render-template
-  [sql template-params]
-  (evaluate-ir (parse-template sql) template-params))
+(defn render-compiled-query
+  "Renders an already analyzed template with a precompiled renderer."
+  [template renderer template-params]
+  {:pre [(map? template) (fn? renderer) (map? template-params)]}
+  (let [context (template-context template)]
+    (try
+      (let [{:keys [query-name meta]} template
+            {:keys [sql bind-params]} (renderer template-params)
+            postprocessed-sql (postprocess-sql sql)]
+        (merge (cond-> context
+                 query-name (assoc :query-name query-name))
+               {:sql postprocessed-sql
+                :params bind-params
+                :meta meta}))
+      (catch clojure.lang.ExceptionInfo ex
+        (throw (ex-info (ex-message ex)
+                        (merge context (ex-data ex))
+                        ex))))))
 
 (defn- postprocess-sql
   [sql]
@@ -825,19 +864,10 @@
   {:pre [(map? template) (map? template-params)]}
   (let [context (template-context template)]
     (try
-      (let [; 1. Pre-process the template
-            preprocessed-template (preprocess-template template)
-            ; 2. Extract declarations such as /*:doc ...*/
-            {:keys [query-name meta sql-template]} (analyze-template preprocessed-template)
-            ; 3. Render the template to executable SQL
-            {:keys [sql bind-params]} (render-template sql-template template-params)
-            ; 4. Post-process the SQL such as trimming whitespace
-            postprocessed-sql (postprocess-sql sql)]
-        (merge (cond-> context
-                 query-name (assoc :query-name query-name))
-               {:sql postprocessed-sql
-                :params bind-params
-                :meta meta}))
+      (let [preprocessed-template (preprocess-template template)
+            analyzed-template (analyze-template preprocessed-template)
+            renderer (compile-ir (parse-template (:sql-template analyzed-template)))]
+        (render-compiled-query analyzed-template renderer template-params))
       (catch clojure.lang.ExceptionInfo ex
         (throw (ex-info (ex-message ex)
                         (merge context (ex-data ex))
