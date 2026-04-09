@@ -408,6 +408,14 @@
           (throw (ex-info "Literal string values must not contain single quotes."
                           {:parameter (parameter-key parameter-name)
                            :value value})))
+        (when (str/includes? value "\\")
+          (throw (ex-info "Literal string values must not contain backslashes."
+                          {:parameter (parameter-key parameter-name)
+                           :value value})))
+        (when (str/includes? value "\0")
+          (throw (ex-info "Literal string values must not contain NUL characters."
+                          {:parameter (parameter-key parameter-name)
+                           :value value})))
         {:sql (str "'" value "'")
          :params []})
 
@@ -423,8 +431,21 @@
 
 (defn- render-raw-variable
   [template-params parameter-name]
-  {:sql (str (parameter-value template-params parameter-name))
-   :params []})
+  (let [value (str (parameter-value template-params parameter-name))]
+    (when (str/includes? value ";")
+      (throw (ex-info "Raw variable values must not contain semicolons."
+                      {:parameter (parameter-key parameter-name)
+                       :value value})))
+    (when (str/includes? value "--")
+      (throw (ex-info "Raw variable values must not contain line comment sequences."
+                      {:parameter (parameter-key parameter-name)
+                       :value value})))
+    (when (str/includes? value "/*")
+      (throw (ex-info "Raw variable values must not contain block comment sequences."
+                      {:parameter (parameter-key parameter-name)
+                       :value value})))
+    {:sql value
+     :params []}))
 
 (defn- render-variable
   [template-params sigil parameter-name collection?]
