@@ -1,8 +1,13 @@
 /*:doc
-Loads a user by id.
+"Loads a user by id."
 */
-/*:meta
-{:tags [:example :user]
- :returns :one}
+/*:tags
+[:example :user]
+*/
+/*:returns
+:one
+*/
+/*:cardinality
+:one
 */
 SELECT * FROM users WHERE id = /*$id*/1

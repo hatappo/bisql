@@ -1,4 +1,4 @@
 SELECT 1
 /*:doc
-not allowed here
+"not allowed here"
 */

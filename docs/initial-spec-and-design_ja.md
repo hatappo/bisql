@@ -88,18 +88,19 @@ DSL やクエリビルダで SQL を置き換えない。
 
 ## 3.1 推奨パス規約
 
-SQL ファイルは `resources/sql/` 配下に置く。
+SQL ファイルは classpath 上の論理パス `sql/` 配下に置く。
+通常は `src/sql/` または `resources/sql/` に置く。
 
 推奨レイアウト:
 
 ```text
-resources/sql/<database>/<schema>/<table>/<function-name>.sql
+sql/<database>/<schema>/<table>/<function-name>.sql
 ```
 
 例:
 
 ```text
-resources/sql/postgresql/public/users/get-by-id.sql
+src/sql/postgresql/public/users/get-by-id.sql
 ```
 
 ### ルール
@@ -127,6 +128,8 @@ Prepared statement のパラメータ。
 
 - `?` に置き換えられる
 - 値自体は別で渡される
+- パラメータ名には `user.profile.status` のような多段 dot-path を使える
+- 各 path segment の lookup 順は `keyword` → `string` → `symbol`
 
 ### 例
 
@@ -145,6 +148,29 @@ bind 値:
 ```clojure
 [123]
 ```
+
+### `DEFAULT`
+
+scalar の bind 変数に `bisql/default` を渡した場合、`?` ではなく SQL の `DEFAULT` として出力される。
+
+```clojure
+{:status bisql/default}
+```
+
+```sql
+INSERT INTO users (status) VALUES (/*$status*/'active')
+```
+
+→
+
+```sql
+INSERT INTO users (status) VALUES (DEFAULT)
+```
+
+初期実装での注意:
+
+- scalar の `$` バインディングでのみサポートする
+- `IN /*$ids*/(...)` のような collection binding では使えない
 
 ---
 
@@ -188,12 +214,17 @@ bind 値:
 WHERE 1 = 1
 /*%if name */
   AND name = /*$name*/'foo'
+/*%elseif status */
+  AND status = /*$status*/'active'
+/*%else */
+  AND status = 'inactive'
 /*%end */
 ```
 
 ### サポートする形式
 
 - `x`
+- `if / elseif / else / end`
 
 ### 評価ルール
 
@@ -201,15 +232,137 @@ WHERE 1 = 1
 - `nil` と `false` だけを偽として扱う
 - 未指定のパラメータは `nil` として扱う
 - 空文字列や空コレクションは真として扱う
+- falsy と評価された条件ブロックの直後に `AND` または `OR` がある場合、その後続の演算子も取り除く
+- falsy と評価された条件ブロックの直後に `AND` または `OR` がなく、直前に `WHERE` または `HAVING` がある場合、その節キーワードも取り除く
 
 ### 初期実装での制約
 
-- サポートするのは単一の変数名だけ
+- `if` と `elseif` でサポートするのは単一の変数名だけ
 - 式構文は初期実装では意図的にサポートしない
+- `else` は式を取らない
+
+### `/*%for*/`
+
+```sql
+UPDATE users
+SET
+/*%for item in items */
+  /*!item.name*/ = /*$item.value*/'sample',
+/*%end */
+WHERE id = /*$id*/1
+```
+
+### ルール
+
+- 構文は `/*%for item in items */ ... /*%end */`
+- `item` はループ内でのみ有効なローカル変数名
+- `item.name`, `item.value`, `user.profile.name` のような dot-path 参照をサポートする
+- dot-path の key lookup は `keyword` → `string` → `symbol` の順で行う
+- 空コレクションはエラーにしない
+- 空の `for` ブロックの直後に `AND` または `OR` がある場合、その後続の演算子も取り除く
+- 空の `for` ブロックの直後に `AND` または `OR` がなく、直前に `WHERE` または `HAVING` がある場合、その節キーワードも取り除く
+- 繰り返し内容の末尾が `,`, `AND`, `OR` のいずれかで終わる場合、最後の要素ではその末尾 token を取り除く
+
+### 初期実装での制約
+
+- 初期実装では nested `for` をサポートしない
 
 ---
 
-## 4.4 LIKE の扱い
+## 4.4 想定ユースケース
+
+`if` と `for` は、SQL ファイル全体を汎用プログラミング言語化するためではなく、SQL の一部を局所的に組み立てるために使う。
+
+### `if` の主な想定ユースケース
+
+#### `WHERE` / `HAVING` の条件出し分け
+
+```sql
+SELECT *
+FROM users
+WHERE
+/*%if active */
+  active = true
+/*%end */
+```
+
+#### `SET` 項目の出し分け
+
+```sql
+UPDATE users
+SET
+/*%if display-name */
+  display_name = /*$display-name*/'Alice'
+/*%else */
+  display_name = display_name
+/*%end */
+WHERE id = /*$id*/1
+```
+
+#### `ORDER BY` / `LIMIT` の有無の切り替え
+
+```sql
+SELECT *
+FROM users
+/*%if sort-by-created-at */
+ORDER BY created_at DESC
+/*%end */
+/*%if limit */
+LIMIT /*$limit*/100
+/*%end */
+```
+
+### `for` の主な想定ユースケース
+
+#### `WHERE` 句の条件列挙
+
+```sql
+SELECT *
+FROM users
+WHERE
+/*%for item in filters */
+  /*!item.column*/ = /*$item.value*/'sample' AND
+/*%end */
+```
+
+#### `UPDATE ... SET` の項目列挙
+
+```sql
+UPDATE users
+SET
+/*%for item in items */
+  /*!item.name*/ = /*$item.value*/'sample',
+/*%end */
+WHERE id = /*$id*/1
+```
+
+#### `INSERT` の列と値の列挙
+
+```sql
+INSERT INTO users (
+/*%for column in columns */
+  /*!column.name*/,
+/*%end */
+) VALUES (
+/*%for column in columns */
+  /*$column.value*/'sample',
+/*%end */
+)
+```
+
+#### 複数行 `VALUES`
+
+```sql
+INSERT INTO users (email, status)
+VALUES
+/*%for row in rows */
+  (/*$row.email*/'user@example.com', /*$row.status*/'active'),
+/*%end */
+```
+
+---
+
+## 4.5 LIKE の扱い
 
 LIKE は型付きの値で扱う。
 
@@ -235,7 +388,7 @@ bind 値:
 
 ---
 
-## 4.5 リテラル変数 — `/*^name*/` (任意)
+## 4.6 リテラル変数 — `/*^name*/` (任意)
 
 SQL リテラルを直接埋め込む。
 
@@ -266,7 +419,7 @@ WHERE type = 'BOOK'
 
 ---
 
-## 4.6 埋め込み変数 — `/*!name*/` (上級者向け)
+## 4.7 埋め込み変数 — `/*!name*/` (上級者向け)
 
 明示的なエスケープハッチとして、生の SQL 断片を注入する。
 
@@ -289,63 +442,63 @@ ORDER BY /*!order-by*/id DESC
 
 # 5. 宣言コメント
 
-宣言コメントはメタデータとドキュメントを提供する。
+宣言コメントは template metadata を提供する。
 
 ## 5.1 構文
 
 ```sql
-/*:doc
-...
-*/
-
-/*:meta
-{...}
+/*:<name>
+<edn>
 */
 ```
 
 ### ルール
 
-- ファイル先頭でのみ認識する
-- SQL 本文より前に置かなければならない
-- それ以降に出現しても無視する
+- declaration 名は任意
+- 宣言コメントは template block の先頭でのみ認識する
+- 同じ declaration の重複はエラー
+- declaration body はデフォルトでは EDN としてパースする
+- `/*:doc */` だけは、EDN として読めない場合に trim した plain string として扱う
+- 複数 template を含むファイルでは、それぞれの template block が自身の declaration を持つ
+- パース結果は `:meta` 配下に返す
 
----
-
-## 5.2 `/*:doc */`
-
-関数の docstring を定義する。
+例:
 
 ```sql
 /*:doc
 Find orders by customer ID.
 */
-```
 
----
-
-## 5.3 `/*:meta */`
-
-メタデータ（EDN）を定義する。
-
-```sql
-/*:meta
-{:tags [:orders :list]
- :since "0.1.0"}
+/*:tags
+[:orders :list]
 */
 ```
 
+→
+
+```clojure
+{:meta {:doc "Find orders by customer ID."
+        :tags [:orders :list]}}
+```
+
 ---
 
-## 5.4 命名
+## 5.2 `/*:name */`
 
-- 関数名は SQL ファイル名から導出する
-- `/*:name */` ディレクティブは使わない
+template 内ローカルな query 名を定義する。
 
-**理由:**
+```sql
+/*:name find-user-by-email */
+SELECT * FROM users WHERE email = /*$email*/'user@example.com'
+```
 
-- 信頼できる情報源の重複を避ける
-- 不整合を防ぐ
-- ファイル構成をシンプルに保つ
+### 命名ルール
+
+- 1 template だけを含むファイルでは `/*:name */` を省略できる
+- 複数 template を含むファイルでは各 template に `/*:name */` が必須
+- `load-query` は単一 template ファイルのみを扱う
+- `load-queries` は `query-name` をキーにして template を返す
+- `:name` は `query-name` の解決に使い、返却される `:meta` にも残す
 
 ---
 
@@ -359,7 +512,7 @@ Find orders by customer ID.
 (load-query "postgresql/public/users/get-by-id.sql")
 ```
 
-`resources/sql/...` から SQL ファイルを読み込み、パース済み表現を返す。
+classpath 上の `sql/...` から SQL ファイルを読み込み、パース済み表現を返す。
 
 ## 6.2 レンダリング
 
@@ -374,27 +527,96 @@ Find orders by customer ID.
  :params [1]}
 ```
 
-## 6.3 実行
+## 6.3 関数定義
 
 ```clojure
-(execute-one! datasource query params)
-(execute! datasource query params)
+(defrender)
+(defrender "admin")
+(defrender "/sql/postgresql/public/users/get-by-id.sql")
+(defrender "/sql/postgresql/public/users")
 ```
 
-これらの関数は実行を `next.jdbc` に委譲する。
+`defrender` は、SQL ファイルに含まれる query ごとにレンダリング関数を定義する。
+引数なしの場合は、現在の namespace を classpath 上のディレクトリへ変換し、
+その配下の `.sql` ファイルを再帰的に走査して定義する。相対パスを渡した場合は、
+その namespace 由来ディレクトリ配下として解決する。`/` から始まるパスを渡した
+場合は classpath root からの絶対パスとして解決する。ファイルではなくディレクトリを
+渡した場合は、その配下の `.sql` ファイルを再帰的に走査し、見つかった query を
+すべて定義する。
 
-## 6.4 CRUD 生成
+`defrender` が `query-name` を解決する優先順位は次のとおり:
+
+1. `/*:name */`
+2. SQL ファイル名そのもの
+
+生成される var 名は、解決された `query-name` を使う。
+ディレクトリを読む場合、ファイルはパス順に再帰処理する。var 名衝突は error とする。
+
+`defquery` は、実行可能な query 関数を定義する高レイヤのファサードである。
+デフォルトでは `:next-jdbc` アダプタへ委譲する。
+
+## 6.4 実行アダプタ
+
+実行は adapter namespace 配下で提供する。
+
+例:
+
+```clojure
+(require '[bisql.adapter.next-jdbc :as bisql.jdbc])
+
+(defquery "/sql/postgresql/public/users/users-crud.sql")
+
+(bisql.jdbc/exec! datasource get-by-id {:id 42})
+```
+
+`bisql.adapter.next-jdbc/exec!` は、query function metadata の `:cardinality` を見て
+`next.jdbc/execute-one!` または `next.jdbc/execute!` を選ぶ。`:cardinality` が
+未指定の場合は `:many` をデフォルトとする。
+
+これにより `bisql.core` は、読み込み・解析・レンダリング・関数生成に集中できる。
+
+## 6.5 CRUD 生成
 
 ```clojure
 (generate-crud datasource {:schema "public"})
 ```
 
-PostgreSQL のスキーマメタデータから、クエリ定義と呼び出し可能な関数を生成する。
+PostgreSQL のスキーマメタデータから、クエリ定義、SQL template ファイル、
+テーブルごとの query namespace ファイルを生成する。
+
+例:
+
+```clojure
+(-> (generate-crud datasource {:schema "public"})
+    (write-crud-files! {:output-root "src/sql"}))
+
+(-> (generate-crud datasource {:schema "public"})
+    (write-crud-query-namespaces! {:output-root "src/sql"}))
+```
+
+生成される namespace ファイルは、対応する SQL ディレクトリを読む:
+
+```clojure
+(ns sql.postgresql.public.users
+  (:require [bisql.core :as bisql]))
+
+(bisql/defquery)
+```
+
+同じ生成フローは CLI としても提供できる:
+
+```sh
+clojure -M -m bisql.cli gen-config
+clojure -M -m bisql.cli gen-crud --config bisql.edn
+clojure -M -m bisql.cli gen-ns --config bisql.edn
+```
+
+設定ファイルは `:db` と `:generate` を持つ EDN map とし、生成される雛形では既定値をコメントで例示する。設定ファイルがなくても、優先順位が CLI オプション > 環境変数 > 設定ファイル > デフォルトなので各コマンドは動作する。
 
 **理由:**
 
 - API の表面積を小さく保てる
-- 読み込み、展開、実行、生成の責務を分離できる
+- 読み込み、展開、実行アダプタ、生成の責務を分離できる
 - 各レイヤを独立にテストしやすい
 
 ---

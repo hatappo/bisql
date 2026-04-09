@@ -1,13 +1,16 @@
 (ns bisql.query
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
-            [clojure.string :as str]))
+            [clojure.string :as str])
+  (:import [java.io PushbackReader StringReader]))
 
 (declare render-template)
-(declare render-conditionals)
+(declare render-control-flow)
 
 (def default
   (Object.))
+
+(def ^:private missing ::missing)
 
 (defn- skip-leading-whitespace
   [s]
@@ -15,29 +18,48 @@
 
 (defn- parse-declaration-block
   [sql]
-  (let [pattern #"(?s)^/\*:\s*([A-Za-z0-9\-]+)?\s*\n?(.*?)\*/"
+  (let [pattern #"(?s)^/\*:([A-Za-z0-9\-]+)\s*\n?(.*?)\*/"
         matcher (re-matcher pattern sql)]
     (when (.find matcher)
       {:directive (some-> (.group matcher 1) keyword)
        :body (.group matcher 2)
        :rest (subs sql (.end matcher))})))
 
-(defn- supported-declaration?
-  [directive]
-  (contains? #{:name :doc :meta} directive))
+(def ^:private declaration-eof ::declaration-eof)
+
+(defn- read-edn-body
+  [body]
+  (let [reader (PushbackReader. (StringReader. body))
+        value (edn/read {:eof declaration-eof} reader)
+        trailing (edn/read {:eof declaration-eof} reader)]
+    (when (= value declaration-eof)
+      (throw (ex-info "Empty EDN value." {})))
+    (when-not (= trailing declaration-eof)
+      (throw (ex-info "Trailing EDN data." {})))
+    value))
 
 (defn- read-declaration-value
   [directive body]
-  (case directive
-    :name (str/trim body)
-    :doc (str/trim body)
-    :meta (try
-            (edn/read-string body)
-            (catch Exception ex
-              (throw (ex-info "Invalid meta declaration."
-                              {:directive directive
-                               :body body}
-                              ex))))))
+  (try
+    (read-edn-body body)
+    (catch Exception ex
+      (if (= directive :doc)
+        (str/trim body)
+        (throw (ex-info "Invalid declaration value."
+                        {:directive directive
+                         :body body}
+                        ex))))))
+
+(defn- normalize-query-name
+  [value]
+  (cond
+    (string? value) value
+    (keyword? value) (name value)
+    (symbol? value) (name value)
+    :else (throw (ex-info "Query name declaration must be a string, keyword, or symbol."
+                          {:directive :name
+                           :value value
+                           :type (type value)}))))
 
 (defn- extract-declarations
   [sql]
@@ -45,24 +67,19 @@
          result {}]
     (if-let [{:keys [directive body rest]} (parse-declaration-block remaining)]
       (do
-        (when-not (supported-declaration? directive)
-          (throw (ex-info "Unsupported declaration block."
-                          {:directive directive})))
         (when (contains? result directive)
           (throw (ex-info "Duplicate declaration block."
                           {:directive directive})))
         (recur (skip-leading-whitespace rest)
                (assoc result directive (read-declaration-value directive body))))
       (do
-        (when-let [matcher (re-find #"/\*:\s*([A-Za-z0-9\-]+)?" remaining)]
-          (let [directive (some-> (second matcher) keyword)]
-            (throw (ex-info (if (supported-declaration? directive)
-                              "Declaration blocks must appear at the beginning of the SQL file."
-                              "Unsupported declaration block.")
-                            {:directive directive}))))
-        {:name (:name result)
-         :doc (:doc result)
-         :meta (:meta result)
+        (when (str/starts-with? remaining "/*:")
+          (throw (ex-info "Invalid declaration block."
+                          {})))
+        (when (re-find #"/\*:" remaining)
+          (throw (ex-info "Declaration blocks must appear at the beginning of the SQL template block."
+                          {})))
+        {:meta result
          :sql-template remaining}))))
 
 (defn- preprocess-template
@@ -75,6 +92,12 @@
     (:query-name template) (assoc :query-name (:query-name template))
     (:base-path template) (assoc :base-path (:base-path template))
     (:resource-path template) (assoc :resource-path (:resource-path template))))
+
+(defn- resource-path-for
+  [base-path filename]
+  (if (str/blank? base-path)
+    filename
+    (str base-path "/" filename)))
 
 (defn- sql-filename?
   [filename]
@@ -108,8 +131,8 @@
       []
 
       (empty? start-indexes)
-      (let [{:keys [name]} (extract-declarations sql)]
-        [{:name name
+      (let [{:keys [meta]} (extract-declarations sql)]
+        [{:name (some-> (:name meta) normalize-query-name)
           :sql-template sql}])
 
       :else
@@ -122,8 +145,8 @@
                          (not (str/blank? prefixed-block))
                          (into [prefixed-block]))]
         (mapv (fn [block-sql]
-                (let [{:keys [name]} (extract-declarations block-sql)]
-                  {:name name
+                (let [{:keys [meta]} (extract-declarations block-sql)]
+                  {:name (some-> (:name meta) normalize-query-name)
                    :sql-template block-sql}))
               block-sqls)))))
 
@@ -134,7 +157,7 @@
                     {:filename filename
                      :base-path base-path})))
   (let [query-name (query-name-from-filename filename)
-        resource-path (str base-path "/" filename)
+        resource-path (resource-path-for base-path filename)
         resource (io/resource resource-path)]
     (when-not resource
       (throw (ex-info "SQL resource not found."
@@ -212,6 +235,19 @@
                         :base-path base-path
                         :query-names (sort (keys queries))}))))))
 
+(defn analyze-template
+  "Analyzes a template and returns declaration metadata plus the declaration-free SQL template."
+  [template]
+  {:pre [(map? template)]}
+  (let [context (template-context template)
+        {:keys [meta sql-template]} (extract-declarations (:sql-template template))
+        query-name (or (:query-name context)
+                       (some-> (:name meta) normalize-query-name))]
+    (merge context
+           {:query-name query-name
+            :sql-template sql-template
+            :meta meta})))
+
 (defn- whitespace?
   [ch]
   (Character/isWhitespace ^char ch))
@@ -268,12 +304,44 @@
                       (recur (inc idx) (dec depth)))
           :else (recur (inc idx) depth))))))
 
+(defn- path-segments
+  [parameter-name]
+  (str/split parameter-name #"\."))
+
+(defn- candidate-keys
+  [segment]
+  [(keyword segment) segment (symbol segment)])
+
+(defn- lookup-segment
+  [value segment]
+  (if (associative? value)
+    (reduce (fn [_ k]
+              (if (contains? value k)
+                (reduced (get value k))
+                missing))
+            missing
+            (candidate-keys segment))
+    missing))
+
+(defn- parameter-key
+  [parameter-name]
+  (keyword parameter-name))
+
+(defn- resolved-parameter-value
+  [template-params parameter-name]
+  (reduce (fn [value segment]
+            (if (= value missing)
+              missing
+              (lookup-segment value segment)))
+          template-params
+          (path-segments parameter-name)))
+
 (defn- parameter-value
-  [template-params name]
-  (let [value (get template-params name ::missing)]
-    (when (= value ::missing)
+  [template-params parameter-name]
+  (let [value (resolved-parameter-value template-params parameter-name)]
+    (when (= value missing)
       (throw (ex-info "Missing query parameter."
-                      {:parameter name})))
+                      {:parameter (parameter-key parameter-name)})))
     value))
 
 (defn- default-value?
@@ -281,25 +349,25 @@
   (identical? value default))
 
 (defn- render-bind-variable
-  [template-params name collection?]
-  (let [value (parameter-value template-params name)]
+  [template-params parameter-name collection?]
+  (let [value (parameter-value template-params parameter-name)]
     (if collection?
       (do
         (when (default-value? value)
           (throw (ex-info "DEFAULT is not allowed in collection binding."
-                          {:parameter name
+                          {:parameter (parameter-key parameter-name)
                            :value value})))
         (when-not (sequential? value)
           (throw (ex-info "Collection binding requires a sequential value."
-                          {:parameter name
+                          {:parameter (parameter-key parameter-name)
                            :value value})))
         (when (some default-value? value)
           (throw (ex-info "DEFAULT is not allowed inside collection binding."
-                          {:parameter name
+                          {:parameter (parameter-key parameter-name)
                            :value value})))
         (when (empty? value)
           (throw (ex-info "Collection binding does not allow empty values."
-                          {:parameter name})))
+                          {:parameter (parameter-key parameter-name)})))
         {:sql (str "("
                    (str/join ", " (repeat (count value) "?"))
                    ")")
@@ -311,14 +379,14 @@
          :params [value]}))))
 
 (defn- render-literal-variable
-  [template-params name]
-  (let [value (parameter-value template-params name)]
+  [template-params parameter-name]
+  (let [value (parameter-value template-params parameter-name)]
     (cond
       (string? value)
       (do
         (when (str/includes? value "'")
           (throw (ex-info "Literal string values must not contain single quotes."
-                          {:parameter name
+                          {:parameter (parameter-key parameter-name)
                            :value value})))
         {:sql (str "'" value "'")
          :params []})
@@ -329,25 +397,25 @@
 
       :else
       (throw (ex-info "Unsupported literal value type."
-                      {:parameter name
+                      {:parameter (parameter-key parameter-name)
                        :value value
                        :type (type value)})))))
 
 (defn- render-raw-variable
-  [template-params name]
-  {:sql (str (parameter-value template-params name))
+  [template-params parameter-name]
+  {:sql (str (parameter-value template-params parameter-name))
    :params []})
 
 (defn- render-variable
-  [template-params sigil name collection?]
+  [template-params sigil parameter-name collection?]
   (case sigil
-    "$" (render-bind-variable template-params name collection?)
-    "^" (render-literal-variable template-params name)
-    "!" (render-raw-variable template-params name)))
+    "$" (render-bind-variable template-params parameter-name collection?)
+    "^" (render-literal-variable template-params parameter-name)
+    "!" (render-raw-variable template-params parameter-name)))
 
 (defn- variable-context
-  [name sigil collection?]
-  {:parameter name
+  [parameter-name sigil collection?]
+  {:parameter (parameter-key parameter-name)
    :sigil sigil
    :collection? collection?})
 
@@ -356,8 +424,11 @@
   (not (or (nil? value) (false? value))))
 
 (defn- eval-condition
-  [name template-params]
-  (truthy? (get template-params (keyword name))))
+  [parameter-name template-params]
+  (truthy? (let [value (resolved-parameter-value template-params parameter-name)]
+             (if (= value missing)
+               nil
+               value))))
 
 (defn- trim-leading-newline
   [s]
@@ -365,53 +436,167 @@
     (subs s 1)
     s))
 
-(defn- find-if-end
-  [sql start]
-  (loop [cursor start
-         depth 1]
-    (let [matcher (re-matcher #"/\*%(if|end)(?:\s+([^*]*?))?\s*\*/" sql)]
+(defn- remove-trailing-clause-keyword
+  [out]
+  (let [current (str out)
+        updated (or (some->> current
+                             (re-matches #"(?s)(.*(?:^|\n))[ \t]*(WHERE|HAVING)[ \t\r\n]*$")
+                             second)
+                    (some->> current
+                             (re-matches #"(?s)(.*?)(?:WHERE|HAVING)[ \t\r\n]*$")
+                             second)
+                    current)]
+    (when-not (= current updated)
+      (.setLength out 0)
+      (.append out ^String updated))))
+
+(defn- trailing-set-clause?
+  [out]
+  (boolean
+   (or (re-matches #"(?s).*(?:^|\n)[ \t]*SET[ \t\r\n]*$" (str out))
+       (re-matches #"(?s).*SET[ \t\r\n]*$" (str out)))))
+
+(defn- consume-leading-conditional-operator
+  [sql cursor]
+  (let [remaining (subs sql cursor)]
+    (when-let [match (re-find #"(?is)\A([ \t\r\n]*)(AND|OR)([ \t\r\n]*)" remaining)]
+      (let [[matched _ _ _] match]
+        (+ cursor (count matched))))))
+
+(defn- trim-trailing-for-separator
+  [s]
+  (or (some->> s
+               (re-matches #"(?is)(.*?)[ \t\r\n]*,[ \t\r\n]*$")
+               second)
+      (some->> s
+               (re-matches #"(?is)(.*?)[ \t\r\n]+(?:AND|OR)[ \t\r\n]*$")
+               second)
+      s))
+
+(defn- parse-control-directive
+  [matcher]
+  {:directive (.group matcher 1)
+   :arg1 (.group matcher 2)
+   :arg2 (.group matcher 3)
+   :start (.start matcher)
+   :end (.end matcher)})
+
+(def ^:private control-directive-pattern
+  #"/\*%(if|elseif|else|for|end)(?:\s+([A-Za-z0-9\-\.]+)(?:\s+in\s+([A-Za-z0-9\-\.]+))?)?\s*\*/")
+
+(defn- append-conditional-branch
+  [branches current-expr branch-start branch-end sql]
+  (conj branches
+        {:expr current-expr
+         :body (subs sql branch-start branch-end)}))
+
+(defn- parse-conditional-branches
+  [sql if-start if-end initial-expr]
+  (loop [cursor if-end
+         depth 1
+         branches []
+         current-expr initial-expr
+         branch-start if-end
+         else-seen? false]
+    (let [matcher (re-matcher control-directive-pattern sql)]
       (if-not (.find matcher cursor)
         (throw (ex-info "Unterminated conditional block."
                         {:sql sql
-                         :start start}))
-        (let [directive (.group matcher 1)
-              next-depth (cond
-                           (= directive "if") (inc depth)
-                           (= directive "end") (dec depth)
-                           :else depth)]
-          (if (zero? next-depth)
-            {:start (.start matcher)
-             :end (.end matcher)}
-            (recur (.end matcher) next-depth)))))))
+                         :start if-start}))
+        (let [{:keys [directive arg1 start end]} (parse-control-directive matcher)]
+          (cond
+            (> depth 1)
+            (recur end
+                   (case directive
+                     ("if" "for") (inc depth)
+                     "end" (dec depth)
+                     depth)
+                   branches
+                   current-expr
+                   branch-start
+                   else-seen?)
 
-(defn- render-conditionals
-  [sql template-params]
-  (let [matcher (re-matcher #"/\*%if\s+([A-Za-z0-9\-]+)\s*\*/" sql)
-        out (StringBuilder.)]
-    (loop [cursor 0]
+            (contains? #{"if" "for"} directive)
+            (recur end
+                   (inc depth)
+                   branches
+                   current-expr
+                   branch-start
+                   else-seen?)
+
+            (= directive "elseif")
+            (do
+              (when else-seen?
+                (throw (ex-info "Conditional block cannot contain elseif after else."
+                                {:sql sql
+                                 :start start})))
+              (recur end
+                     depth
+                     (append-conditional-branch branches current-expr branch-start start sql)
+                     arg1
+                     end
+                     else-seen?))
+
+            (= directive "else")
+            (do
+              (when else-seen?
+                (throw (ex-info "Conditional block cannot contain multiple else blocks."
+                                {:sql sql
+                                 :start start})))
+              (recur end
+                     depth
+                     (append-conditional-branch branches current-expr branch-start start sql)
+                     nil
+                     end
+                     true))
+
+            (= directive "end")
+            {:branches (append-conditional-branch branches current-expr branch-start start sql)
+             :end end}))))))
+
+(defn- parse-for-block
+  [sql for-start for-end item-name collection-name]
+  (loop [cursor for-end
+         depth 1]
+    (let [matcher (re-matcher control-directive-pattern sql)]
       (if-not (.find matcher cursor)
-        (do
-          (.append out ^String (subs sql cursor))
-          (str out))
-        (let [if-start (.start matcher)
-              if-end (.end matcher)
-              expr (.group matcher 1)
-              {:keys [start end]} (find-if-end sql if-end)
-              body (subs sql if-end start)]
-          (.append out ^String (subs sql cursor if-start))
-          (when (eval-condition expr template-params)
-            (let [rendered-body (render-conditionals body template-params)
-                  rendered-body (if (and (pos? (.length out))
-                                         (= \newline (.charAt out (dec (.length out)))))
-                                  (trim-leading-newline rendered-body)
-                                  rendered-body)]
-              (.append out ^String rendered-body)))
-          (recur end))))))
+        (throw (ex-info "Unterminated for block."
+                        {:sql sql
+                         :start for-start}))
+        (let [{:keys [directive start end]} (parse-control-directive matcher)]
+          (cond
+            (= directive "for")
+            (if (= depth 1)
+              (throw (ex-info "Nested for blocks are not supported."
+                              {:sql sql
+                               :start start
+                               :item item-name
+                               :collection collection-name}))
+              (recur end (inc depth)))
 
-(defn- render-template
+            (= directive "if")
+            (recur end (inc depth))
+
+            (= directive "end")
+            (if (= depth 1)
+              {:body (subs sql for-end start)
+               :end end}
+              (recur end (dec depth)))
+
+            :else
+            (recur end depth)))))))
+
+(defn- selected-conditional-branch
+  [branches template-params]
+  (some (fn [{:keys [expr] :as branch}]
+          (when (or (nil? expr)
+                    (eval-condition expr template-params))
+            branch))
+        branches))
+
+(defn- render-variable-comments
   [sql template-params]
-  (let [sql (render-conditionals sql template-params)
-        matcher (re-matcher #"/\*([\$\^\!])([A-Za-z0-9\-]+)\*/" sql)
+  (let [matcher (re-matcher #"/\*([\$\^\!])([A-Za-z0-9\-\.]+)\*/" sql)
         out (StringBuilder.)
         bind-params (transient [])
         length (count sql)]
@@ -424,22 +609,28 @@
         (let [start (.start matcher)
               end (.end matcher)
               sigil (.group matcher 1)
-              name (keyword (.group matcher 2))
+              parameter-name (.group matcher 2)
               sample-start end]
-          (if (or (>= sample-start length)
-                  (whitespace? (.charAt sql sample-start)))
+          (if (and (not= sigil "!")
+                   (or (>= sample-start length)
+                       (whitespace? (.charAt sql sample-start))))
             (do
               (.append out ^String (subs sql cursor end))
               (recur end))
             (let [collection? (and (= sigil "$")
                                    (= (.charAt sql sample-start) \())
-                  context (variable-context name sigil collection?)
+                  context (variable-context parameter-name sigil collection?)
                   {:keys [sample-end rendered]}
                   (try
-                    (let [sample-end (if collection?
-                                       (consume-sample-collection sql sample-start)
-                                       (consume-sample-token sql sample-start))
-                          rendered (render-variable template-params sigil name collection?)]
+                    (let [sample-end (cond
+                                       (= sigil "!")
+                                       (if (or (>= sample-start length)
+                                               (whitespace? (.charAt sql sample-start)))
+                                         end
+                                         (consume-sample-token sql sample-start))
+                                       collection? (consume-sample-collection sql sample-start)
+                                       :else (consume-sample-token sql sample-start))
+                          rendered (render-variable template-params sigil parameter-name collection?)]
                       {:sample-end sample-end
                        :rendered rendered})
                     (catch clojure.lang.ExceptionInfo ex
@@ -450,6 +641,90 @@
               (.append out ^String (:sql rendered))
               (reduce conj! bind-params (:params rendered))
               (recur sample-end))))))))
+
+(defn- append-fragment!
+  [out accumulated-bind-params {:keys [sql bind-params]}]
+  (.append out ^String sql)
+  (reduce conj! accumulated-bind-params bind-params))
+
+(defn- normalize-fragment-for-context
+  [out fragment]
+  (let [sql (:sql fragment)
+        sql (if (and (pos? (.length out))
+                     (= \newline (.charAt out (dec (.length out)))))
+              (trim-leading-newline sql)
+              sql)]
+    (assoc fragment :sql sql)))
+
+(defn- render-control-flow
+  [sql template-params]
+  (let [matcher (re-matcher #"/\*%(if|for)\s+([A-Za-z0-9\-\.]+)(?:\s+in\s+([A-Za-z0-9\-\.]+))?\s*\*/" sql)
+        out (StringBuilder.)
+        bind-params (transient [])]
+    (loop [cursor 0]
+      (if-not (.find matcher cursor)
+        (do
+          (append-fragment! out bind-params (render-variable-comments (subs sql cursor) template-params))
+          {:sql (str out)
+           :bind-params (persistent! bind-params)})
+        (let [directive (.group matcher 1)
+              block-start (.start matcher)
+              block-end (.end matcher)]
+          (append-fragment! out bind-params (render-variable-comments (subs sql cursor block-start) template-params))
+          (let [next-cursor
+                (case directive
+                  "if"
+                  (let [expr (.group matcher 2)
+                        {:keys [branches end]} (parse-conditional-branches sql block-start block-end expr)]
+                    (if-let [{:keys [body]} (selected-conditional-branch branches template-params)]
+                      (do
+                        (append-fragment! out
+                                          bind-params
+                                          (normalize-fragment-for-context
+                                           out
+                                           (render-control-flow body template-params)))
+                        end)
+                      (if-let [next-cursor (consume-leading-conditional-operator sql end)]
+                        next-cursor
+                        (do
+                          (remove-trailing-clause-keyword out)
+                          end))))
+
+                  "for"
+                  (let [item-name (.group matcher 2)
+                        collection-name (.group matcher 3)
+                        {:keys [body end]} (parse-for-block sql block-start block-end item-name collection-name)
+                        items (parameter-value template-params collection-name)]
+                    (when-not (sequential? items)
+                      (throw (ex-info "For block requires a sequential value."
+                                      {:parameter (parameter-key collection-name)
+                                       :value items})))
+                    (if (seq items)
+                      (do
+                        (doseq [[idx item] (map-indexed vector items)]
+                          (let [item-params (assoc template-params (keyword item-name) item)
+                                rendered-fragment (render-control-flow body item-params)
+                                rendered-fragment (if (= idx (dec (count items)))
+                                                    (update rendered-fragment :sql trim-trailing-for-separator)
+                                                    rendered-fragment)]
+                            (append-fragment! out
+                                              bind-params
+                                              (normalize-fragment-for-context out rendered-fragment))))
+                        end)
+                      (if-let [next-cursor (consume-leading-conditional-operator sql end)]
+                        next-cursor
+                        (do
+                          (when (trailing-set-clause? out)
+                            (throw (ex-info "Empty for block is not allowed in SET clause."
+                                            {:parameter (parameter-key collection-name)
+                                             :item (keyword item-name)})))
+                          (remove-trailing-clause-keyword out)
+                          end)))))]
+            (recur next-cursor)))))))
+
+(defn- render-template
+  [sql template-params]
+  (render-control-flow sql template-params))
 
 (defn- postprocess-sql
   [sql]
@@ -465,15 +740,15 @@
       (let [; 1. Pre-process the template
             preprocessed-template (preprocess-template template)
             ; 2. Extract declarations such as /*:doc ...*/
-            {:keys [doc meta sql-template]} (extract-declarations (:sql-template preprocessed-template))
+            {:keys [query-name meta sql-template]} (analyze-template preprocessed-template)
             ; 3. Render the template to executable SQL
             {:keys [sql bind-params]} (render-template sql-template template-params)
             ; 4. Post-process the SQL such as trimming whitespace
             postprocessed-sql (postprocess-sql sql)]
-        (merge context
+        (merge (cond-> context
+                 query-name (assoc :query-name query-name))
                {:sql postprocessed-sql
                 :params bind-params
-                :doc doc
                 :meta meta}))
       (catch clojure.lang.ExceptionInfo ex
         (throw (ex-info (ex-message ex)

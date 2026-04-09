@@ -83,18 +83,19 @@ Initial implementation assumes `next.jdbc` as the execution backend.
 
 ## 3.1 Recommended Path Convention
 
-SQL files are placed under `resources/sql/`.
+SQL files are placed under the logical `sql/` base path on the classpath.
+In practice, that usually means `src/sql/` or `resources/sql/`.
 
 Recommended layout:
 
 ```text
-resources/sql/<database>/<schema>/<table>/<function-name>.sql
+sql/<database>/<schema>/<table>/<function-name>.sql
 ```
 
 Example:
 
 ```text
-resources/sql/postgresql/public/users/get-by-id.sql
+src/sql/postgresql/public/users/get-by-id.sql
 ```
 
 ### Rules
@@ -121,6 +122,8 @@ Prepared statement parameter.
 
 - Replaced with `?`
 - Value is passed separately
+- Parameter names may use multi-level dot-paths such as `user.profile.status`
+- Each path segment is resolved in this order: `keyword`, `string`, `symbol`
 
 ### Example
 
@@ -139,6 +142,29 @@ binds:
 ```clojure
 [123]
 ```
+
+### `DEFAULT`
+
+When a scalar bind variable receives `bisql/default`, it is rendered as SQL `DEFAULT` instead of `?`.
+
+```clojure
+{:status bisql/default}
+```
+
+```sql
+INSERT INTO users (status) VALUES (/*$status*/'active')
+```
+
+→
+
+```sql
+INSERT INTO users (status) VALUES (DEFAULT)
+```
+
+Initial implementation notes:
+
+- Supported only for scalar `$` bindings
+- Not allowed in collection bindings such as `IN /*$ids*/(...)`
 
 ---
 
@@ -181,12 +207,17 @@ binds:
 WHERE 1 = 1
 /*%if name */
   AND name = /*$name*/'foo'
+/*%elseif status */
+  AND status = /*$status*/'active'
+/*%else */
+  AND status = 'inactive'
 /*%end */
 ```
 
 ### Supported Form
 
 - `x`
+- `if / elseif / else / end`
 
 ### Evaluation Rules
 
@@ -194,15 +225,137 @@ WHERE 1 = 1
 - Only `nil` and `false` are treated as false
 - Missing parameters are treated as `nil`
 - Empty strings and empty collections are treated as true
+- If a falsy conditional block is immediately followed by `AND` or `OR`, that trailing operator is also removed
+- If a falsy conditional block is not followed by `AND` or `OR` and is immediately preceded by `WHERE` or `HAVING`, that clause keyword is also removed
 
 ### Initial Implementation Constraint
 
-- Only a single variable name is supported
+- Only a single variable name is supported in `if` and `elseif`
 - Expression syntax is intentionally not supported in the initial implementation
+- `else` does not take an expression
+
+### `/*%for*/`
+
+```sql
+UPDATE users
+SET
+/*%for item in items */
+  /*!item.name*/ = /*$item.value*/'sample',
+/*%end */
+WHERE id = /*$id*/1
+```
+
+### Rules
+
+- Syntax: `/*%for item in items */ ... /*%end */`
+- `item` is a loop-local variable name
+- Dot-path references such as `item.name`, `item.value`, or `user.profile.name` are supported
+- Dot-path lookup checks keys in this order: `keyword`, `string`, `symbol`
+- Empty collections are not treated as errors
+- If an empty `for` block is immediately followed by `AND` or `OR`, that trailing operator should also be removed
+- If an empty `for` block is not followed by `AND` or `OR` and is immediately preceded by `WHERE` or `HAVING`, that clause keyword should also be removed
+- If the repeated body ends with `,`, `AND`, or `OR`, that trailing token should be removed for the last element
+
+### Initial Implementation Constraint
+
+- Nested `for` blocks are not supported in the initial implementation
 
 ---
 
-## 4.4 LIKE Handling
+## 4.4 Typical Use Cases
+
+`if` and `for` are intended for local SQL assembly, not for turning SQL files into a general-purpose programming language.
+
+### Typical Use Cases for `if`
+
+#### Conditional `WHERE` / `HAVING`
+
+```sql
+SELECT *
+FROM users
+WHERE
+/*%if active */
+  active = true
+/*%end */
+```
+
+#### Conditional `SET`
+
+```sql
+UPDATE users
+SET
+/*%if display-name */
+  display_name = /*$display-name*/'Alice'
+/*%else */
+  display_name = display_name
+/*%end */
+WHERE id = /*$id*/1
+```
+
+#### Conditional `ORDER BY` / `LIMIT`
+
+```sql
+SELECT *
+FROM users
+/*%if sort-by-created-at */
+ORDER BY created_at DESC
+/*%end */
+/*%if limit */
+LIMIT /*$limit*/100
+/*%end */
+```
+
+### Typical Use Cases for `for`
+
+#### Repeated `WHERE` Conditions
+
+```sql
+SELECT *
+FROM users
+WHERE
+/*%for item in filters */
+  /*!item.column*/ = /*$item.value*/'sample' AND
+/*%end */
+```
+
+#### Repeated `SET` Items
+
+```sql
+UPDATE users
+SET
+/*%for item in items */
+  /*!item.name*/ = /*$item.value*/'sample',
+/*%end */
+WHERE id = /*$id*/1
+```
+
+#### Repeated `INSERT` Columns and Values
+
+```sql
+INSERT INTO users (
+/*%for column in columns */
+  /*!column.name*/,
+/*%end */
+) VALUES (
+/*%for column in columns */
+  /*$column.value*/'sample',
+/*%end */
+)
+```
+
+#### Repeated Multi-row `VALUES`
+
+```sql
+INSERT INTO users (email, status)
+VALUES
+/*%for row in rows */
+  (/*$row.email*/'user@example.com', /*$row.status*/'active'),
+/*%end */
+```
+
+---
+
+## 4.5 LIKE Handling
 
 LIKE is handled via typed values.
 
@@ -228,7 +381,7 @@ binds:
 
 ---
 
-## 4.5 Literal Variables — `/*^name*/` (Optional)
+## 4.6 Literal Variables — `/*^name*/` (Optional)
 
 Directly embeds a SQL literal.
 
@@ -258,7 +411,7 @@ WHERE type = 'BOOK'
 
 ---
 
-## 4.6 Embedded Variables — `/*!name*/` (Advanced)
+## 4.7 Embedded Variables — `/*!name*/` (Advanced)
 
 Injects raw SQL fragments as an explicit escape hatch.
 
@@ -280,62 +433,63 @@ ORDER BY /*!order-by*/id DESC
 
 # 5. Declaration Comments
 
-Declaration comments provide metadata and documentation.
+Declaration comments provide template metadata.
 
 ## 5.1 Syntax
 
 ```sql
-/*:doc
-...
-*/
-
-/*:meta
-{...}
+/*:<name>
+<edn>
 */
 ```
 
 ### Rules
 
-- Only recognized at the top of the file
-- Must appear before SQL content
-- Later occurrences are ignored
+- Any declaration name is allowed
+- Declaration blocks are recognized only at the beginning of a template block
+- Duplicate declaration blocks are errors
+- Declaration bodies are parsed as EDN by default
+- `/*:doc */` falls back to a trimmed plain string when EDN parsing fails
+- In a file with multiple templates, each template block starts with its own declarations
+- Parsed declarations are returned under `:meta`
 
----
-
-## 5.2 `/*:doc */`
-
-Defines function docstring.
+Example:
 
 ```sql
 /*:doc
 Find orders by customer ID.
 */
-```
 
----
-
-## 5.3 `/*:meta */`
-
-Defines metadata (EDN).
-
-```sql
-/*:meta
-{:tags [:orders :list]
- :since "0.1.0"}
+/*:tags
+[:orders :list]
 */
 ```
 
+→
+
+```clojure
+{:meta {:doc "Find orders by customer ID."
+        :tags [:orders :list]}}
+```
+
 ---
 
-## 5.4 Naming
+## 5.2 `/*:name */`
 
-- Function name is derived from the SQL file name
-- No `/*:name */` directive is used
+Defines a template-local query name.
 
-**Reasoning:**
-- Avoid duplication of source of truth
-- Prevent inconsistencies
-- Keep file structure simple
+```sql
+/*:name find-user-by-email */
+SELECT * FROM users WHERE email = /*$email*/'user@example.com'
+```
+
+### Naming Rules
+
+- Files with a single template may omit `/*:name */`
+- Files with multiple templates require `/*:name */` for each template
+- `load-query` only supports single-template files
+- `load-queries` returns templates keyed by `query-name`
+- `:name` is used to resolve `query-name` and is also kept inside returned `:meta`
 
 ---
 
@@ -349,7 +503,7 @@ Initial implementation should expose a small public API.
 (load-query "postgresql/public/users/get-by-id.sql")
 ```
 
-Loads a SQL file from `resources/sql/...` and returns its parsed representation.
+Loads a SQL file from `sql/...` on the classpath and returns its parsed representation.
 
 ## 6.2 Rendering
 
@@ -364,26 +518,96 @@ Renders template SQL into:
  :params [1]}
 ```
 
-## 6.3 Execution
+## 6.3 Function Definition
 
 ```clojure
-(execute-one! datasource query params)
-(execute! datasource query params)
+(defrender)
+(defrender "admin")
+(defrender "/sql/postgresql/public/users/get-by-id.sql")
+(defrender "/sql/postgresql/public/users")
 ```
 
-These functions delegate execution to `next.jdbc`.
+`defrender` defines one rendering function per query found in a SQL file.
+With no arguments, it resolves the current namespace to a classpath directory
+and loads every `.sql` file under that directory recursively. When a relative
+path is passed, it is resolved under that namespace-derived directory. When a
+path starts with `/`, it is resolved from the classpath root. If a directory is
+passed instead of a file, it loads every `.sql` file under that directory
+recursively and defines all queries found there.
 
-## 6.4 CRUD Generation
+`defrender` resolves `query-name` with this priority:
+
+1. `/*:name */`
+2. the SQL file name itself
+
+The generated var name is the resolved `query-name`.
+When loading a directory, files are processed recursively in sorted path order.
+Var name collisions are errors.
+
+`defquery` is the higher-level facade that defines executable query functions.
+By default it delegates to the `:next-jdbc` adapter implementation.
+
+## 6.4 Execution Adapters
+
+Execution lives behind adapter namespaces.
+
+Example:
+
+```clojure
+(require '[bisql.adapter.next-jdbc :as bisql.jdbc])
+
+(defquery "/sql/postgresql/public/users/users-crud.sql")
+
+(bisql.jdbc/exec! datasource get-by-id {:id 42})
+```
+
+`bisql.adapter.next-jdbc/exec!` chooses `next.jdbc/execute-one!` or `next.jdbc/execute!`
+based on the query function metadata's `:cardinality` value. When `:cardinality` is not
+specified, it defaults to `:many`.
+
+This keeps `bisql.core` focused on loading, analyzing, rendering, and function generation.
+
+## 6.5 CRUD Generation
 
 ```clojure
 (generate-crud datasource {:schema "public"})
 ```
 
-Generates query definitions and callable functions from PostgreSQL schema metadata.
+Generates query definitions, SQL template files, and per-table query namespace files
+from PostgreSQL schema metadata.
+
+Example:
+
+```clojure
+(-> (generate-crud datasource {:schema "public"})
+    (write-crud-files! {:output-root "src/sql"}))
+
+(-> (generate-crud datasource {:schema "public"})
+    (write-crud-query-namespaces! {:output-root "src/sql"}))
+```
+
+Each generated namespace file loads the matching SQL directory:
+
+```clojure
+(ns sql.postgresql.public.users
+  (:require [bisql.core :as bisql]))
+
+(bisql/defquery)
+```
+
+The same generation flow can be exposed as a CLI:
+
+```sh
+clojure -M -m bisql.cli gen-config
+clojure -M -m bisql.cli gen-crud --config bisql.edn
+clojure -M -m bisql.cli gen-ns --config bisql.edn
+```
+
+The config file is an EDN map with `:db` and `:generate` sections. Generated templates show default values as commented examples. Commands still work without a config file because the precedence order is CLI options > environment variables > config file > defaults.
 
 **Reasoning:**
 - Keeps the API surface small
-- Separates loading, rendering, execution, and generation concerns
+- Separates loading, rendering, execution adapters, and generation concerns
 - Makes it easier to test each layer independently
 
 ---

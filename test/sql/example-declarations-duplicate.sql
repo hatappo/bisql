@@ -1,7 +1,7 @@
 /*:doc
-first
+"first"
 */
 /*:doc
-second
+"second"
 */
 SELECT 1

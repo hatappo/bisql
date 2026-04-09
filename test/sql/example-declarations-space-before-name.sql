@@ -1,4 +1,4 @@
 /*: foo
-bar
+:bar
 */
 SELECT 1

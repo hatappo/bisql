@@ -36,8 +36,14 @@
   db-reset {:doc "Reset local PostgreSQL sample schema and seed data"
             :task (shell "bb scripts/db/reset_postgres_sample.bb")}
 
-  crud-generate {:doc "Generate CRUD SQL files from local PostgreSQL"
-                 :task (clojure "-M:script" "-m" "db.generate-crud-files")}
+  gen-config {:doc "Generate a bisql.edn config template"
+              :task (clojure "-M" "-m" "bisql.cli" "gen-config")}
+
+  gen-crud {:doc "Generate CRUD SQL files from local PostgreSQL"
+            :task (clojure "-M" "-m" "bisql.cli" "gen-crud")}
+
+  gen-ns {:doc "Generate query namespace files from local PostgreSQL"
+          :task (clojure "-M" "-m" "bisql.cli" "gen-ns")}
 
   demo {:doc "Run example scripts for manual verification"
         :task (shell "bb scripts/demo/core.bb")}

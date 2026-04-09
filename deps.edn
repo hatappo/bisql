@@ -6,7 +6,6 @@
  {:dev {:extra-paths ["dev"]}
   :lint {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2025.10.23"}}
          :main-opts ["-m" "clj-kondo.main"]}
-  :script {:extra-paths ["scripts"]}
   :test {:extra-paths ["test"]
          :main-opts ["-m" "bisql.test-runner"]}
   :test-db {:extra-paths ["test"]

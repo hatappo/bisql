@@ -1,5 +1,6 @@
 (ns bisql.crud
-  (:require [clojure.java.io :as io]
+  (:require [clojure.edn :as edn]
+            [clojure.java.io :as io]
             [clojure.string :as str]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs]))
@@ -106,10 +107,64 @@
   [dialect schema table]
   (str dialect "/" schema "/" table "/" table "-crud.sql"))
 
+(defn- normalize-path
+  [path]
+  (some-> path
+          (str/replace "\\" "/")
+          (str/replace #"^\./" "")
+          (str/replace #"/+$" "")))
+
+(defn- deps-classpath-roots
+  []
+  (let [deps-edn (-> "deps.edn" io/file slurp edn/read-string)]
+    (mapv normalize-path (:paths deps-edn))))
+
+(defn- relative-to-classpath-root
+  [output-root]
+  (let [normalized-root (normalize-path output-root)
+        matching-root (->> (deps-classpath-roots)
+                           (filter #(or (= normalized-root %)
+                                        (str/starts-with? normalized-root (str % "/"))))
+                           (sort-by count >)
+                           first)]
+    (when matching-root
+      (let [prefix (str matching-root "/")]
+        (if (= normalized-root matching-root)
+          ""
+          (subs normalized-root (count prefix)))))))
+
+(defn- namespace-root-path
+  [output-root]
+  (or (not-empty (relative-to-classpath-root output-root))
+      (normalize-path (.getName (io/file output-root)))))
+
+(defn- query-namespace-segments
+  [root-path query-path]
+  (->> (str/split (str root-path "/" query-path) #"/")
+       (mapv kebab-name)))
+
+(defn- namespace-file-path
+  [query-path]
+  (str query-path ".clj"))
+
+(defn- namespace-symbol
+  [root-path query-path]
+  (symbol (str/join "." (query-namespace-segments root-path query-path))))
+
 (defn- query-block
-  [{:keys [name sql-template]}]
-  (str "/*:name " name " */\n"
-       sql-template))
+  [{:keys [name meta sql-template]}]
+  (let [declarations (concat [[:name name]]
+                             (sort-by key (dissoc (or meta {}) :name)))
+        declaration-lines (map (fn [[k v]]
+                                 (str "/*:" (clojure.core/name k) " "
+                                      (if (= k :name)
+                                        v
+                                        (pr-str v))
+                                      " */"))
+                               declarations)]
+    (str (str/join "\n" declaration-lines)
+         "\n"
+         sql-template)))
 
 (defn- table-file-entry
   [dialect schema table templates]
@@ -135,13 +190,52 @@
 (defn write-crud-files!
   "Writes generated CRUD templates as one SQL file per table."
   [crud-result {:keys [output-root]
-                :or {output-root "resources/sql"}}]
+                :or {output-root "src/sql"}}]
   (let [file-result (render-crud-files crud-result)]
     (doseq [{:keys [path content]} (:files file-result)]
       (let [output-file (io/file output-root path)]
         (io/make-parents output-file)
         (spit output-file content)))
     file-result))
+
+(defn render-crud-query-namespaces
+  "Renders one query namespace file per table.
+   Each generated namespace loads the matching SQL directory via bisql/defquery."
+  ([crud-result]
+   (render-crud-query-namespaces crud-result {:output-root "src/sql"}))
+  ([{:keys [dialect schema templates]} {:keys [output-root]
+                                        :or {output-root "src/sql"}}]
+   (let [root-path (namespace-root-path output-root)
+         files (->> templates
+                    (map :table)
+                    distinct
+                    sort
+                    (mapv (fn [table]
+                            (let [query-path (str dialect "/" schema "/" table)
+                                  ns-sym (namespace-symbol root-path query-path)
+                                  file-path (namespace-file-path query-path)
+                                  content (str "(ns " ns-sym "\n"
+                                               "  (:require [bisql.core :as bisql]))\n\n"
+                                               "(bisql/defquery)\n")]
+                              {:table table
+                               :path file-path
+                               :namespace ns-sym
+                               :query-path query-path
+                               :content content}))))]
+     {:dialect dialect
+      :schema schema
+      :files files})))
+
+(defn write-crud-query-namespaces!
+  "Writes generated query namespace files, one per table."
+  [crud-result {:keys [output-root]
+                :or {output-root "src/sql"}}]
+  (let [rendered (render-crud-query-namespaces crud-result {:output-root output-root})]
+    (doseq [{:keys [path content]} (:files rendered)]
+      (let [output-file (io/file output-root path)]
+        (io/make-parents output-file)
+        (spit output-file content)))
+    rendered))
 
 (defn- generate-get-templates
   [schema table columns-by-name unique-column-groups]
@@ -152,7 +246,8 @@
                        table
                        :get
                        column-names
-                       (get-template table columns))))
+                       (get-template table columns)
+                       :meta {:cardinality :one})))
    unique-column-groups))
 
 (defn- insertable-column?
@@ -188,7 +283,8 @@
   [table predicate-columns]
   (str/join "\n"
             [(str "DELETE FROM " table)
-             (where-clause predicate-columns)]))
+             (where-clause predicate-columns)
+             "RETURNING *"]))
 
 (defn- update-bind-comment
   [column]
@@ -222,7 +318,8 @@
                             :insert
                             "insert"
                             (mapv :column_name insert-columns)
-                            (insert-template table insert-columns)))))
+                            (insert-template table insert-columns)
+                            :meta {:cardinality :one}))))
 
 (defn- generate-delete-templates
   [schema table columns-by-name unique-column-groups]
@@ -233,7 +330,8 @@
                        table
                        :delete
                        column-names
-                       (delete-template table columns))))
+                       (delete-template table columns)
+                       :meta {:cardinality :one})))
    unique-column-groups))
 
 (defn- generate-update-templates
@@ -249,6 +347,7 @@
                                   :update
                                   predicate-column-names
                                   (update-template table predicate-columns set-columns)
+                                  :meta {:cardinality :one}
                                   :set-columns (mapv :column_name set-columns))))))
        (remove nil?)
        vec))
@@ -295,7 +394,8 @@
                                       :list
                                       (list-template-name candidate colliding-base-names)
                                       prefix-column-names
-                                      (select-template table predicate-columns order-columns))))
+                                      (select-template table predicate-columns order-columns)
+                                      :meta {:cardinality :many})))
             candidates))))
 
 (defn- table-columns-query

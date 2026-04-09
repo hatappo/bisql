@@ -1,6 +1,6 @@
 #!/usr/bin/env bb
 
-(require '[bisql.query :refer [load-query load-queries render-query]]
+(require '[bisql.query :as bisql :refer [load-query load-queries render-query]]
          '[demo.lib :refer [error-example example]])
 
 (example
@@ -16,8 +16,41 @@
  (render-query (load-query "demo-variables-raw.sql") {:order-by "created_at DESC"}))
 
 (example
+ "Variables 4. default bind value"
+ (render-query (load-query "demo-variables-default.sql")
+               {:email "alice@example.com"
+                :status bisql/default}))
+
+(example
  "Control flow 1. if"
  (render-query (load-query "demo-if.sql") {:id 42}))
+
+(example
+ "Control flow 2. remove WHERE for falsy if"
+ (render-query (load-query "demo-if-where.sql") {:active false}))
+
+(example
+ "Control flow 3. remove following AND for falsy if"
+ (render-query (load-query "demo-if-and.sql")
+               {:active false
+                :status "active"}))
+
+(example
+ "Control flow 4. remove HAVING for falsy if"
+ (render-query (load-query "demo-if-having.sql") {:min-count nil}))
+
+(example
+ "Control flow 5. elseif and else"
+ (render-query (load-query "demo-if-elseif-else.sql")
+               {:active false
+                :pending true}))
+
+(example
+ "Control flow 6. for"
+ (render-query (load-query "demo-for.sql")
+               {:id 42
+                :items [{:name "display_name" :value "Alice"}
+                        {:name "status" :value "active"}]}))
 
 (example
  "Declarations"

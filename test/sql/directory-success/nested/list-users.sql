@@ -1,0 +1,3 @@
+SELECT *
+FROM users
+WHERE status = /*$status*/'sample'

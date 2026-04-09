@@ -1,4 +1,4 @@
-/*:meta
-{:tags [:example]
+/*:tags
+[:example
 */
 SELECT 1

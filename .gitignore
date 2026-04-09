@@ -1,3 +1,11 @@
 .cpcache/
 .clj-kondo/.cache/
+
 tmp/
+
+# Bisql generated files
+src/sql/**/*-crud.sql
+src/sql/**/*.clj
+
+# Bisql config file
+bisql.edn

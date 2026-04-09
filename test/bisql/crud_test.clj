@@ -163,7 +163,8 @@
                  (:sql-template update-template)))
           (is (= (str "DELETE FROM user_devices\n"
                       "WHERE user_id = /*$user-id*/1\n"
-                      "  AND device_identifier = /*$device-identifier*/'sample'")
+                      "  AND device_identifier = /*$device-identifier*/'sample'\n"
+                      "RETURNING *")
                  (:sql-template delete-template)))
           (is (= (str "SELECT * FROM user_devices\n"
                       "WHERE user_id = /*$user-id*/1\n"
@@ -219,7 +220,8 @@
                  (:sql-template update-template)))
           (is (= (str "DELETE FROM user_roles\n"
                       "WHERE user_id = /*$user-id*/1\n"
-                      "  AND role_code = /*$role-code*/'sample'")
+                      "  AND role_code = /*$role-code*/'sample'\n"
+                      "RETURNING *")
                  (:sql-template delete-template))))))))
 
 (deftest render-crud-files-groups-templates-by-table
@@ -227,12 +229,15 @@
                      :schema "public"
                      :templates [{:table "users"
                                   :name "get-by-id"
+                                  :meta {:cardinality :one}
                                   :sql-template "SELECT * FROM users WHERE id = /*$id*/1"}
                                  {:table "users"
                                   :name "insert"
+                                  :meta {:cardinality :one}
                                   :sql-template "INSERT INTO users (...) VALUES (...) RETURNING *"}
                                  {:table "orders"
                                   :name "get-by-id"
+                                  :meta {:cardinality :one}
                                   :sql-template "SELECT * FROM orders WHERE id = /*$id*/1"}]}
         rendered (crud/render-crud-files crud-result)
         files (:files rendered)
@@ -244,11 +249,14 @@
             "postgresql/public/users/users-crud.sql"]
            (mapv :path files)))
     (is (= (str "/*:name get-by-id */\n"
+                "/*:cardinality :one */\n"
                 "SELECT * FROM users WHERE id = /*$id*/1\n\n"
                 "/*:name insert */\n"
+                "/*:cardinality :one */\n"
                 "INSERT INTO users (...) VALUES (...) RETURNING *")
            (:content users-file)))
     (is (= (str "/*:name get-by-id */\n"
+                "/*:cardinality :one */\n"
                 "SELECT * FROM orders WHERE id = /*$id*/1")
            (:content orders-file)))))
 
@@ -260,12 +268,66 @@
                      :schema "public"
                      :templates [{:table "users"
                                   :name "get-by-id"
+                                  :meta {:cardinality :one}
                                   :sql-template "SELECT * FROM users WHERE id = /*$id*/1"}]}
         result (crud/write-crud-files! crud-result {:output-root temp-root})
         output-file (io/file temp-root "postgresql/public/users/users-crud.sql")]
     (is (.exists output-file))
     (is (= (str "/*:name get-by-id */\n"
+                "/*:cardinality :one */\n"
                 "SELECT * FROM users WHERE id = /*$id*/1")
            (slurp output-file)))
     (is (= "postgresql/public/users/users-crud.sql"
+           (:path (first (:files result)))))))
+
+(deftest render-crud-query-namespaces-groups-tables-into-namespaces
+  (let [crud-result {:dialect "postgresql"
+                     :schema "public"
+                     :templates [{:table "users"
+                                  :name "get-by-id"
+                                  :meta {:cardinality :one}
+                                  :sql-template "SELECT * FROM users WHERE id = /*$id*/1"}
+                                 {:table "users"
+                                  :name "insert"
+                                  :meta {:cardinality :one}
+                                  :sql-template "INSERT INTO users (...) VALUES (...) RETURNING *"}
+                                 {:table "orders"
+                                  :name "get-by-id"
+                                  :meta {:cardinality :one}
+                                  :sql-template "SELECT * FROM orders WHERE id = /*$id*/1"}]}
+        rendered (crud/render-crud-query-namespaces crud-result {:output-root "src/sql"})
+        files (:files rendered)
+        orders-file (first files)
+        users-file (second files)]
+    (is (= "postgresql" (:dialect rendered)))
+    (is (= "public" (:schema rendered)))
+    (is (= ["postgresql/public/orders.clj"
+            "postgresql/public/users.clj"]
+           (mapv :path files)))
+    (is (= 'sql.postgresql.public.users
+           (:namespace users-file)))
+    (is (= "postgresql/public/users"
+           (:query-path users-file)))
+    (is (= "(ns sql.postgresql.public.users\n  (:require [bisql.core :as bisql]))\n\n(bisql/defquery)\n"
+           (:content users-file)))
+    (is (= "(ns sql.postgresql.public.orders\n  (:require [bisql.core :as bisql]))\n\n(bisql/defquery)\n"
+           (:content orders-file)))))
+
+(deftest write-crud-query-namespaces-writes-table-namespaces
+  (let [temp-root (str (System/getProperty "java.io.tmpdir")
+                       "/bisql-crud-ns-test-"
+                       (System/nanoTime))
+        crud-result {:dialect "postgresql"
+                     :schema "public"
+                     :templates [{:table "users"
+                                  :name "get-by-id"
+                                  :meta {:cardinality :one}
+                                  :sql-template "SELECT * FROM users WHERE id = /*$id*/1"}]}
+        output-root (str temp-root "/src/sql")
+        result (crud/write-crud-query-namespaces! crud-result {:output-root output-root})
+        output-file (io/file output-root "postgresql/public/users.clj")]
+    (is (.exists output-file))
+    (is (= "(ns sql.postgresql.public.users\n  (:require [bisql.core :as bisql]))\n\n(bisql/defquery)\n"
+           (slurp output-file)))
+    (is (= "postgresql/public/users.clj"
            (:path (first (:files result)))))))
