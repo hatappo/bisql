@@ -965,14 +965,12 @@
                        fragment-sql# (if (= idx# (dec (count items#)))
                                        (~(var trim-trailing-for-separator) fragment-sql#)
                                        fragment-sql#)
-                       rendered-fragment# {:sql fragment-sql#
-                                           :bind-params (persistent! ~body-bind-params-sym)}]
-                   (~(var append-fragment!)
-                    ~out-sym
-                    ~bind-params-sym
-                    (~(var normalize-fragment-for-context)
-                     ~out-sym
-                     rendered-fragment#)))))
+                       fragment-sql# (:sql (~(var normalize-fragment-for-context)
+                                           ~out-sym
+                                           {:sql fragment-sql#
+                                            :bind-params []}))]
+                   (.append ~out-sym ^String fragment-sql#)
+                   (reduce conj! ~bind-params-sym (persistent! ~body-bind-params-sym)))))
              false)
            (do
              (when (and (not ~skip-leading-operator-sym)
