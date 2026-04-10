@@ -566,6 +566,10 @@ classpath 上の `sql/...` から SQL ファイルを読み込み、パース済
 ` :where`, `:having`, `:set`, `:values`, `:limit`, `:offset`
 のような clause 単位の文脈も node に注釈する。
 
+現在の主経路は `emit-ir-form` である。`defrender` と `defquery` は、
+マクロ展開時に emitted renderer form をそのまま埋め込み、`compile-ir` は
+`eval` を使う実行時向けの薄い convenience wrapper として残している。
+
 ## 6.3 関数定義
 
 ```clojure

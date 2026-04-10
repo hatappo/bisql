@@ -558,6 +558,10 @@ The initial IR also annotates nodes with statement kind (`:select`, `:insert`,
 `:update`, `:delete`) and clause-level context such as `:where`, `:having`,
 `:set`, `:values`, `:limit`, and `:offset`.
 
+The current primary path is `emit-ir-form`: `defrender` and `defquery` embed
+the emitted renderer form at macro expansion time, while `compile-ir` remains
+as a thin runtime convenience wrapper around `eval`.
+
 ## 6.3 Function Definition
 
 ```clojure
