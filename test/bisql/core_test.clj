@@ -294,6 +294,70 @@
     (is (= "^" (:sigil (ex-data error))))
     (is (= false (:collection? (ex-data error))))))
 
+(deftest render-query-rejects-raw-values-with-semicolons
+  (let [error (try
+                (bisql/render-query
+                 {:sql-template "SELECT * FROM users ORDER BY /*!order-by*/id"}
+                 {:order-by "id; DROP TABLE users"})
+                nil
+                (catch clojure.lang.ExceptionInfo ex
+                  ex))]
+    (is (= "Raw variable values must not contain semicolons."
+           (ex-message error)))
+    (is (= :order-by (:parameter (ex-data error))))
+    (is (= "id; DROP TABLE users" (:value (ex-data error))))))
+
+(deftest render-query-rejects-raw-values-with-line-comments
+  (let [error (try
+                (bisql/render-query
+                 {:sql-template "SELECT * FROM users ORDER BY /*!order-by*/id"}
+                 {:order-by "id -- malicious"})
+                nil
+                (catch clojure.lang.ExceptionInfo ex
+                  ex))]
+    (is (= "Raw variable values must not contain line comment sequences."
+           (ex-message error)))
+    (is (= :order-by (:parameter (ex-data error))))))
+
+(deftest render-query-rejects-raw-values-with-block-comments
+  (let [error (try
+                (bisql/render-query
+                 {:sql-template "SELECT * FROM users ORDER BY /*!order-by*/id"}
+                 {:order-by "id /* malicious */"})
+                nil
+                (catch clojure.lang.ExceptionInfo ex
+                  ex))]
+    (is (= "Raw variable values must not contain block comment sequences."
+           (ex-message error)))
+    (is (= :order-by (:parameter (ex-data error))))))
+
+(deftest render-query-rejects-literal-strings-with-backslashes
+  (let [error (try
+                (bisql/render-query
+                 {:sql-template "SELECT * FROM users WHERE type = /*^type*/'A'"}
+                 {:type "BO\\OK"})
+                nil
+                (catch clojure.lang.ExceptionInfo ex
+                  ex))]
+    (is (= "Literal string values must not contain backslashes."
+           (ex-message error)))
+    (is (= :type (:parameter (ex-data error))))
+    (is (= "BO\\OK" (:value (ex-data error))))
+    (is (= "^" (:sigil (ex-data error))))
+    (is (= false (:collection? (ex-data error))))))
+
+(deftest render-query-rejects-literal-strings-with-nul-characters
+  (let [error (try
+                (bisql/render-query
+                 {:sql-template "SELECT * FROM users WHERE type = /*^type*/'A'"}
+                 {:type (str "BO" \u0000 "OK")})
+                nil
+                (catch clojure.lang.ExceptionInfo ex
+                  ex))]
+    (is (= "Literal string values must not contain NUL characters."
+           (ex-message error)))
+    (is (= :type (:parameter (ex-data error))))))
+
 (deftest render-query-rejects-unsupported-literal-types
   (let [error (try
                 (bisql/render-query
