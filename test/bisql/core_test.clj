@@ -172,6 +172,15 @@
     (is (= (:sql result) (str/trim (:sql rendered))))
     (is (= (:params result) (:bind-params rendered)))))
 
+(deftest emit-ir-form-linearizes-top-level-renderer-shape
+  (let [sql-template "SELECT * FROM users WHERE id = /*$id*/1"
+        emitted-form (bisql/emit-ir-form (bisql/parse-template sql-template))
+        emitted-str (pr-str emitted-form)]
+    (is (str/includes? emitted-str "clojure.core/fn"))
+    (is (str/includes? emitted-str "StringBuilder"))
+    (is (not (str/includes? emitted-str "compiled-nodes#")))
+    (is (not (str/includes? emitted-str "loop")))))
+
 (deftest parse-template-annotates-variable-contexts
   (let [ir (bisql/parse-template
             (str/join "\n"
