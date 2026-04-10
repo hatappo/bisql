@@ -815,15 +815,88 @@
       `(do
          (when ~skip-leading-operator-sym
            (~(var remove-trailing-clause-keyword) ~out-sym))
-         (let [rendered# (try
-                           (~(var render-variable) ~params-sym ~sigil ~parameter-name ~collection?)
-                           (catch clojure.lang.ExceptionInfo ex#
-                             (throw (ex-info (ex-message ex#)
-                                             (merge ~context (ex-data ex#))
-                                             ex#))))]
-           (.append ~out-sym ^String (:sql rendered#))
-           (reduce conj! ~bind-params-sym (:params rendered#))
-           false)))
+         (try
+           ~(case sigil
+              "$"
+              (if collection?
+                `(let [value# (~(var parameter-value) ~params-sym ~parameter-name)]
+                   (when (identical? value# default)
+                     (throw (ex-info "DEFAULT is not allowed in collection binding."
+                                     {:parameter (~(var parameter-key) ~parameter-name)
+                                      :value value#})))
+                   (when (identical? value# ALL)
+                     (throw (ex-info "ALL is not allowed in collection binding."
+                                     {:parameter (~(var parameter-key) ~parameter-name)
+                                      :value value#})))
+                   (when-not (sequential? value#)
+                     (throw (ex-info "Collection binding requires a sequential value."
+                                     {:parameter (~(var parameter-key) ~parameter-name)
+                                      :value value#})))
+                   (when (some #(identical? % default) value#)
+                     (throw (ex-info "DEFAULT is not allowed inside collection binding."
+                                     {:parameter (~(var parameter-key) ~parameter-name)
+                                      :value value#})))
+                   (when (some #(identical? % ALL) value#)
+                     (throw (ex-info "ALL is not allowed inside collection binding."
+                                     {:parameter (~(var parameter-key) ~parameter-name)
+                                      :value value#})))
+                   (when (empty? value#)
+                     (throw (ex-info "Collection binding does not allow empty values."
+                                     {:parameter (~(var parameter-key) ~parameter-name)})))
+                   (.append ~out-sym "(")
+                   (.append ~out-sym ^String (str/join ", " (repeat (count value#) "?")))
+                   (.append ~out-sym ")")
+                   (reduce conj! ~bind-params-sym value#)
+                   false)
+                `(let [value# (~(var parameter-value) ~params-sym ~parameter-name)]
+                   (cond
+                     (identical? value# default)
+                     (do
+                       (.append ~out-sym "DEFAULT")
+                       false)
+
+                     (identical? value# ALL)
+                     (do
+                       (.append ~out-sym "ALL")
+                       false)
+
+                     :else
+                     (do
+                       (.append ~out-sym "?")
+                       (conj! ~bind-params-sym value#)
+                       false))))
+
+              "^"
+              `(let [value# (~(var parameter-value) ~params-sym ~parameter-name)]
+                 (cond
+                   (string? value#)
+                   (do
+                     (when (str/includes? value# "'")
+                       (throw (ex-info "Literal string values must not contain single quotes."
+                                       {:parameter (~(var parameter-key) ~parameter-name)
+                                        :value value#})))
+                     (.append ~out-sym ^String (str "'" value# "'"))
+                     false)
+
+                   (number? value#)
+                   (do
+                     (.append ~out-sym ^String (str value#))
+                     false)
+
+                   :else
+                   (throw (ex-info "Unsupported literal value type."
+                                   {:parameter (~(var parameter-key) ~parameter-name)
+                                    :value value#
+                                    :type (type value#)}))))
+
+              "!"
+              `(do
+                 (.append ~out-sym ^String (str (~(var parameter-value) ~params-sym ~parameter-name)))
+                 false))
+           (catch clojure.lang.ExceptionInfo ex#
+             (throw (ex-info (ex-message ex#)
+                             (merge ~context (ex-data ex#))
+                             ex#))))))
 
     :if
     (let [compiled-branches
