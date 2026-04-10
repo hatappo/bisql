@@ -1,6 +1,16 @@
 # Bisql
 
-Bisql (pronunce `bάɪsɪkl` 🚲️ ) is a 2-way SQL toolkit for Clojure.
+Bisql (pronounced `báisikl` 🚲) is a SQL-first, SQL-only data access library for Clojure.
+
+Write real SQL. Keep it executable. Generate the boring parts.
+
+- Query templates remain valid, executable SQL.
+- Typical index-friendly queries are generated automatically.
+
+No query builder.  
+No data mapper.  
+No hidden SQL.  
+No boilerplate SQL.  
 
 [![Clojars Project](https://img.shields.io/clojars/v/io.github.hatappo/bisql.svg)](https://clojars.org/io.github.hatappo/bisql)
 
@@ -64,7 +74,7 @@ CREATE INDEX orders_state_created_at_idx
   ON orders (state, created_at);
 ```
 
-### 2. Write One Custom Query
+### 2. Write One Real SQL Query
 
 Place a SQL template under a classpath `sql/...` directory.
 
@@ -80,6 +90,8 @@ WHERE status = /*$status*/'active'
 ORDER BY id
 LIMIT /*$limit*/100
 ```
+
+This template is still valid SQL: you can run it directly with the embedded literals, and bisql replaces those literals with bind parameters at runtime.
 
 ```clj
 (ns sql
@@ -107,39 +119,19 @@ Then use the generated query function:
                                :limit 20})
 ```
 
-`bisql.core/defquery` uses the current namespace only to locate SQL files.
-Each discovered SQL file still defines executable query functions into the
-namespace derived from that SQL file path, so the same SQL file always maps to
-the same namespace. Internally it uses the default adapter `:next-jdbc`.
+`bisql.core/defquery` uses the current namespace only to find SQL files.
+Each discovered SQL file defines executable query functions in the namespace derived from its file path, so the same SQL file always maps to the same namespace.
+By default, query execution uses the `:next-jdbc` adapter.
 
-### 3. Generate Typical CRUD Queries
+### 3. Generate Typical Index-Friendly Queries
 
-Continuing from the above, generate a config template first:
+Continuing from the previous example, you can generate a config template (`bisql.edn`) and modify it if needed:
 
 ```sh
 clojure -M -m bisql.cli gen-config
 ```
 
-This writes a `bisql.edn` template:
-
-```clojure
-{:db {
-      ;; :dbtype "postgresql"
-      ;; :host "localhost"
-      ;; :port 5432
-      ;; :dbname "bisql_dev"
-      ;; :user "bisql"
-      ;; :password "bisql"
-      }
- :generate {
-            ;; :schema "public"
-            ;; :base-dir "src/sql"
-            }}
-```
-
-Comments show the default values. Commands still work without editing this file.
-
-Then generate CRUD SQL:
+Then generate the CRUD SQL:
 
 ```sh
 clojure -M -m bisql.cli gen-crud
@@ -151,7 +143,7 @@ Depending on the tables present in the target database, this writes files such a
 - `src/sql/postgresql/public/orders/orders-crud.sql`
 
 Generated CRUD SQL includes templates such as `insert`, `insert-many`, `get-by-*`,
-`update-by-*`, `delete-by-*`, and `list-by-*`.
+`update-by-*`, `delete-by-*`, `list`, and `list-by-*`.
 
 These generated queries are meant to cover the typical index-friendly SQL patterns
 you would usually write by hand. In practice, that often means you do not need to
@@ -170,6 +162,7 @@ For the sample tables above, this typically includes:
 - `users/delete-by-email`
 - `orders/insert`
 - `orders/insert-many`
+- `orders/list`
 - `orders/get-by-id`
 - `orders/update-by-id`
 - `orders/delete-by-id`
@@ -192,9 +185,8 @@ Then execute one of the generated functions:
                         :user "bisql"
                         :password "bisql"}))
 
-(orders/list-by-state datasource {:state "paid"
-                                  :limit 20
-                                  :offset 0})
+(orders/list datasource {:limit 20
+                         :offset 0})
 ```
 
 SQL templates are resolved from the classpath under the logical `sql` base path.

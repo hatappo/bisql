@@ -13,6 +13,21 @@
 (def analyze-template
   query/analyze-template)
 
+(def parse-template
+  query/parse-template)
+
+(def emit-ir-form
+  query/emit-ir-form)
+
+(def compile-ir
+  query/compile-ir)
+
+(def evaluate-ir
+  query/evaluate-ir)
+
+(def render-compiled-query
+  query/render-compiled-query)
+
 (def render-query
   query/render-query)
 
@@ -44,18 +59,21 @@
    (let [ns-sym (ns-name *ns*)
          entries (define/definition-entries ns-sym nil)]
      (define/ensure-unique-var-names! entries)
-     `(do ~@(mapv (fn [{:keys [template target-ns var-name metadata]}]
+     `(do ~@(mapv (fn [{:keys [template ir target-ns var-name metadata]}]
                     (let [template-data (list 'quote template)
+                          renderer-form (query/emit-ir-form ir)
                           metadata-data (list 'quote metadata)]
-                      `(define/define-function-var!
-                         '~target-ns
-                         '~var-name
-                         ~metadata-data
-                         (with-meta
-                           (fn
-                             ([] (query/render-query ~template-data {}))
-                             ([template-params#] (query/render-query ~template-data template-params#)))
-                           ~metadata-data))))
+                      `(let [renderer# ~renderer-form]
+                         (define/define-function-var!
+                           '~target-ns
+                           '~var-name
+                           ~metadata-data
+                           (with-meta
+                             (fn
+                               ([] (query/render-compiled-query ~template-data renderer# {}))
+                               ([template-params#]
+                                (query/render-compiled-query ~template-data renderer# template-params#)))
+                             ~metadata-data)))))
                   entries))))
   ([path]
    (when-not (string? path)
@@ -65,18 +83,21 @@
    (let [ns-sym (ns-name *ns*)
          entries (define/definition-entries ns-sym path)]
      (define/ensure-unique-var-names! entries)
-     `(do ~@(mapv (fn [{:keys [template target-ns var-name metadata]}]
+     `(do ~@(mapv (fn [{:keys [template ir target-ns var-name metadata]}]
                     (let [template-data (list 'quote template)
+                          renderer-form (query/emit-ir-form ir)
                           metadata-data (list 'quote metadata)]
-                      `(define/define-function-var!
-                         '~target-ns
-                         '~var-name
-                         ~metadata-data
-                         (with-meta
-                           (fn
-                             ([] (query/render-query ~template-data {}))
-                             ([template-params#] (query/render-query ~template-data template-params#)))
-                           ~metadata-data))))
+                      `(let [renderer# ~renderer-form]
+                         (define/define-function-var!
+                           '~target-ns
+                           '~var-name
+                           ~metadata-data
+                           (with-meta
+                             (fn
+                               ([] (query/render-compiled-query ~template-data renderer# {}))
+                               ([template-params#]
+                                (query/render-compiled-query ~template-data renderer# template-params#)))
+                             ~metadata-data)))))
                   entries)))))
 
 (defmacro defquery

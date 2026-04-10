@@ -119,10 +119,12 @@
   (->> (templates-for-definition ns-sym path)
        (mapv (fn [template]
                (let [analyzed-template (query/analyze-template template)
+                     ir (query/parse-template (:sql-template analyzed-template))
                      target-ns (target-namespace-symbol (:resource-path analyzed-template))
                      var-name (var-symbol-from-query-name (:query-name analyzed-template))
                      metadata (query-function-metadata analyzed-template)]
                  {:template analyzed-template
+                  :ir ir
                   :target-ns target-ns
                   :var-name var-name
                   :metadata metadata

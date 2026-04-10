@@ -533,6 +533,35 @@ Renders template SQL into:
  :params [1]}
 ```
 
+The initial compiler foundation also exposes:
+
+```clojure
+(parse-template "SELECT * FROM users WHERE id = /*$id*/1")
+(emit-ir-form ir)
+(compile-ir ir)
+(evaluate-ir ir {:id 1})
+```
+
+`parse-template` converts a declaration-free SQL template string into an
+intermediate representation. `emit-ir-form` emits a reusable renderer function
+form from that IR. `compile-ir` compiles the IR into a reusable renderer
+function at runtime. `evaluate-ir` evaluates the IR directly and returns the
+same rendered SQL shape as the internal renderer step:
+
+```clojure
+{:sql "SELECT * FROM users WHERE id = ?"
+ :bind-params [1]}
+```
+
+This IR layer is intended to be the foundation for future compiled renderers.
+The initial IR also annotates nodes with statement kind (`:select`, `:insert`,
+`:update`, `:delete`) and clause-level context such as `:where`, `:having`,
+`:set`, `:values`, `:limit`, and `:offset`.
+
+The current primary path is `emit-ir-form`: `defrender` and `defquery` embed
+the emitted renderer form at macro expansion time, while `compile-ir` remains
+as a thin runtime convenience wrapper around `eval`.
+
 ## 6.3 Function Definition
 
 ```clojure

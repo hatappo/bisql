@@ -66,10 +66,18 @@
       (is (contains? names "list-by-user-id-order-by-device-identifier"))
       (is (contains? names "list-by-user-id-order-by-last-seen-at"))
       (is (contains? names "list-by-user-id-and-last-seen-at"))
+      (is (contains? names "list-order-by-id"))
+      (is (contains? names "list-order-by-email"))
+      (is (contains? names "list-order-by-state-and-created-at"))
+      (is (contains? names "list-order-by-status-and-last-seen-at"))
+      (is (contains? names "list-order-by-user-id-and-last-seen-at"))
+      (is (contains? names "list-order-by-status-and-device-type-and-last-seen-at"))
+      (is (contains? names "list-order-by-user-id-and-device-identifier"))
       (is (contains? names "list-by-status-order-by-last-seen-at"))
       (is (contains? names "list-by-status-order-by-device-type-and-last-seen-at"))
       (is (contains? names "list-by-status-and-device-type"))
       (is (contains? names "list-by-status"))
+      (is (contains? names "list"))
       (is (contains? names "list-by-status-and-last-seen-at"))
       (is (contains? names "list-by-user-id"))
       (is (contains? names "list-by-state"))
@@ -153,10 +161,25 @@
                       "LIMIT /*$limit*/100\n"
                       "OFFSET /*$offset*/0")
                  (:sql-template template)))))
+      (testing "zero-prefix list query is generated for composite indexes"
+        (let [template (some #(when (= "list" (:name %)) %) templates)]
+          (is (= "list" (:query-name template)))
+          (is (= [] (:columns template)))
+          (is (= (str "SELECT * FROM user_roles\n"
+                      "ORDER BY user_id, role_code\n"
+                      "LIMIT /*$limit*/100\n"
+                      "OFFSET /*$offset*/0")
+                 (:sql-template template)))))
       (testing "composite unique and composite index generate expected templates"
         (let [get-template (some #(when (= "get-by-user-id-and-device-identifier" (:name %)) %) templates)
               update-template (some #(when (= "update-by-user-id-and-device-identifier" (:name %)) %) templates)
               delete-template (some #(when (= "delete-by-user-id-and-device-identifier" (:name %)) %) templates)
+              list-from-two-column-index-template (some #(when (= "list-order-by-status-and-last-seen-at" (:name %))
+                                                           %)
+                                                        templates)
+              list-from-three-column-index-template (some #(when (= "list-order-by-status-and-device-type-and-last-seen-at" (:name %))
+                                                             %)
+                                                          templates)
               list-by-user-id-from-unique-template (some #(when (= "list-by-user-id-order-by-device-identifier" (:name %))
                                                             %)
                                                          templates)
@@ -196,6 +219,16 @@
                       "  AND device_identifier = /*$device-identifier*/'sample'\n"
                       "RETURNING *")
                  (:sql-template delete-template)))
+          (is (= (str "SELECT * FROM user_devices\n"
+                      "ORDER BY status, last_seen_at\n"
+                      "LIMIT /*$limit*/100\n"
+                      "OFFSET /*$offset*/0")
+                 (:sql-template list-from-two-column-index-template)))
+          (is (= (str "SELECT * FROM user_devices\n"
+                      "ORDER BY status, device_type, last_seen_at\n"
+                      "LIMIT /*$limit*/100\n"
+                      "OFFSET /*$offset*/0")
+                 (:sql-template list-from-three-column-index-template)))
           (is (= (str "SELECT * FROM user_devices\n"
                       "WHERE user_id = /*$user-id*/1\n"
                       "ORDER BY device_identifier\n"
@@ -265,18 +298,22 @@
   (let [crud-result {:dialect "postgresql"
                      :schema "public"
                      :templates [{:table "users"
+                                  :kind :get
                                   :name "get-by-id"
                                   :meta {:cardinality :one}
                                   :sql-template "SELECT * FROM users WHERE id = /*$id*/1"}
                                  {:table "users"
+                                  :kind :insert
                                  :name "insert"
                                   :meta {:cardinality :one}
                                   :sql-template "INSERT INTO users (...) VALUES (...) RETURNING *"}
                                  {:table "users"
+                                  :kind :insert
                                   :name "insert-many"
                                   :meta {:cardinality :many}
                                   :sql-template "INSERT INTO users (...) VALUES /*%for row in rows */(...),/*%end */ RETURNING *"}
                                  {:table "orders"
+                                  :kind :get
                                   :name "get-by-id"
                                   :meta {:cardinality :one}
                                   :sql-template "SELECT * FROM orders WHERE id = /*$id*/1"}]}
@@ -289,15 +326,15 @@
     (is (= ["postgresql/public/orders/orders-crud.sql"
             "postgresql/public/users/users-crud.sql"]
            (mapv :path files)))
-    (is (= (str "/*:name get-by-id */\n"
-                "/*:cardinality :one */\n"
-                "SELECT * FROM users WHERE id = /*$id*/1\n\n"
-                "/*:name insert */\n"
+    (is (= (str "/*:name insert */\n"
                 "/*:cardinality :one */\n"
                 "INSERT INTO users (...) VALUES (...) RETURNING *\n\n"
                 "/*:name insert-many */\n"
                 "/*:cardinality :many */\n"
-                "INSERT INTO users (...) VALUES /*%for row in rows */(...),/*%end */ RETURNING *")
+                "INSERT INTO users (...) VALUES /*%for row in rows */(...),/*%end */ RETURNING *\n\n"
+                "/*:name get-by-id */\n"
+                "/*:cardinality :one */\n"
+                "SELECT * FROM users WHERE id = /*$id*/1")
            (:content users-file)))
     (is (= (str "/*:name get-by-id */\n"
                 "/*:cardinality :one */\n"

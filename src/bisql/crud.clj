@@ -34,14 +34,15 @@
 
 (defn- where-clause
   [columns]
-  (str/join "\n"
-            (map-indexed
-             (fn [idx column]
-               (str (if (zero? idx) "WHERE " "  AND ")
-                    (:column_name column)
-                    " = "
-                    (bind-comment column)))
-             columns)))
+  (when (seq columns)
+    (str/join "\n"
+              (map-indexed
+               (fn [idx column]
+                 (str (if (zero? idx) "WHERE " "  AND ")
+                      (:column_name column)
+                      " = "
+                      (bind-comment column)))
+               columns))))
 
 (defn- order-by-clause
   [columns]
@@ -175,6 +176,19 @@
    :templates templates
    :content (str/join "\n\n" (map query-block templates))})
 
+(def ^:private crud-kind-order
+  {:insert 0
+   :get 1
+   :list 2
+   :update 3
+   :delete 4})
+
+(defn- sort-templates-for-file
+  [templates]
+  (sort-by (juxt #(get crud-kind-order (:kind %) Long/MAX_VALUE)
+                 :name)
+           templates))
+
 (defn render-crud-files
   "Groups generated CRUD templates into one SQL file per table."
   [{:keys [dialect schema templates]}]
@@ -187,7 +201,7 @@
                        (table-file-entry dialect
                                          schema
                                          table
-                                         (sort-by :name table-templates)))))} )
+                                         (sort-templates-for-file table-templates)))))} )
 
 (defn write-crud-files!
   "Writes generated CRUD templates as one SQL file per table."
@@ -393,8 +407,8 @@
                   (fn [column-group]
                     (let [column-group (normalize-column-names column-group)
                           prefix-lengths (if strict-prefix?
-                                           (range 1 (count column-group))
-                                           (range 1 (inc (count column-group))))]
+                                           (range 0 (count column-group))
+                                           (range 0 (inc (count column-group))))]
                       (map (fn [prefix-length]
                              {:prefix-column-names (subvec column-group 0 prefix-length)
                               :order-column-names (subvec column-group prefix-length)})
@@ -404,7 +418,9 @@
                          {})
                  vals))
           (list-template-base-name [prefix-column-names]
-            (str "list-by-" (joined-name prefix-column-names)))
+            (if (seq prefix-column-names)
+              (str "list-by-" (joined-name prefix-column-names))
+              "list"))
           (list-template-name [{:keys [prefix-column-names order-column-names]} colliding-base-names]
             (let [base-name (list-template-base-name prefix-column-names)]
               (if (and (contains? colliding-base-names base-name)

@@ -542,6 +542,34 @@ classpath 上の `sql/...` から SQL ファイルを読み込み、パース済
  :params [1]}
 ```
 
+コンパイラ実装の土台として、次も公開する:
+
+```clojure
+(parse-template "SELECT * FROM users WHERE id = /*$id*/1")
+(emit-ir-form ir)
+(compile-ir ir)
+(evaluate-ir ir {:id 1})
+```
+
+`parse-template` は declaration を除いた SQL template 文字列を中間表現へ変換する。
+`emit-ir-form` はその IR から再利用可能な renderer 関数 form を生成する。
+`compile-ir` はその IR を実行時に再利用可能な renderer 関数へコンパイルする。
+`evaluate-ir` はその IR を直接評価し、内部 renderer 段階と同じ形を返す:
+
+```clojure
+{:sql "SELECT * FROM users WHERE id = ?"
+ :bind-params [1]}
+```
+
+この IR 層は、将来の compiled renderer の土台として位置づける。
+初期 IR は、statement kind (`:select`, `:insert`, `:update`, `:delete`) と、
+` :where`, `:having`, `:set`, `:values`, `:limit`, `:offset`
+のような clause 単位の文脈も node に注釈する。
+
+現在の主経路は `emit-ir-form` である。`defrender` と `defquery` は、
+マクロ展開時に emitted renderer form をそのまま埋め込み、`compile-ir` は
+`eval` を使う実行時向けの薄い convenience wrapper として残している。
+
 ## 6.3 関数定義
 
 ```clojure

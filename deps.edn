@@ -11,5 +11,6 @@
          :main-opts ["-m" "clj-kondo.main"]}
   :test {:extra-paths ["test"]
          :main-opts ["-m" "bisql.test-runner"]}
+  :test-repl {:extra-paths ["test"]}
   :test-db {:extra-paths ["test"]
             :main-opts ["-m" "bisql.test-db-runner"]}}}
