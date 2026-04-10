@@ -56,9 +56,9 @@
      (define/ensure-unique-var-names! entries)
      `(do ~@(mapv (fn [{:keys [template ir target-ns var-name metadata]}]
                     (let [template-data (list 'quote template)
-                          ir-data (list 'quote ir)
+                          renderer-form (query/emit-ir-form ir)
                           metadata-data (list 'quote metadata)]
-                      `(let [renderer# (query/compile-ir ~ir-data)
+                      `(let [renderer# ~renderer-form
                              compiled-template# (with-meta
                                                   (assoc ~template-data :renderer renderer#)
                                                   ~metadata-data)]
@@ -94,9 +94,9 @@
      (define/ensure-unique-var-names! entries)
      `(do ~@(mapv (fn [{:keys [template ir target-ns var-name metadata]}]
                     (let [template-data (list 'quote template)
-                          ir-data (list 'quote ir)
+                          renderer-form (query/emit-ir-form ir)
                           metadata-data (list 'quote metadata)]
-                      `(let [renderer# (query/compile-ir ~ir-data)
+                      `(let [renderer# ~renderer-form
                              compiled-template# (with-meta
                                                   (assoc ~template-data :renderer renderer#)
                                                   ~metadata-data)]

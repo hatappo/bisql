@@ -546,12 +546,14 @@ classpath 上の `sql/...` から SQL ファイルを読み込み、パース済
 
 ```clojure
 (parse-template "SELECT * FROM users WHERE id = /*$id*/1")
+(emit-ir-form ir)
 (compile-ir ir)
 (evaluate-ir ir {:id 1})
 ```
 
 `parse-template` は declaration を除いた SQL template 文字列を中間表現へ変換する。
-`compile-ir` はその IR を再利用可能な renderer 関数へコンパイルする。
+`emit-ir-form` はその IR から再利用可能な renderer 関数 form を生成する。
+`compile-ir` はその IR を実行時に再利用可能な renderer 関数へコンパイルする。
 `evaluate-ir` はその IR を直接評価し、内部 renderer 段階と同じ形を返す:
 
 ```clojure

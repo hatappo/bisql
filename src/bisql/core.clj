@@ -16,6 +16,9 @@
 (def parse-template
   query/parse-template)
 
+(def emit-ir-form
+  query/emit-ir-form)
+
 (def compile-ir
   query/compile-ir)
 
@@ -58,9 +61,9 @@
      (define/ensure-unique-var-names! entries)
      `(do ~@(mapv (fn [{:keys [template ir target-ns var-name metadata]}]
                     (let [template-data (list 'quote template)
-                          ir-data (list 'quote ir)
+                          renderer-form (query/emit-ir-form ir)
                           metadata-data (list 'quote metadata)]
-                      `(let [renderer# (query/compile-ir ~ir-data)]
+                      `(let [renderer# ~renderer-form]
                          (define/define-function-var!
                            '~target-ns
                            '~var-name
@@ -82,9 +85,9 @@
      (define/ensure-unique-var-names! entries)
      `(do ~@(mapv (fn [{:keys [template ir target-ns var-name metadata]}]
                     (let [template-data (list 'quote template)
-                          ir-data (list 'quote ir)
+                          renderer-form (query/emit-ir-form ir)
                           metadata-data (list 'quote metadata)]
-                      `(let [renderer# (query/compile-ir ~ir-data)]
+                      `(let [renderer# ~renderer-form]
                          (define/define-function-var!
                            '~target-ns
                            '~var-name

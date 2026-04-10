@@ -21,6 +21,7 @@
     (is (fn? bisql/load-queries))
     (is (fn? bisql/analyze-template))
     (is (fn? bisql/parse-template))
+    (is (fn? bisql/emit-ir-form))
     (is (fn? bisql/compile-ir))
     (is (fn? bisql/evaluate-ir))
     (is (fn? bisql/render-compiled-query))
@@ -85,7 +86,8 @@
   (let [expanded (macroexpand '(bisql.core/defrender "/sql/directory-success"))
         expanded-str (pr-str expanded)]
     (is (= 'do (first expanded)))
-    (is (str/includes? expanded-str "compile-ir"))
+    (is (not (str/includes? expanded-str "compile-ir")))
+    (is (str/includes? expanded-str "StringBuilder"))
     (is (str/includes? expanded-str "sql/directory-success/get-user-by-id"))
     (is (str/includes? expanded-str "sql/directory-success/nested/list-users"))))
 
@@ -154,6 +156,16 @@
   (let [sql-template "SELECT * FROM users WHERE id = /*$id*/1"
         ir (bisql/parse-template sql-template)
         renderer (bisql/compile-ir ir)
+        rendered (renderer {:id 42})
+        result (bisql/render-query {:sql-template sql-template} {:id 42})]
+    (is (fn? renderer))
+    (is (= (:sql result) (str/trim (:sql rendered))))
+    (is (= (:params result) (:bind-params rendered)))))
+
+(deftest emit-ir-form-matches-render-query-for-scalar-bind
+  (let [sql-template "SELECT * FROM users WHERE id = /*$id*/1"
+        ir (bisql/parse-template sql-template)
+        renderer (eval (bisql/emit-ir-form ir))
         rendered (renderer {:id 42})
         result (bisql/render-query {:sql-template sql-template} {:id 42})]
     (is (fn? renderer))
