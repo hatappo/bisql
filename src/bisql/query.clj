@@ -789,6 +789,8 @@
   {:pre [(map? ir)]}
   (eval (emit-ir-form ir)))
 
+(declare emit-sequential-render-body-form)
+
 (defn- emit-compiled-node-form
   [node out-sym bind-params-sym params-sym skip-leading-operator-sym]
   (case (:op node)
@@ -826,69 +828,91 @@
     :if
     (let [compiled-branches
           (mapv (fn [{:keys [expr body]}]
-                  {:expr expr
-                   :renderer-form (emit-ir-form {:op :template
-                                                 :statement-kind (:statement-kind node)
-                                                 :nodes body})})
+                  (let [body-out-sym (gensym "if_body_out__")
+                        body-bind-params-sym (gensym "if_body_bind_params__")
+                        body-params-sym (gensym "if_body_params__")
+                        body-form (emit-sequential-render-body-form body
+                                                                    body-out-sym
+                                                                    body-bind-params-sym
+                                                                    body-params-sym)]
+                    {:expr expr
+                     :body-out-sym body-out-sym
+                     :body-bind-params-sym body-bind-params-sym
+                     :body-params-sym body-params-sym
+                     :body-form body-form}))
                 (:branches node))]
       `(let [compiled-branches#
-             ~(vec (map (fn [{:keys [expr renderer-form]}]
+             ~(vec (map (fn [{:keys [expr body-out-sym body-bind-params-sym body-params-sym body-form]}]
                           `{:expr ~expr
-                            :renderer ~renderer-form})
+                            :body (fn []
+                                    (let [~body-out-sym (StringBuilder.)
+                                          ~body-bind-params-sym (transient [])
+                                          ~body-params-sym ~params-sym]
+                                      ~body-form
+                                      {:sql (str ~body-out-sym)
+                                       :bind-params (persistent! ~body-bind-params-sym)}))})
                         compiled-branches))]
          (do
            (when ~skip-leading-operator-sym
              (~(var remove-trailing-clause-keyword) ~out-sym))
            (if-let [selected-branch# (~(var selected-conditional-branch) compiled-branches# ~params-sym)]
-             (let [renderer# (:renderer selected-branch#)]
+             (let [body-fn# (:body selected-branch#)]
                (~(var append-fragment!)
                 ~out-sym
                 ~bind-params-sym
                 (~(var normalize-fragment-for-context)
                  ~out-sym
-                 (renderer# ~params-sym)))
+                 (body-fn#)))
                false)
              true))))
 
     :for
     (let [collection-name (:collection-name node)
           item-name (:item-name node)
-          body-renderer-form (emit-ir-form {:op :template
-                                            :statement-kind (:statement-kind node)
-                                            :nodes (:body node)})]
-      `(let [body-renderer# ~body-renderer-form]
-         (let [items# (~(var parameter-value) ~params-sym ~collection-name)]
-           (when-not (sequential? items#)
-             (throw (ex-info "For block requires a sequential value."
-                             {:parameter (~(var parameter-key) ~collection-name)
-                              :value items#})))
-           (if (seq items#)
-             (do
-               (doseq [[idx# item#] (map-indexed vector items#)]
-                 (let [item-params# (assoc ~params-sym (keyword ~item-name) item#)
-                       rendered-fragment# (body-renderer# item-params#)
-                       rendered-fragment# (if (= idx# (dec (count items#)))
-                                            (update rendered-fragment# :sql ~(var trim-trailing-for-separator))
-                                            rendered-fragment#)]
+          body-out-sym (gensym "body_out__")
+          body-bind-params-sym (gensym "body_bind_params__")
+          body-params-sym (gensym "body_params__")
+          body-form (emit-sequential-render-body-form (:body node)
+                                                      body-out-sym
+                                                      body-bind-params-sym
+                                                      body-params-sym)]
+      `(let [items# (~(var parameter-value) ~params-sym ~collection-name)]
+         (when-not (sequential? items#)
+           (throw (ex-info "For block requires a sequential value."
+                           {:parameter (~(var parameter-key) ~collection-name)
+                            :value items#})))
+         (if (seq items#)
+           (do
+             (doseq [[idx# item#] (map-indexed vector items#)]
+               (let [~body-out-sym (StringBuilder.)
+                     ~body-bind-params-sym (transient [])
+                     ~body-params-sym (assoc ~params-sym (keyword ~item-name) item#)]
+                 ~body-form
+                 (let [fragment-sql# (str ~body-out-sym)
+                       fragment-sql# (if (= idx# (dec (count items#)))
+                                       (~(var trim-trailing-for-separator) fragment-sql#)
+                                       fragment-sql#)
+                       rendered-fragment# {:sql fragment-sql#
+                                           :bind-params (persistent! ~body-bind-params-sym)}]
                    (~(var append-fragment!)
                     ~out-sym
                     ~bind-params-sym
                     (~(var normalize-fragment-for-context)
                      ~out-sym
-                     rendered-fragment#))))
-               false)
-             (do
-               (when (and (not ~skip-leading-operator-sym)
-                          (~(var trailing-set-clause?) ~out-sym))
-                 (throw (ex-info "Empty for block is not allowed in SET clause."
-                                 {:parameter (~(var parameter-key) ~collection-name)
-                                  :item (keyword ~item-name)})))
-               (when (and (not ~skip-leading-operator-sym)
-                          (~(var trailing-values-clause?) ~out-sym))
-                 (throw (ex-info "Empty for block is not allowed in VALUES clause."
-                                 {:parameter (~(var parameter-key) ~collection-name)
-                                  :item (keyword ~item-name)})))
-               true)))))))
+                     rendered-fragment#)))))
+             false)
+           (do
+             (when (and (not ~skip-leading-operator-sym)
+                        (~(var trailing-set-clause?) ~out-sym))
+               (throw (ex-info "Empty for block is not allowed in SET clause."
+                               {:parameter (~(var parameter-key) ~collection-name)
+                                :item (keyword ~item-name)})))
+             (when (and (not ~skip-leading-operator-sym)
+                        (~(var trailing-values-clause?) ~out-sym))
+               (throw (ex-info "Empty for block is not allowed in VALUES clause."
+                               {:parameter (~(var parameter-key) ~collection-name)
+                                :item (keyword ~item-name)})))
+             true))))))
 
 (defn- emit-sequential-render-form
   [nodes out-sym bind-params-sym params-sym]
@@ -908,6 +932,14 @@
                  (conj bindings next-skip-sym step-form)))
         {:bindings bindings
          :final-skip-sym current-skip-sym}))))
+
+(defn- emit-sequential-render-body-form
+  [nodes out-sym bind-params-sym params-sym]
+  (let [{:keys [bindings final-skip-sym]}
+        (emit-sequential-render-form nodes out-sym bind-params-sym params-sym)]
+    `(let [~@bindings]
+       (when ~final-skip-sym
+         (~(var remove-trailing-clause-keyword) ~out-sym)))))
 
 (defn emit-ir-form
   "Emits a reusable renderer function form from parsed template IR."
