@@ -790,38 +790,37 @@
   (eval (emit-ir-form ir)))
 
 (defn- emit-compiled-node-form
-  [node]
+  [node out-sym bind-params-sym params-sym skip-leading-operator-sym]
   (case (:op node)
     :text
     (let [sql (:sql node)]
-      `(fn [out# _bind-params# _params# skip-leading-operator?#]
-         (let [sql# ~sql
-               sql# (if skip-leading-operator?#
+      `(let [sql# ~sql
+             sql# (if ~skip-leading-operator-sym
                       (if-let [trimmed# (~(var consume-leading-conditional-operator-from-text) sql#)]
                         trimmed#
                         (do
-                          (~(var remove-trailing-clause-keyword) out#)
+                          (~(var remove-trailing-clause-keyword) ~out-sym)
                           sql#))
                       sql#)]
-           (.append out# ^String sql#)
-           false)))
+         (.append ~out-sym ^String sql#)
+         false))
 
     :variable
     (let [parameter-name (:parameter-name node)
           sigil (:sigil node)
           collection? (:collection? node)
           context (variable-context parameter-name sigil collection?)]
-      `(fn [out# bind-params# params# skip-leading-operator?#]
-         (when skip-leading-operator?#
-           (~(var remove-trailing-clause-keyword) out#))
+      `(do
+         (when ~skip-leading-operator-sym
+           (~(var remove-trailing-clause-keyword) ~out-sym))
          (let [rendered# (try
-                           (~(var render-variable) params# ~sigil ~parameter-name ~collection?)
+                           (~(var render-variable) ~params-sym ~sigil ~parameter-name ~collection?)
                            (catch clojure.lang.ExceptionInfo ex#
                              (throw (ex-info (ex-message ex#)
                                              (merge ~context (ex-data ex#))
                                              ex#))))]
-           (.append out# ^String (:sql rendered#))
-           (reduce conj! bind-params# (:params rendered#))
+           (.append ~out-sym ^String (:sql rendered#))
+           (reduce conj! ~bind-params-sym (:params rendered#))
            false)))
 
     :if
@@ -837,17 +836,17 @@
                           `{:expr ~expr
                             :renderer ~renderer-form})
                         compiled-branches))]
-         (fn [out# bind-params# params# skip-leading-operator?#]
-           (when skip-leading-operator?#
-             (~(var remove-trailing-clause-keyword) out#))
-           (if-let [selected-branch# (~(var selected-conditional-branch) compiled-branches# params#)]
+         (do
+           (when ~skip-leading-operator-sym
+             (~(var remove-trailing-clause-keyword) ~out-sym))
+           (if-let [selected-branch# (~(var selected-conditional-branch) compiled-branches# ~params-sym)]
              (let [renderer# (:renderer selected-branch#)]
                (~(var append-fragment!)
-                out#
-                bind-params#
+                ~out-sym
+                ~bind-params-sym
                 (~(var normalize-fragment-for-context)
-                 out#
-                 (renderer# params#)))
+                 ~out-sym
+                 (renderer# ~params-sym)))
                false)
              true))))
 
@@ -858,60 +857,75 @@
                                             :statement-kind (:statement-kind node)
                                             :nodes (:body node)})]
       `(let [body-renderer# ~body-renderer-form]
-         (fn [out# bind-params# params# skip-leading-operator?#]
-           (let [items# (~(var parameter-value) params# ~collection-name)]
-             (when-not (sequential? items#)
-               (throw (ex-info "For block requires a sequential value."
-                               {:parameter (~(var parameter-key) ~collection-name)
-                                :value items#})))
-             (if (seq items#)
-               (do
-                 (doseq [[idx# item#] (map-indexed vector items#)]
-                   (let [item-params# (assoc params# (keyword ~item-name) item#)
-                         rendered-fragment# (body-renderer# item-params#)
-                         rendered-fragment# (if (= idx# (dec (count items#)))
-                                              (update rendered-fragment# :sql ~(var trim-trailing-for-separator))
-                                              rendered-fragment#)]
-                     (~(var append-fragment!)
-                      out#
-                      bind-params#
-                      (~(var normalize-fragment-for-context)
-                       out#
-                       rendered-fragment#))))
-                 false)
-               (do
-                 (when (and (not skip-leading-operator?#)
-                            (~(var trailing-set-clause?) out#))
-                   (throw (ex-info "Empty for block is not allowed in SET clause."
-                                   {:parameter (~(var parameter-key) ~collection-name)
-                                    :item (keyword ~item-name)})))
-                 (when (and (not skip-leading-operator?#)
-                            (~(var trailing-values-clause?) out#))
-                   (throw (ex-info "Empty for block is not allowed in VALUES clause."
-                                   {:parameter (~(var parameter-key) ~collection-name)
-                                    :item (keyword ~item-name)})))
-                 true))))))))
+         (let [items# (~(var parameter-value) ~params-sym ~collection-name)]
+           (when-not (sequential? items#)
+             (throw (ex-info "For block requires a sequential value."
+                             {:parameter (~(var parameter-key) ~collection-name)
+                              :value items#})))
+           (if (seq items#)
+             (do
+               (doseq [[idx# item#] (map-indexed vector items#)]
+                 (let [item-params# (assoc ~params-sym (keyword ~item-name) item#)
+                       rendered-fragment# (body-renderer# item-params#)
+                       rendered-fragment# (if (= idx# (dec (count items#)))
+                                            (update rendered-fragment# :sql ~(var trim-trailing-for-separator))
+                                            rendered-fragment#)]
+                   (~(var append-fragment!)
+                    ~out-sym
+                    ~bind-params-sym
+                    (~(var normalize-fragment-for-context)
+                     ~out-sym
+                     rendered-fragment#))))
+               false)
+             (do
+               (when (and (not ~skip-leading-operator-sym)
+                          (~(var trailing-set-clause?) ~out-sym))
+                 (throw (ex-info "Empty for block is not allowed in SET clause."
+                                 {:parameter (~(var parameter-key) ~collection-name)
+                                  :item (keyword ~item-name)})))
+               (when (and (not ~skip-leading-operator-sym)
+                          (~(var trailing-values-clause?) ~out-sym))
+                 (throw (ex-info "Empty for block is not allowed in VALUES clause."
+                                 {:parameter (~(var parameter-key) ~collection-name)
+                                  :item (keyword ~item-name)})))
+               true)))))))
+
+(defn- emit-sequential-render-form
+  [nodes out-sym bind-params-sym params-sym]
+  (let [initial-skip-sym (gensym "skip__")]
+    (loop [remaining nodes
+           current-skip-sym initial-skip-sym
+           bindings [initial-skip-sym false]]
+      (if-let [node (first remaining)]
+        (let [next-skip-sym (gensym "skip__")
+              step-form (emit-compiled-node-form node
+                                                 out-sym
+                                                 bind-params-sym
+                                                 params-sym
+                                                 current-skip-sym)]
+          (recur (rest remaining)
+                 next-skip-sym
+                 (conj bindings next-skip-sym step-form)))
+        {:bindings bindings
+         :final-skip-sym current-skip-sym}))))
 
 (defn emit-ir-form
   "Emits a reusable renderer function form from parsed template IR."
   [ir]
   {:pre [(map? ir)]}
-  (let [compiled-node-forms (mapv emit-compiled-node-form (:nodes ir))]
-    `(let [compiled-nodes# ~(vec compiled-node-forms)]
-       (fn [params#]
-         (let [out# (StringBuilder.)
-               bind-params# (transient [])]
-           (loop [remaining# compiled-nodes#
-                  skip-leading-operator?# false]
-             (if-let [compiled-node# (first remaining#)]
-               (let [remaining# (rest remaining#)]
-                 (recur remaining#
-                        (compiled-node# out# bind-params# params# skip-leading-operator?#)))
-               (do
-                 (when skip-leading-operator?#
-                   (~(var remove-trailing-clause-keyword) out#))
-                 {:sql (str out#)
-                  :bind-params (persistent! bind-params#)}))))))))
+  (let [out-sym (gensym "out__")
+        bind-params-sym (gensym "bind_params__")
+        params-sym (gensym "params__")
+        {:keys [bindings final-skip-sym]}
+        (emit-sequential-render-form (:nodes ir) out-sym bind-params-sym params-sym)]
+    `(fn [~params-sym]
+       (let [~out-sym (StringBuilder.)
+             ~bind-params-sym (transient [])
+             ~@bindings]
+         (when ~final-skip-sym
+           (~(var remove-trailing-clause-keyword) ~out-sym))
+         {:sql (str ~out-sym)
+          :bind-params (persistent! ~bind-params-sym)}))))
 
 (defn evaluate-ir
   "Evaluates parsed template IR and returns rendered SQL plus bind parameters."
