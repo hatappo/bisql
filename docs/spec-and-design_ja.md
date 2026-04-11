@@ -238,6 +238,7 @@ WHERE 1 = 1
 
 - `x`
 - `if / else / end`
+- inline `else` 断片: `/*%else => <fragment> */`
 
 ### 評価ルール
 
@@ -245,6 +246,8 @@ WHERE 1 = 1
 - `nil` と `false` だけを偽として扱う
 - 未指定のパラメータは `nil` として扱う
 - 空文字列や空コレクションは真として扱う
+- `else` が `=> <fragment>` を持つ場合、その inline fragment を else body として使う
+- `inline else => <fragment>` と comment 外 body を同時に持つ場合、そのテンプレートは不正として拒否する
 - falsy と評価された条件ブロックの直後に `AND` または `OR` がある場合、その後続の演算子も取り除く
 - falsy と評価された条件ブロックの直後に `AND` または `OR` がなく、直前に `WHERE` または `HAVING` がある場合、その節キーワードも取り除く
 
@@ -312,6 +315,18 @@ SET
   display_name = display_name
 /*%end */
 WHERE id = /*$id*/1
+```
+
+#### inline `else` 断片
+
+```sql
+SELECT *
+FROM users
+WHERE
+/*%if active */
+  active = true
+/*%else => status = 'inactive' */
+/*%end */
 ```
 
 #### `ORDER BY` / `LIMIT` の有無の切り替え

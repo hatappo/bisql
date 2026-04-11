@@ -829,6 +829,25 @@
            (:sql result)))
     (is (= [] (:params result)))))
 
+(deftest render-query-supports-inline-else-fragment
+  (let [result (bisql/render-query
+                {:sql-template (str/join "\n"
+                                         ["SELECT *"
+                                          "FROM users"
+                                          "WHERE"
+                                          "/*%if active */"
+                                          "  active = true"
+                                          "/*%else => status = 'inactive' */"
+                                          "/*%end */"])}
+                {:active false})]
+    (is (= (str/join "\n"
+                     ["SELECT *"
+                      "FROM users"
+                      "WHERE"
+                      "status = 'inactive'"])
+           (:sql result)))
+    (is (= [] (:params result)))))
+
 (deftest render-query-supports-else-branch-with-operator-trimming
   (let [result (bisql/render-query
                 {:sql-template (str/join "\n"
@@ -886,6 +905,25 @@
                 (catch clojure.lang.ExceptionInfo ex
                   ex))]
     (is (= "Conditional block cannot contain multiple else blocks."
+           (ex-message error)))))
+
+(deftest render-query-rejects-mixed-inline-and-block-else
+  (let [error (try
+                (bisql/render-query
+                 {:sql-template (str/join "\n"
+                                          ["SELECT *"
+                                           "FROM users"
+                                           "WHERE"
+                                           "/*%if active */"
+                                           "  active = true"
+                                           "/*%else => status = 'inactive' */"
+                                           "  status = 'pending'"
+                                           "/*%end */"])}
+                 {:active false})
+                nil
+                (catch clojure.lang.ExceptionInfo ex
+                  ex))]
+    (is (= "Conditional branch cannot mix inline else fragments with block body content."
            (ex-message error)))))
 
 (deftest render-query-supports-dot-path-bind-lookup

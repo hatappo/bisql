@@ -286,6 +286,42 @@ WHERE
  :meta {}}
 ```
 
+### Control flow 5b. inline else
+
+1. Input Form:
+```clj
+(render-query (load-query "demo-if-inline-else.sql") {:active false})
+```
+
+2. Input SQL:
+```sql
+SELECT *
+FROM users
+WHERE
+/*%if active */
+  active = true
+/*%else => status = 'inactive' */
+/*%end */
+```
+
+3. Output SQL:
+```sql
+SELECT *
+FROM users
+WHERE
+status = 'inactive'
+```
+
+4. Output Data:
+```clj
+{:query-name "demo-if-inline-else",
+ :base-path "sql",
+ :resource-path "sql/demo-if-inline-else.sql",
+ :sql "SELECT *\nFROM users\nWHERE\nstatus = 'inactive'",
+ :params [],
+ :meta {}}
+```
+
 
 ### Control flow 6. for 
 

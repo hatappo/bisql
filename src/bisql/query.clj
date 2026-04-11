@@ -685,17 +685,28 @@
    :arg1 (.group matcher 2)
    :arg2 (.group matcher 3)
    :arg3 (.group matcher 4)
+   :arg4 (.group matcher 5)
    :start (.start matcher)
    :end (.end matcher)})
 
 (def ^:private control-directive-pattern
-  #"/\*%(if|elseif|else|for|end)(?:\s+([A-Za-z0-9\-\.]+)(?:\s+in\s+([A-Za-z0-9\-\.]+)(?:\s+separating\s+(.+?))?)?)?\s*\*/")
+  #"/\*%(if|elseif|else|for|end)(?:(?:\s+([A-Za-z0-9\-\.]+)(?:\s+in\s+([A-Za-z0-9\-\.]+)(?:\s+separating\s+(.+?))?)?)|(?:\s*=>\s*(.+?)))?\s*\*/")
 
 (defn- append-conditional-branch
-  [branches current-expr branch-start branch-end sql]
-  (conj branches
-        {:expr current-expr
-         :body (subs sql branch-start branch-end)}))
+  [branches current-expr branch-start branch-end sql inline-body]
+  (let [block-body (subs sql branch-start branch-end)
+        body (if inline-body
+               (do
+                 (when-not (str/blank? block-body)
+                   (throw (ex-info "Conditional branch cannot mix inline else fragments with block body content."
+                                   {:sql sql
+                                    :start branch-start
+                                    :end branch-end})))
+                 inline-body)
+               block-body)]
+    (conj branches
+          {:expr current-expr
+           :body body})))
 
 (defn- parse-conditional-branches
   [sql if-start if-end initial-expr]
@@ -704,13 +715,14 @@
          branches []
          current-expr initial-expr
          branch-start if-end
+         current-inline-body nil
          else-seen? false]
     (let [matcher (re-matcher control-directive-pattern sql)]
       (if-not (.find matcher cursor)
         (throw (ex-info "Unterminated conditional block."
                         {:sql sql
                          :start if-start}))
-        (let [{:keys [directive start end]} (parse-control-directive matcher)]
+        (let [{:keys [directive start end arg4]} (parse-control-directive matcher)]
           (cond
             (> depth 1)
             (recur end
@@ -721,6 +733,7 @@
                    branches
                    current-expr
                    branch-start
+                   current-inline-body
                    else-seen?)
 
             (contains? #{"if" "for"} directive)
@@ -729,6 +742,7 @@
                    branches
                    current-expr
                    branch-start
+                   current-inline-body
                    else-seen?)
 
             (= directive "elseif")
@@ -744,13 +758,14 @@
                                  :start start})))
               (recur end
                      depth
-                     (append-conditional-branch branches current-expr branch-start start sql)
+                     (append-conditional-branch branches current-expr branch-start start sql current-inline-body)
                      nil
                      end
+                     (some-> arg4 str/trim not-empty)
                      true))
 
             (= directive "end")
-            {:branches (append-conditional-branch branches current-expr branch-start start sql)
+            {:branches (append-conditional-branch branches current-expr branch-start start sql current-inline-body)
              :end end}))))))
 
 (defn- parse-for-block

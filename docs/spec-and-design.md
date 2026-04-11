@@ -231,6 +231,7 @@ WHERE 1 = 1
 
 - `x`
 - `if / else / end`
+- Optional inline else fragment: `/*%else => <fragment> */`
 
 ### Evaluation Rules
 
@@ -238,6 +239,8 @@ WHERE 1 = 1
 - Only `nil` and `false` are treated as false
 - Missing parameters are treated as `nil`
 - Empty strings and empty collections are treated as true
+- If `else` uses `=> <fragment>`, that inline fragment becomes the else body
+- If an inline `else => <fragment>` also has block body content before `/*%end */`, the template is rejected as invalid
 - If a falsy conditional block is immediately followed by `AND` or `OR`, that trailing operator is also removed
 - If a falsy conditional block is not followed by `AND` or `OR` and is immediately preceded by `WHERE` or `HAVING`, that clause keyword is also removed
 
@@ -305,6 +308,18 @@ SET
   display_name = display_name
 /*%end */
 WHERE id = /*$id*/1
+```
+
+#### Inline `else` Fragment
+
+```sql
+SELECT *
+FROM users
+WHERE
+/*%if active */
+  active = true
+/*%else => status = 'inactive' */
+/*%end */
 ```
 
 #### Conditional `ORDER BY` / `LIMIT`
