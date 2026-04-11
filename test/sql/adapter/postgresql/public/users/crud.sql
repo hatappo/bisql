@@ -36,6 +36,25 @@ VALUES (
 )
 RETURNING *
 
+/*:name crud.insert-many */
+/*:cardinality :many */
+INSERT INTO users (
+  email,
+  display_name,
+  status,
+  created_at
+)
+VALUES
+/*%for row in rows separating , */
+(
+  /*$row.email*/'user@example.com',
+  /*$row.display-name*/'sample',
+  /*$row.status*/'sample',
+  /*$row.created-at*/CURRENT_TIMESTAMP
+)
+/*%end */
+RETURNING *
+
 /*:name crud.list-by-status */
 /*:cardinality :many */
 SELECT * FROM users
