@@ -28,8 +28,16 @@
     :else "'sample'"))
 
 (defn- bind-comment
-  [column]
-  (str "/*$" (kebab-name (:column_name column)) "*/" (sample-token column)))
+  ([column]
+   (bind-comment nil column))
+  ([parameter-prefix column]
+   (let [segments (cond-> []
+                    parameter-prefix (conj parameter-prefix)
+                    true (conj (kebab-name (:column_name column))))]
+     (str "/*$"
+          (str/join "." segments)
+          "*/"
+          (sample-token column)))))
 
 (defn- where-clause
   [columns]
@@ -371,7 +379,7 @@
   (str/join
    "\n"
    (concat
-    [(str "INSERT INTO " table " (")
+    [(str "INSERT INTO " table " AS t (")
      (str/join "\n" (map-indexed (fn [idx column]
                                    (str "  "
                                         (:column_name column)
@@ -381,7 +389,7 @@
      "VALUES ("
      (str/join "\n" (map-indexed (fn [idx column]
                                    (str "  "
-                                        (bind-comment column)
+                                        (bind-comment "inserting" column)
                                         (when (< idx (dec (count insert-columns))) ",")))
                                  insert-columns))
      ")"
@@ -392,8 +400,18 @@
                        (fn [idx column]
                          (str (if (zero? idx) "SET " "  , ")
                               (:column_name column)
-                              " = EXCLUDED."
-                              (:column_name column)))
+                              " = "
+                              "/*%if non-updating-cols."
+                              (kebab-name (:column_name column))
+                              " */"
+                              "t."
+                              (:column_name column)
+                              " "
+                              "/*%else*/"
+                              "EXCLUDED."
+                              (:column_name column)
+                              " "
+                              "/*%end*/"))
                        update-columns))]
       ["DO NOTHING"])
     ["RETURNING *"])))

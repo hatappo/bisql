@@ -157,52 +157,52 @@
                       "/*%end */\n"
                       "RETURNING *")
                  (:sql-template template)))))
-      (testing "upsert template uses ON CONFLICT ON CONSTRAINT and EXCLUDED assignments"
+      (testing "upsert template uses inserting bindings and non-updating-cols guards"
         (let [template (some #(when (and (= "users" (:table %))
                                          (= "crud.upsert-by-id" (:name %)))
                                 %)
                              templates)]
           (is (= {:cardinality :one} (:meta template)))
           (is (= ["email" "display_name" "status"] (:set-columns template)))
-          (is (= (str "INSERT INTO users (\n"
+          (is (= (str "INSERT INTO users AS t (\n"
                       "  email,\n"
                       "  display_name,\n"
                       "  status\n"
                       ")\n"
                       "VALUES (\n"
-                      "  /*$email*/'user@example.com',\n"
-                      "  /*$display-name*/'sample',\n"
-                      "  /*$status*/'sample'\n"
+                      "  /*$inserting.email*/'user@example.com',\n"
+                      "  /*$inserting.display-name*/'sample',\n"
+                      "  /*$inserting.status*/'sample'\n"
                       ")\n"
                       "ON CONFLICT ON CONSTRAINT users_pkey\n"
                       "DO UPDATE\n"
-                      "SET email = EXCLUDED.email\n"
-                      "  , display_name = EXCLUDED.display_name\n"
-                      "  , status = EXCLUDED.status\n"
+                      "SET email = /*%if non-updating-cols.email */t.email /*%else*/EXCLUDED.email /*%end*/\n"
+                      "  , display_name = /*%if non-updating-cols.display-name */t.display_name /*%else*/EXCLUDED.display_name /*%end*/\n"
+                      "  , status = /*%if non-updating-cols.status */t.status /*%else*/EXCLUDED.status /*%end*/\n"
                       "RETURNING *")
                  (:sql-template template)))))
-      (testing "upsert updates non-key columns through EXCLUDED values"
+      (testing "upsert uses the same non-updating-cols guard for composite keys"
         (let [template (some #(when (and (= "user_roles" (:table %))
                                          (= "crud.upsert-by-user-id-and-role-code" (:name %)))
                                 %)
                              templates)]
           (is (= ["granted_at" "granted_by"] (:set-columns template)))
-          (is (= (str "INSERT INTO user_roles (\n"
+          (is (= (str "INSERT INTO user_roles AS t (\n"
                       "  user_id,\n"
                       "  role_code,\n"
                       "  granted_at,\n"
                       "  granted_by\n"
                       ")\n"
                       "VALUES (\n"
-                      "  /*$user-id*/1,\n"
-                      "  /*$role-code*/'sample',\n"
-                      "  /*$granted-at*/CURRENT_TIMESTAMP,\n"
-                      "  /*$granted-by*/1\n"
+                      "  /*$inserting.user-id*/1,\n"
+                      "  /*$inserting.role-code*/'sample',\n"
+                      "  /*$inserting.granted-at*/CURRENT_TIMESTAMP,\n"
+                      "  /*$inserting.granted-by*/1\n"
                       ")\n"
                       "ON CONFLICT ON CONSTRAINT user_roles_pkey\n"
                       "DO UPDATE\n"
-                      "SET granted_at = EXCLUDED.granted_at\n"
-                      "  , granted_by = EXCLUDED.granted_by\n"
+                      "SET granted_at = /*%if non-updating-cols.granted-at */t.granted_at /*%else*/EXCLUDED.granted_at /*%end*/\n"
+                      "  , granted_by = /*%if non-updating-cols.granted-by */t.granted_by /*%else*/EXCLUDED.granted_by /*%end*/\n"
                       "RETURNING *")
                  (:sql-template template)))))
       (testing "update template uses plain bind variables"
