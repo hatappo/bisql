@@ -714,7 +714,28 @@ CRUD functions are generated from database schema:
 
 ---
 
-## 7.3 Update
+## 7.3 Upsert
+
+Generated for:
+
+- primary key
+- unique constraints
+
+Uses PostgreSQL `INSERT ... ON CONFLICT ON CONSTRAINT ... DO UPDATE RETURNING *`.
+
+```clojure
+(upsert-by-id! db row)
+```
+
+Composite key example:
+
+```clojure
+(upsert-by-user-id-and-device-identifier! db row)
+```
+
+---
+
+## 7.4 Update
 
 Generated only for:
 
@@ -736,7 +757,7 @@ Composite key example:
 
 ---
 
-## 7.4 Delete
+## 7.5 Delete
 
 Generated only for:
 

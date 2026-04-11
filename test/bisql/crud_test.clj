@@ -30,17 +30,23 @@
                                   {:column_name "granted_at" :data_type "timestamp with time zone"}
                                   {:column_name "granted_by" :data_type "bigint"}]}
                    :constraints-by-table
-                   {"users" [{:constraint_type "PRIMARY KEY"
+                   {"users" [{:constraint_name "users_pkey"
+                              :constraint_type "PRIMARY KEY"
                               :column_names ["id"]}
-                             {:constraint_type "UNIQUE"
+                             {:constraint_name "users_email_key"
+                              :constraint_type "UNIQUE"
                               :column_names ["email"]}]
-                    "orders" [{:constraint_type "PRIMARY KEY"
+                    "orders" [{:constraint_name "orders_pkey"
+                               :constraint_type "PRIMARY KEY"
                                :column_names ["id"]}]
-                    "user_devices" [{:constraint_type "PRIMARY KEY"
+                    "user_devices" [{:constraint_name "user_devices_pkey"
+                                     :constraint_type "PRIMARY KEY"
                                      :column_names ["id"]}
-                                    {:constraint_type "UNIQUE"
+                                    {:constraint_name "user_devices_user_id_device_identifier_key"
+                                     :constraint_type "UNIQUE"
                                      :column_names ["user_id" "device_identifier"]}]
-                    "user_roles" [{:constraint_type "PRIMARY KEY"
+                    "user_roles" [{:constraint_name "user_roles_pkey"
+                                   :constraint_type "PRIMARY KEY"
                                    :column_names ["user_id" "role_code"]}]}
                    :indexes-by-table
                    {"users" [{:column_names ["status"]}]
@@ -58,6 +64,8 @@
       (is (= "public" (:schema result)))
       (is (contains? names "crud.insert"))
       (is (contains? names "crud.insert-many"))
+      (is (contains? names "crud.upsert-by-id"))
+      (is (contains? names "crud.upsert-by-email"))
       (is (contains? names "crud.update-by-id"))
       (is (contains? names "crud.update-by-email"))
       (is (contains? names "crud.delete-by-id"))
@@ -66,6 +74,8 @@
       (is (contains? names "crud.get-by-email"))
       (is (contains? names "crud.get-by-user-id-and-device-identifier"))
       (is (contains? names "crud.get-by-user-id-and-role-code"))
+      (is (contains? names "crud.upsert-by-user-id-and-device-identifier"))
+      (is (contains? names "crud.upsert-by-user-id-and-role-code"))
       (is (contains? names "crud.count"))
       (is (contains? names "crud.count-by-status"))
       (is (contains? names "crud.count-by-state"))
@@ -145,6 +155,54 @@
                       "  /*$row.created-at*/CURRENT_TIMESTAMP\n"
                       "),\n"
                       "/*%end */\n"
+                      "RETURNING *")
+                 (:sql-template template)))))
+      (testing "upsert template uses ON CONFLICT ON CONSTRAINT and EXCLUDED assignments"
+        (let [template (some #(when (and (= "users" (:table %))
+                                         (= "crud.upsert-by-id" (:name %)))
+                                %)
+                             templates)]
+          (is (= {:cardinality :one} (:meta template)))
+          (is (= ["email" "display_name" "status"] (:set-columns template)))
+          (is (= (str "INSERT INTO users (\n"
+                      "  email,\n"
+                      "  display_name,\n"
+                      "  status\n"
+                      ")\n"
+                      "VALUES (\n"
+                      "  /*$email*/'user@example.com',\n"
+                      "  /*$display-name*/'sample',\n"
+                      "  /*$status*/'sample'\n"
+                      ")\n"
+                      "ON CONFLICT ON CONSTRAINT users_pkey\n"
+                      "DO UPDATE\n"
+                      "SET email = EXCLUDED.email\n"
+                      "  , display_name = EXCLUDED.display_name\n"
+                      "  , status = EXCLUDED.status\n"
+                      "RETURNING *")
+                 (:sql-template template)))))
+      (testing "upsert updates non-key columns through EXCLUDED values"
+        (let [template (some #(when (and (= "user_roles" (:table %))
+                                         (= "crud.upsert-by-user-id-and-role-code" (:name %)))
+                                %)
+                             templates)]
+          (is (= ["granted_at" "granted_by"] (:set-columns template)))
+          (is (= (str "INSERT INTO user_roles (\n"
+                      "  user_id,\n"
+                      "  role_code,\n"
+                      "  granted_at,\n"
+                      "  granted_by\n"
+                      ")\n"
+                      "VALUES (\n"
+                      "  /*$user-id*/1,\n"
+                      "  /*$role-code*/'sample',\n"
+                      "  /*$granted-at*/CURRENT_TIMESTAMP,\n"
+                      "  /*$granted-by*/1\n"
+                      ")\n"
+                      "ON CONFLICT ON CONSTRAINT user_roles_pkey\n"
+                      "DO UPDATE\n"
+                      "SET granted_at = EXCLUDED.granted_at\n"
+                      "  , granted_by = EXCLUDED.granted_by\n"
                       "RETURNING *")
                  (:sql-template template)))))
       (testing "update template uses plain bind variables"
@@ -369,6 +427,11 @@
                                   :meta {:cardinality :one}
                                   :sql-template "INSERT INTO users (...) VALUES (...) RETURNING *"}
                                  {:table "users"
+                                  :kind :upsert
+                                  :name "crud.upsert-by-id"
+                                  :meta {:cardinality :one}
+                                  :sql-template "INSERT INTO users (...) ON CONFLICT ON CONSTRAINT users_pkey DO UPDATE RETURNING *"}
+                                 {:table "users"
                                   :kind :get
                                   :name "crud.get-by-id"
                                   :meta {:cardinality :one}
@@ -403,6 +466,9 @@
                 "/*:name crud.insert-many */\n"
                 "/*:cardinality :many */\n"
                 "INSERT INTO users (...) VALUES /*%for row in rows */(...),/*%end */ RETURNING *\n\n"
+                "/*:name crud.upsert-by-id */\n"
+                "/*:cardinality :one */\n"
+                "INSERT INTO users (...) ON CONFLICT ON CONSTRAINT users_pkey DO UPDATE RETURNING *\n\n"
                 "/*:name crud.get-by-id */\n"
                 "/*:cardinality :one */\n"
                 "SELECT * FROM users WHERE id = /*$id*/1\n\n"

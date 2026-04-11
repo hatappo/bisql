@@ -166,11 +166,12 @@
 
 (def ^:private crud-kind-order
   {:insert 0
-   :get 1
-   :count 2
-   :list 3
-   :update 4
-   :delete 5})
+   :upsert 1
+   :get 2
+   :count 3
+   :list 4
+   :update 5
+   :delete 6})
 
 (def ^:private crud-generation-issue-url
   "https://github.com/hatappo/bisql/issues")
@@ -365,6 +366,56 @@
                              (insert-many-template table insert-columns)
                              :meta {:cardinality :many})])))
 
+(defn- upsert-template
+  [table constraint-name insert-columns update-columns]
+  (str/join
+   "\n"
+   (concat
+    [(str "INSERT INTO " table " (")
+     (str/join "\n" (map-indexed (fn [idx column]
+                                   (str "  "
+                                        (:column_name column)
+                                        (when (< idx (dec (count insert-columns))) ",")))
+                                 insert-columns))
+     ")"
+     "VALUES ("
+     (str/join "\n" (map-indexed (fn [idx column]
+                                   (str "  "
+                                        (bind-comment column)
+                                        (when (< idx (dec (count insert-columns))) ",")))
+                                 insert-columns))
+     ")"
+     (str "ON CONFLICT ON CONSTRAINT " constraint-name)]
+    (if (seq update-columns)
+      ["DO UPDATE"
+       (str/join "\n" (map-indexed
+                       (fn [idx column]
+                         (str (if (zero? idx) "SET " "  , ")
+                              (:column_name column)
+                              " = EXCLUDED."
+                              (:column_name column)))
+                       update-columns))]
+      ["DO NOTHING"])
+    ["RETURNING *"])))
+
+(defn- generate-upsert-templates
+  [schema table columns constraints]
+  (let [insert-columns (filterv insertable-column? columns)]
+    (->> constraints
+         (map (fn [{:keys [constraint_name column_names]}]
+                (let [predicate-column-names (set column_names)
+                      update-columns (filterv (partial updatable-column? predicate-column-names)
+                                              columns)]
+                  (named-template-entry schema
+                                        table
+                                        :upsert
+                                        (str "upsert-by-" (joined-name column_names))
+                                        column_names
+                                        (upsert-template table constraint_name insert-columns update-columns)
+                                        :meta {:cardinality :one}
+                                        :set-columns (mapv :column_name update-columns)))))
+         vec)))
+
 (defn- generate-delete-templates
   [schema table columns-by-name unique-column-groups]
   (mapv
@@ -538,6 +589,7 @@
        (vals)
        (mapv (fn [constraint-rows]
                {:table_name (:table_name (first constraint-rows))
+                :constraint_name (:constraint_name (first constraint-rows))
                 :constraint_type (:constraint_type (first constraint-rows))
                 :column_names (mapv :column_name constraint-rows)}))))
 
@@ -580,8 +632,9 @@
                                                 (map :column_names))
                       index-column-groups (->> (get indexes-by-table table [])
                                                (mapv :column_names))]
-                  (concat
+                 (concat
                    (generate-insert-templates schema table columns)
+                  (generate-upsert-templates schema table columns (get constraints-by-table table []))
                   (generate-update-templates schema table columns columns-by-name unique-column-groups)
                   (generate-delete-templates schema table columns-by-name unique-column-groups)
                   (generate-get-templates schema table columns-by-name unique-column-groups)

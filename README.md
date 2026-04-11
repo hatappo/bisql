@@ -149,7 +149,7 @@ Depending on the tables present in the target database, this writes files such a
 - `src/sql/postgresql/public/orders/crud.sql`
 
 Generated CRUD SQL includes templates such as `insert`, `insert-many`, `get-by-*`,
-`count`, `count-by-*`, `update-by-*`, `delete-by-*`, `list`, and `list-by-*`.
+`upsert-by-*`, `count`, `count-by-*`, `update-by-*`, `delete-by-*`, `list`, and `list-by-*`.
 
 These generated queries are meant to cover the typical index-friendly SQL patterns
 you would usually write by hand. In practice, that often means you do not need to
@@ -160,6 +160,8 @@ For the sample tables above, this typically includes:
 
 - `users.crud/insert`
 - `users.crud/insert-many`
+- `users.crud/upsert-by-id`
+- `users.crud/upsert-by-email`
 - `users.crud/get-by-id`
 - `users.crud/get-by-email`
 - `users.crud/count`
@@ -170,6 +172,7 @@ For the sample tables above, this typically includes:
 - `users.crud/delete-by-email`
 - `orders.crud/insert`
 - `orders.crud/insert-many`
+- `orders.crud/upsert-by-id`
 - `orders.crud/count`
 - `orders.crud/list`
 - `orders.crud/get-by-id`
@@ -234,4 +237,3 @@ For local setup, tasks, and dev workflow, see:
 - Compile analyzed SQL templates into reusable renderer functions for lower runtime overhead.
   - Restrict `bisql/default` to valid SQL value contexts if context-aware rendering becomes necessary.
   - Detect dangerous `nil` comparisons consistently in `WHERE` / `HAVING` clauses instead of letting expressions such as `= NULL`, `LIKE NULL`, or `IN (NULL)` silently behave unexpectedly. This likely needs stricter SQL context parsing, because `= NULL` is dangerous in `WHERE` / `HAVING` but can still be valid assignment syntax in `SET`.
-- Expand CRUD generation output and integration coverage further.

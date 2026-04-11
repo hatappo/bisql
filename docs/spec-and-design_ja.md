@@ -721,7 +721,28 @@ CRUD 関数はデータベーススキーマから生成する:
 
 ---
 
-## 7.3 Update
+## 7.3 Upsert
+
+以下の場合に生成する:
+
+- 主キー
+- unique 制約
+
+PostgreSQL の `INSERT ... ON CONFLICT ON CONSTRAINT ... DO UPDATE RETURNING *` を使う。
+
+```clojure
+(upsert-by-id! db row)
+```
+
+複合キーの例:
+
+```clojure
+(upsert-by-user-id-and-device-identifier! db row)
+```
+
+---
+
+## 7.4 Update
 
 以下の場合にのみ生成する:
 
@@ -743,7 +764,7 @@ CRUD 関数はデータベーススキーマから生成する:
 
 ---
 
-## 7.4 Delete
+## 7.5 Delete
 
 以下の場合にのみ生成する:
 
