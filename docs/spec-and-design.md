@@ -254,8 +254,8 @@ WHERE 1 = 1
 ```sql
 UPDATE users
 SET
-/*%for item in items */
-  /*!item.name*/ = /*$item.value*/'sample',
+/*%for item in items separating , */
+  /*!item.name*/ = /*$item.value*/'sample'
 /*%end */
 WHERE id = /*$id*/1
 ```
@@ -263,13 +263,15 @@ WHERE id = /*$id*/1
 ### Rules
 
 - Syntax: `/*%for item in items */ ... /*%end */`
+- Optional separator syntax: `/*%for item in items separating , */ ... /*%end */`
 - `item` is a loop-local variable name
 - Dot-path references such as `item.name`, `item.value`, or `user.profile.name` are supported
 - Dot-path lookup checks keys in this order: `keyword`, `string`, `symbol`
 - Empty collections are not treated as errors
 - If an empty `for` block is immediately followed by `AND` or `OR`, that trailing operator should also be removed
 - If an empty `for` block is not followed by `AND` or `OR` and is immediately preceded by `WHERE` or `HAVING`, that clause keyword should also be removed
-- If the repeated body ends with `,`, `AND`, or `OR`, that trailing token should be removed for the last element
+- With `separating`, the separator is emitted before the second and subsequent iterations
+- Trailing `,`, `AND`, or `OR` are not trimmed from the repeated body anymore; use `separating` instead when separators are needed
 
 ### Initial Implementation Constraint
 
@@ -328,8 +330,8 @@ LIMIT /*$limit*/100
 SELECT *
 FROM users
 WHERE
-/*%for item in filters */
-  /*!item.column*/ = /*$item.value*/'sample' AND
+/*%for item in filters separating AND */
+  /*!item.column*/ = /*$item.value*/'sample'
 /*%end */
 ```
 
@@ -338,8 +340,8 @@ WHERE
 ```sql
 UPDATE users
 SET
-/*%for item in items */
-  /*!item.name*/ = /*$item.value*/'sample',
+/*%for item in items separating , */
+  /*!item.name*/ = /*$item.value*/'sample'
 /*%end */
 WHERE id = /*$id*/1
 ```
@@ -348,12 +350,12 @@ WHERE id = /*$id*/1
 
 ```sql
 INSERT INTO users (
-/*%for column in columns */
-  /*!column.name*/,
+/*%for column in columns separating , */
+  /*!column.name*/
 /*%end */
 ) VALUES (
-/*%for column in columns */
-  /*$column.value*/'sample',
+/*%for column in columns separating , */
+  /*$column.value*/'sample'
 /*%end */
 )
 ```
@@ -363,8 +365,8 @@ INSERT INTO users (
 ```sql
 INSERT INTO users (email, status)
 VALUES
-/*%for row in rows */
-  (/*$row.email*/'user@example.com', /*$row.status*/'active'),
+/*%for row in rows separating , */
+  (/*$row.email*/'user@example.com', /*$row.status*/'active')
 /*%end */
 ```
 

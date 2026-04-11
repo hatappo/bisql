@@ -1,99 +1,13 @@
-# Draft: `for ... separating <separator>` and `if/elseif/else => <fragment>`
+# Draft: inline `elseif/else => <fragment>` branches
 
-This note records possible future extensions to bisql's template language for
-`for`, `if`, `elseif`, and `else`.
+This note records a possible future extension to bisql's template language for
+`if`, `elseif`, and `else`.
 
-## 1. `for ... separating <separator>`
+`for ... separating <separator>` has already been adopted and is now part of the
+current template syntax. The remaining draft here is only for inline branch
+fragments in `elseif` and `else`.
 
-### Motivation
-
-Current `for` blocks render each iteration body as-is, then trim the trailing
-separator from the last rendered fragment.
-
-Today this is used to support patterns such as:
-
-```sql
-UPDATE users
-SET
-/*%for item in items */
-  /*!item.name*/ = /*$item.value*/'sample',
-/*%end */
-WHERE id = /*$id*/1
-```
-
-This works, but it has two drawbacks:
-
-1. Generated output depends on a post-processing rule that removes the last
-   trailing separator.
-2. The source template is harder to read as SQL because separators are written
-   after each item, including the last one.
-
-### Proposed Syntax
-
-Extend `for` with an optional `separating` separator:
-
-```sql
-/*%for row in rows separating , */
-...
-/*%end */
-```
-
-The separator is not emitted before the first iteration. It is emitted before
-every subsequent iteration.
-
-Conceptually:
-
-- first item: no separator
-- second and later items: emit `,` first, then emit the body
-
-This makes `for` blocks work more like join/interpose than "render everything
-and trim the last separator".
-
-### Example
-
-Instead of:
-
-```sql
-VALUES
-/*%for row in rows */
-(
-  /*$row.email*/'a@example.com',
-  /*$row.status*/'active'
-),
-/*%end */
-```
-
-use:
-
-```sql
-VALUES
-/*%for row in rows separating , */
-(
-  /*$row.email*/'a@example.com',
-  /*$row.status*/'active'
-)
-/*%end */
-```
-
-This is easier to read and produces a more SQL-like source template.
-
-### Potential Benefits
-
-- Removes the need to trim trailing `,`, `AND`, or `OR` from the last rendered
-  `for` iteration.
-- Makes generated SQL rules simpler because separators become prefix separators
-  instead of trailing separators.
-- Keeps templates closer to the SQL shape they are trying to express.
-
-### Open Questions
-
-- Exact grammar for `separating`
-- Whether separators should be restricted to a small set such as `,`, `AND`,
-  and `OR`
-- Whether existing trailing-separator behavior should remain for backward
-  compatibility or eventually be removed
-
-## 2. `elseif ... => <fragment>` and `else => <fragment>`
+## `elseif ... => <fragment>` and `else => <fragment>`
 
 ### Motivation
 
@@ -160,7 +74,7 @@ syntax change and would require explicit migration from the current block style.
 - `elseif` and `else` no longer need to introduce all branch content outside
   the directive comment.
 - Small alternative fragments become much easier to read.
-- The syntax pairs naturally with `for ... separating <separator>`.
+- The syntax still pairs naturally with `for ... separating <separator>`.
 
 ### Open Questions
 

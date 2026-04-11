@@ -617,16 +617,6 @@
    (or (re-matches #"(?s).*(?:^|\n)[ \t]*VALUES[ \t\r\n]*$" (str out))
        (re-matches #"(?s).*VALUES[ \t\r\n]*$" (str out)))))
 
-(defn trim-trailing-for-separator
-  [s]
-  (or (some->> s
-               (re-matches #"(?is)(.*?)[ \t\r\n]*,[ \t\r\n]*$")
-               second)
-      (some->> s
-               (re-matches #"(?is)(.*?)[ \t\r\n]+(?:AND|OR)[ \t\r\n]*$")
-               second)
-      s))
-
 (def ^:private clause-context-pattern
   #"(?is)\b(WHERE|HAVING|SET|VALUES|LIMIT|OFFSET)\b")
 
@@ -694,11 +684,12 @@
   {:directive (.group matcher 1)
    :arg1 (.group matcher 2)
    :arg2 (.group matcher 3)
+   :arg3 (.group matcher 4)
    :start (.start matcher)
    :end (.end matcher)})
 
 (def ^:private control-directive-pattern
-  #"/\*%(if|elseif|else|for|end)(?:\s+([A-Za-z0-9\-\.]+)(?:\s+in\s+([A-Za-z0-9\-\.]+))?)?\s*\*/")
+  #"/\*%(if|elseif|else|for|end)(?:\s+([A-Za-z0-9\-\.]+)(?:\s+in\s+([A-Za-z0-9\-\.]+)(?:\s+separating\s+(.+?))?)?)?\s*\*/")
 
 (defn- append-conditional-branch
   [branches current-expr branch-start branch-end sql]
@@ -804,7 +795,7 @@
 
 (defn- parse-template-nodes
   [segment]
-  (let [matcher (re-matcher #"/\*%(if|for)\s+([A-Za-z0-9\-\.]+)(?:\s+in\s+([A-Za-z0-9\-\.]+))?\s*\*/" segment)]
+  (let [matcher (re-matcher #"/\*%(if|for)\s+([A-Za-z0-9\-\.]+)(?:\s+in\s+([A-Za-z0-9\-\.]+)(?:\s+separating\s+(.+?))?)?\s*\*/" segment)]
     (loop [cursor 0
            nodes []]
       (if-not (.find matcher cursor)
@@ -812,6 +803,7 @@
         (let [directive (.group matcher 1)
               arg1 (.group matcher 2)
               arg2 (.group matcher 3)
+              arg3 (.group matcher 4)
               block-start (.start matcher)
               block-end (.end matcher)
               nodes (into nodes (parse-variable-nodes (subs segment cursor block-start)))]
@@ -829,6 +821,7 @@
                   node {:op :for
                         :item-name arg1
                         :collection-name arg2
+                        :separator (some-> arg3 str/trim not-empty)
                         :body (parse-template-nodes body)}]
               (recur end (conj nodes node)))))))))
 
@@ -1072,34 +1065,42 @@
     :for
     (let [collection-name (:collection-name node)
           item-name (:item-name node)
+          separator (:separator node)
+          items-sym (gensym "items__")
+          idx-sym (gensym "idx__")
+          item-sym (gensym "item__")
           body-out-sym (gensym "body_out__")
           body-bind-params-sym (gensym "body_bind_params__")
           body-params-sym (gensym "body_params__")
+          fragment-sql-sym (gensym "fragment_sql__")
           body-form (emit-sequential-render-body-form (:body node)
                                                       body-out-sym
                                                       body-bind-params-sym
                                                       body-params-sym)]
-      `(let [items# (~(var parameter-value) ~params-sym ~collection-name)]
-         (when-not (sequential? items#)
+      `(let [~items-sym (~(var parameter-value) ~params-sym ~collection-name)]
+         (when-not (sequential? ~items-sym)
            (throw (ex-info "For block requires a sequential value."
                            {:parameter (~(var parameter-key) ~collection-name)
-                            :value items#})))
-         (if (seq items#)
+                            :value ~items-sym})))
+         (if (seq ~items-sym)
            (do
-             (doseq [[idx# item#] (map-indexed vector items#)]
+             (doseq [[~idx-sym ~item-sym] (map-indexed vector ~items-sym)]
                (let [~body-out-sym (StringBuilder.)
                      ~body-bind-params-sym (transient [])
-                     ~body-params-sym (assoc ~params-sym (keyword ~item-name) item#)]
+                     ~body-params-sym (assoc ~params-sym (keyword ~item-name) ~item-sym)]
                  ~body-form
-                 (let [fragment-sql# (str ~body-out-sym)
-                       fragment-sql# (if (= idx# (dec (count items#)))
-                                       (~(var trim-trailing-for-separator) fragment-sql#)
-                                       fragment-sql#)
-                       fragment-sql# (:sql (~(var normalize-fragment-for-context)
+                 (let [~fragment-sql-sym (str ~body-out-sym)
+                       ~fragment-sql-sym ~(if separator
+                                            `(str/replace ~fragment-sql-sym #"\r?\n$" "")
+                                            fragment-sql-sym)
+                       ~fragment-sql-sym (:sql (~(var normalize-fragment-for-context)
                                             ~out-sym
-                                            {:sql fragment-sql#
+                                            {:sql ~fragment-sql-sym
                                              :bind-params []}))]
-                   (.append ~out-sym ^String fragment-sql#)
+                   ~@(when separator
+                       [`(when (pos? ~idx-sym)
+                           (.append ~out-sym ^String ~separator))])
+                   (.append ~out-sym ^String ~fragment-sql-sym)
                    (reduce conj! ~bind-params-sym (persistent! ~body-bind-params-sym)))))
              false)
            (do

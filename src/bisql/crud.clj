@@ -313,7 +313,7 @@
                                 columns))
     ")"
     "VALUES"
-    "/*%for row in rows */"
+    "/*%for row in rows separating , */"
     "("
     (str/join "\n" (map-indexed (fn [idx column]
                                   (str "  "
@@ -321,7 +321,7 @@
                                        (sample-token column)
                                        (when (< idx (dec (count columns))) ",")))
                                 columns))
-    "),"
+    ")"
     "/*%end */"
     "RETURNING *"]))
 

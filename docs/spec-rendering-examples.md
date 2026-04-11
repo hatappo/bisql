@@ -300,8 +300,8 @@ WHERE
 ```sql
 UPDATE users
 SET
-/*%for item in items */
-  /*!item.name*/ = /*$item.value*/'sample',
+/*%for item in items separating , */
+  /*!item.name*/ = /*$item.value*/'sample'
 /*%end */
 WHERE id = /*$id*/1
 ```
@@ -496,4 +496,3 @@ SELECT * FROM users WHERE id = /*$id*/1
   :sigil "$",
   :collection? false}}
 ```
-

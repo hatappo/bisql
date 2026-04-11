@@ -261,8 +261,8 @@ WHERE 1 = 1
 ```sql
 UPDATE users
 SET
-/*%for item in items */
-  /*!item.name*/ = /*$item.value*/'sample',
+/*%for item in items separating , */
+  /*!item.name*/ = /*$item.value*/'sample'
 /*%end */
 WHERE id = /*$id*/1
 ```
@@ -270,13 +270,15 @@ WHERE id = /*$id*/1
 ### ルール
 
 - 構文は `/*%for item in items */ ... /*%end */`
+- 区切りが必要な場合は `/*%for item in items separating , */ ... /*%end */` の構文も使える
 - `item` はループ内でのみ有効なローカル変数名
 - `item.name`, `item.value`, `user.profile.name` のような dot-path 参照をサポートする
 - dot-path の key lookup は `keyword` → `string` → `symbol` の順で行う
 - 空コレクションはエラーにしない
 - 空の `for` ブロックの直後に `AND` または `OR` がある場合、その後続の演算子も取り除く
 - 空の `for` ブロックの直後に `AND` または `OR` がなく、直前に `WHERE` または `HAVING` がある場合、その節キーワードも取り除く
-- 繰り返し内容の末尾が `,`, `AND`, `OR` のいずれかで終わる場合、最後の要素ではその末尾 token を取り除く
+- `separating` を使った場合、区切り文字は 2 件目以降の反復の前に出力される
+- 繰り返し内容の末尾に `,`, `AND`, `OR` を置いて最後だけ削る仕様は使わない。区切りが必要なら `separating` を使う
 
 ### 初期実装での制約
 
@@ -335,8 +337,8 @@ LIMIT /*$limit*/100
 SELECT *
 FROM users
 WHERE
-/*%for item in filters */
-  /*!item.column*/ = /*$item.value*/'sample' AND
+/*%for item in filters separating AND */
+  /*!item.column*/ = /*$item.value*/'sample'
 /*%end */
 ```
 
@@ -345,8 +347,8 @@ WHERE
 ```sql
 UPDATE users
 SET
-/*%for item in items */
-  /*!item.name*/ = /*$item.value*/'sample',
+/*%for item in items separating , */
+  /*!item.name*/ = /*$item.value*/'sample'
 /*%end */
 WHERE id = /*$id*/1
 ```
@@ -355,12 +357,12 @@ WHERE id = /*$id*/1
 
 ```sql
 INSERT INTO users (
-/*%for column in columns */
-  /*!column.name*/,
+/*%for column in columns separating , */
+  /*!column.name*/
 /*%end */
 ) VALUES (
-/*%for column in columns */
-  /*$column.value*/'sample',
+/*%for column in columns separating , */
+  /*$column.value*/'sample'
 /*%end */
 )
 ```
@@ -370,8 +372,8 @@ INSERT INTO users (
 ```sql
 INSERT INTO users (email, status)
 VALUES
-/*%for row in rows */
-  (/*$row.email*/'user@example.com', /*$row.status*/'active'),
+/*%for row in rows separating , */
+  (/*$row.email*/'user@example.com', /*$row.status*/'active')
 /*%end */
 ```
 

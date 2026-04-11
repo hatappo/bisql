@@ -146,14 +146,14 @@
                       "  created_at\n"
                       ")\n"
                       "VALUES\n"
-                      "/*%for row in rows */\n"
+                      "/*%for row in rows separating , */\n"
                       "(\n"
                       "  /*$row.user-id*/1,\n"
                       "  /*$row.order-number*/'sample',\n"
                       "  /*$row.state*/'sample',\n"
                       "  /*$row.total-amount*/1,\n"
                       "  /*$row.created-at*/CURRENT_TIMESTAMP\n"
-                      "),\n"
+                      ")\n"
                       "/*%end */\n"
                       "RETURNING *")
                  (:sql-template template)))))
@@ -445,7 +445,7 @@
                                   :kind :insert
                                   :name "crud.insert-many"
                                   :meta {:cardinality :many}
-                                  :sql-template "INSERT INTO users (...) VALUES /*%for row in rows */(...),/*%end */ RETURNING *"}
+                                  :sql-template "INSERT INTO users (...) VALUES /*%for row in rows separating , */(...)/*%end */ RETURNING *"}
                                  {:table "orders"
                                   :kind :get
                                   :name "crud.get-by-id"
@@ -465,7 +465,7 @@
                 "INSERT INTO users (...) VALUES (...) RETURNING *\n\n"
                 "/*:name crud.insert-many */\n"
                 "/*:cardinality :many */\n"
-                "INSERT INTO users (...) VALUES /*%for row in rows */(...),/*%end */ RETURNING *\n\n"
+                "INSERT INTO users (...) VALUES /*%for row in rows separating , */(...)/*%end */ RETURNING *\n\n"
                 "/*:name crud.upsert-by-id */\n"
                 "/*:cardinality :one */\n"
                 "INSERT INTO users (...) ON CONFLICT ON CONSTRAINT users_pkey DO UPDATE RETURNING *\n\n"

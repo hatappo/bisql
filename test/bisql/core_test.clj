@@ -928,8 +928,8 @@
                 {:sql-template (str/join "\n"
                                          ["UPDATE users"
                                           "SET"
-                                          "/*%for item in items */"
-                                          "  /*!item.name*/ = /*$item.value*/'sample',"
+                                          "/*%for item in items separating , */"
+                                          "  /*!item.name*/ = /*$item.value*/'sample'"
                                           "/*%end */"
                                           "WHERE id = /*$id*/1"])}
                 {:id 42
@@ -944,12 +944,54 @@
            (:sql result)))
     (is (= ["Alice" "active" 42] (:params result)))))
 
+(deftest render-query-does-not-trim-trailing-comma-from-for-body
+  (let [result (bisql/render-query
+                {:sql-template (str/join "\n"
+                                         ["UPDATE users"
+                                          "SET"
+                                          "/*%for item in items */"
+                                          "  /*!item.name*/ = /*$item.value*/'sample',"
+                                          "/*%end */"
+                                          "WHERE id = /*$id*/1"])}
+                {:id 42
+                 :items [{:name "display_name" :value "Alice"}]})]
+    (is (= (str/join "\n"
+                     ["UPDATE users"
+                      "SET"
+                      "  display_name = ?,"
+                      ""
+                      "WHERE id = ?"])
+           (:sql result)))
+    (is (= ["Alice" 42] (:params result)))))
+
+(deftest render-query-does-not-trim-trailing-and-from-for-body
+  (let [result (bisql/render-query
+                {:sql-template (str/join "\n"
+                                         ["SELECT *"
+                                          "FROM users"
+                                          "WHERE"
+                                          "/*%for item in items */"
+                                          "  /*!item.name*/ = /*$item.value*/'sample' AND"
+                                          "/*%end */"
+                                          "status = /*$status*/'active'"])}
+                {:items [{:name "display_name" :value "Alice"}]
+                 :status "active"})]
+    (is (= (str/join "\n"
+                     ["SELECT *"
+                      "FROM users"
+                      "WHERE"
+                      "  display_name = ? AND"
+                      ""
+                      "status = ?"])
+           (:sql result)))
+    (is (= ["Alice" "active"] (:params result)))))
+
 (deftest evaluate-ir-matches-render-query-for-for-blocks
   (let [sql-template (str/join "\n"
                                ["UPDATE users"
                                 "SET"
-                                "/*%for item in items */"
-                                "  /*!item.name*/ = /*$item.value*/'sample',"
+                                "/*%for item in items separating , */"
+                                "  /*!item.name*/ = /*$item.value*/'sample'"
                                 "/*%end */"
                                 "WHERE id = /*$id*/1"])
         ir (bisql/parse-template sql-template)
@@ -967,8 +1009,8 @@
   (let [sql-template (str/join "\n"
                                ["UPDATE users"
                                 "SET"
-                                "/*%for item in items */"
-                                "  /*!item.name*/ = /*$item.value*/'sample',"
+                                "/*%for item in items separating , */"
+                                "  /*!item.name*/ = /*$item.value*/'sample'"
                                 "/*%end */"
                                 "WHERE id = /*$id*/1"])
         ir (bisql/parse-template sql-template)
@@ -1041,10 +1083,10 @@
   (let [error (try
                 (bisql/render-query
                  {:sql-template (str/join "\n"
-                                          ["UPDATE users"
-                                           "SET"
-                                           "/*%for item in items */"
-                                           "  /*!item.name*/ = /*$item.value*/'sample',"
+                                         ["UPDATE users"
+                                          "SET"
+                                          "/*%for item in items */"
+                                           "  /*!item.name*/ = /*$item.value*/'sample'"
                                            "/*%end */"
                                            "WHERE id = /*$id*/1"])}
                  {:id 42
@@ -1063,11 +1105,11 @@
                  {:sql-template (str/join "\n"
                                           ["INSERT INTO users (email, status)"
                                            "VALUES"
-                                           "/*%for row in rows */"
+                                           "/*%for row in rows separating , */"
                                            "("
                                            "  /*$row.email*/'a@example.com',"
                                            "  /*$row.status*/'active'"
-                                           "),"
+                                           ")"
                                            "/*%end */"
                                            "RETURNING *"])}
                  {:rows []})
