@@ -1,6 +1,7 @@
 (ns bisql.crud-test
   (:require [bisql.crud :as crud]
             [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]))
 
 (deftest generate-crud-builds-minimal-select-templates
@@ -393,10 +394,17 @@
            (:namespace users-file)))
     (is (= "postgresql/public/users/crud"
            (:query-path users-file)))
-    (is (= "(ns sql.postgresql.public.users.crud\n  (:require [bisql.core :as bisql]))\n\n(bisql/defquery \"/sql/postgresql/public/users/crud.sql\")\n"
-           (:content users-file)))
-    (is (= "(ns sql.postgresql.public.orders.crud\n  (:require [bisql.core :as bisql]))\n\n(bisql/defquery \"/sql/postgresql/public/orders/crud.sql\")\n"
-           (:content orders-file)))))
+    (is (str/starts-with? (:content users-file) "(ns sql.postgresql.public.users.crud)\n\n"))
+    (is (str/includes? (:content users-file) "(declare"))
+    (is (str/includes? (:content users-file) "get-by-id"))
+    (is (str/includes? (:content users-file) ":arglists (quote ([datasource] [datasource template-params]))"))
+    (is (str/includes? (:content users-file) ":cardinality :one"))
+    (is (str/includes? (:content users-file) "This var and docstring are generated from the following SQL template:"))
+    (is (str/includes? (:content users-file) "src/sql/postgresql/public/users/crud.sql:1"))
+    (is (str/includes? (:content users-file) "SELECT * FROM users WHERE id = /*$id*/1"))
+    (is (not (str/includes? (:content users-file) ":sql-template")))
+    (is (str/starts-with? (:content orders-file) "(ns sql.postgresql.public.orders.crud)\n\n"))
+    (is (str/includes? (:content orders-file) "src/sql/postgresql/public/orders/crud.sql:1"))))
 
 (deftest write-crud-query-namespaces-writes-table-namespaces
   (let [temp-root (str (System/getProperty "java.io.tmpdir")
@@ -412,7 +420,10 @@
         result (crud/write-crud-query-namespaces! crud-result {:output-root output-root})
         output-file (io/file output-root "postgresql/public/users/crud.clj")]
     (is (.exists output-file))
-    (is (= "(ns sql.postgresql.public.users.crud\n  (:require [bisql.core :as bisql]))\n\n(bisql/defquery \"/sql/postgresql/public/users/crud.sql\")\n"
-           (slurp output-file)))
+    (let [content (slurp output-file)]
+      (is (str/starts-with? content
+                            "(ns sql.postgresql.public.users.crud)\n\n(declare\n"))
+      (is (str/includes? content
+                         "src/sql/postgresql/public/users/crud.sql:1")))
     (is (= "postgresql/public/users/crud.clj"
            (:path (first (:files result)))))))

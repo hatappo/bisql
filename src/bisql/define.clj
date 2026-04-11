@@ -3,16 +3,57 @@
             [clojure.java.io :as io]
             [clojure.string :as str]))
 
+(def ^:private navigation-stub-key ::navigation-stub)
+
+(defn build-query-docstring
+  [{:keys [meta project-relative-path resource-path source-line sql-template]}]
+  (let [declared-doc (some-> (:doc meta) str/trim not-empty)
+        source-ref (str (or project-relative-path resource-path) ":" (or source-line 1))
+        sections (cond-> []
+                   declared-doc
+                   (conj declared-doc)
+
+                   true
+                   (conj "This var and docstring are generated from the following SQL template:"
+                         source-ref
+                         sql-template))]
+    (str/join "\n\n" sections)))
+
 (defn query-function-metadata
   [template]
-  (let [{:keys [query-name function-name namespace-suffix resource-path base-path sql-template meta]} template
+  (let [{:keys [query-name function-name namespace-suffix resource-path base-path
+                project-relative-path source-line sql-template meta]} template
         reserved {:query-name query-name
                   :function-name function-name
                   :namespace-suffix namespace-suffix
                   :resource-path resource-path
                   :base-path base-path
+                  :project-relative-path project-relative-path
+                  :source-line source-line
                   :sql-template sql-template}]
-    (merge meta reserved)))
+    (-> (merge meta reserved)
+        (assoc :declared-doc (:doc meta)
+               :doc (build-query-docstring template)
+               navigation-stub-key false))))
+
+(defn navigation-stub-metadata
+  [template arglists]
+  {:arglists (list 'quote arglists)
+   :cardinality (some-> template :meta :cardinality)
+   :doc (build-query-docstring template)
+   navigation-stub-key true})
+
+(defn render-function-metadata
+  [template]
+  (assoc (query-function-metadata template)
+         :arglists '([]
+                     [template-params])))
+
+(defn executable-query-function-metadata
+  [template]
+  (assoc (query-function-metadata template)
+         :arglists '([datasource]
+                     [datasource template-params])))
 
 (defn var-symbol-from-function-name
   [function-name]
@@ -34,12 +75,13 @@
   [target-ns var-name resource-path query-name]
   (when-let [ns-obj (find-ns target-ns)]
     (when-let [existing (ns-resolve ns-obj var-name)]
-      (throw (ex-info "Query function var name already exists."
-                      {:namespace (str target-ns)
-                       :var-name var-name
-                       :resource-path resource-path
-                       :query-name query-name
-                       :existing existing})))))
+      (when-not (true? (navigation-stub-key (meta existing)))
+        (throw (ex-info "Query function var name already exists."
+                        {:namespace (str target-ns)
+                         :var-name var-name
+                         :resource-path resource-path
+                         :query-name query-name
+                         :existing existing}))))))
 
 (defn ensure-unique-var-names!
   [entries]

@@ -1,5 +1,6 @@
 (ns bisql.core-test
   (:require [bisql.core :as bisql]
+            [bisql.define :as define]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]))
 
@@ -48,6 +49,8 @@
             :tags [:example :user]
             :returns :one}
            (:meta result)))
+    (is (= "test/sql/example-declarations-valid.sql" (:project-relative-path result)))
+    (is (= 1 (:source-line result)))
     (is (= "SELECT * FROM users WHERE id = /*$id*/1"
            (str/trim (:sql-template result))))))
 
@@ -63,15 +66,24 @@
     (is (= "get-by-id" (:function-name metadata)))
     (is (= ["core"] (:namespace-suffix metadata)))
     (is (= "sql/postgresql/public/users/get-by-id.sql" (:resource-path metadata)))
+    (is (= "test/sql/postgresql/public/users/get-by-id.sql" (:project-relative-path metadata)))
+    (is (= 1 (:source-line metadata)))
     (is (= "SELECT * FROM users WHERE id = /*$id*/ 1" (str/trim (:sql-template metadata))))))
 
 (deftest defrender-merges-declarations-into-var-metadata
   (let [metadata (query-var-meta 'sql.core 'example-declarations-valid)]
-    (is (= "Loads a user by id." (:doc metadata)))
+    (is (= "Loads a user by id." (:declared-doc metadata)))
+    (is (str/includes? (:doc metadata) "Loads a user by id."))
+    (is (str/includes? (:doc metadata) "This var and docstring are generated from the following SQL template:"))
+    (is (str/includes? (:doc metadata) "test/sql/example-declarations-valid.sql:1"))
+    (is (str/includes? (:doc metadata) "SELECT * FROM users WHERE id = /*$id*/1"))
     (is (= :one (:cardinality metadata)))
     (is (= [:example :user] (:tags metadata)))
     (is (= :one (:returns metadata)))
-    (is (= "core.example-declarations-valid" (:query-name metadata)))))
+    (is (= "core.example-declarations-valid" (:query-name metadata)))
+    (is (= '([]
+             [template-params])
+           (:arglists metadata)))))
 
 (deftest defrender-defines-one-function-per-query
   (let [by-id ((query-fn 'sql.core 'find-user-by-id) {:id 42})
@@ -85,6 +97,17 @@
   (let [metadata (query-var-meta 'sql.core 'find-user-by-email)]
     (is (= "core.find-user-by-email" (:query-name metadata)))
     (is (= 'find-user-by-email (:name metadata)))))
+
+(deftest defrender-can-replace-generated-navigation-stub
+  (create-ns 'sql.postgresql.public.users.core)
+  (let [template (bisql/analyze-template
+                  (bisql/load-query "postgresql/public/users/get-by-id.sql" {:base-path "sql"}))
+        stub-metadata (define/navigation-stub-metadata template '([]
+                                                                 [template-params]))]
+    (binding [*ns* (the-ns 'sql.postgresql.public.users.core)]
+      (intern *ns* (with-meta 'get-by-id stub-metadata))
+      (eval '(bisql.core/defrender "/sql/postgresql/public/users/get-by-id.sql")))
+    (is (fn? (query-fn 'sql.postgresql.public.users.core 'get-by-id)))))
 
 (deftest defrender-loads-all-sql-files-under-a-directory-recursively
   (let [expanded (macroexpand '(bisql.core/defrender "/sql/directory-success"))

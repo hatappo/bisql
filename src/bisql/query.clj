@@ -95,6 +95,11 @@
        :function-name function-name
        :namespace-suffix namespace-suffix})))
 
+(defn query-location
+  "Resolves query-name, function-name, and namespace-suffix from a logical query name."
+  [query-name]
+  (resolve-query-location query-name nil))
+
 (defn- extract-declarations
   [sql]
   (loop [remaining (skip-leading-whitespace sql)
@@ -125,7 +130,9 @@
   (cond-> {}
     (:query-name template) (assoc :query-name (:query-name template))
     (:base-path template) (assoc :base-path (:base-path template))
-    (:resource-path template) (assoc :resource-path (:resource-path template))))
+    (:resource-path template) (assoc :resource-path (:resource-path template))
+    (:project-relative-path template) (assoc :project-relative-path (:project-relative-path template))
+    (:source-line template) (assoc :source-line (:source-line template))))
 
 (defn- resource-path-for
   [base-path filename]
@@ -140,6 +147,21 @@
 (defn- query-name-from-filename
   [filename]
   (subs (.getName (io/file filename)) 0 (- (count (.getName (io/file filename))) 4)))
+
+(defn- line-number-at-index
+  [s idx]
+  (inc (count (filter #(= % \newline) (subs s 0 idx)))))
+
+(defn- project-relative-path
+  [resource-path resource]
+  (try
+    (let [project-root (.toPath (.getCanonicalFile (io/file ".")))
+          file-path (.toPath (.getCanonicalFile (io/file resource)))]
+      (if (.startsWith file-path project-root)
+        (str/replace (str (.relativize project-root file-path)) #"\\+" "/")
+        resource-path))
+    (catch Exception _
+      resource-path)))
 
 (def ^:private query-block-start-pattern
   #"(?m)^[\t ]*/\*:name(?:\s|\*/)")
@@ -158,31 +180,39 @@
 
 (defn- parse-query-blocks
   [sql]
-  (let [sql (skip-leading-whitespace sql)
-        start-indexes (query-block-start-indexes sql)]
+  (let [trimmed-sql (skip-leading-whitespace sql)
+        trim-offset (- (count sql) (count trimmed-sql))
+        start-indexes (query-block-start-indexes trimmed-sql)]
     (cond
-      (str/blank? sql)
+      (str/blank? trimmed-sql)
       []
 
       (empty? start-indexes)
-      (let [{:keys [meta]} (extract-declarations sql)]
+      (let [{:keys [meta]} (extract-declarations trimmed-sql)]
         [{:name (some-> (:name meta) normalize-query-name)
-          :sql-template sql}])
+          :sql-template trimmed-sql
+          :source-line (line-number-at-index sql trim-offset)}])
 
       :else
-      (let [end-indexes (concat (rest start-indexes) [(count sql)])
-            prefixed-block (chunk-sql sql 0 (first start-indexes))
-            query-blocks (mapv #(chunk-sql sql %1 %2)
+      (let [end-indexes (concat (rest start-indexes) [(count trimmed-sql)])
+            prefixed-block (chunk-sql trimmed-sql 0 (first start-indexes))
+            query-blocks (mapv #(chunk-sql trimmed-sql %1 %2)
                                start-indexes
                                end-indexes)
-            block-sqls (cond-> query-blocks
-                         (not (str/blank? prefixed-block))
-                         (into [prefixed-block]))]
-        (mapv (fn [block-sql]
-                (let [{:keys [meta]} (extract-declarations block-sql)]
+            block-entries (cond-> (mapv (fn [start block-sql]
+                                          {:sql-template block-sql
+                                           :source-line (line-number-at-index sql (+ trim-offset start))})
+                                        start-indexes
+                                        query-blocks)
+                            (not (str/blank? prefixed-block))
+                            (into [{:sql-template prefixed-block
+                                    :source-line (line-number-at-index sql trim-offset)}]))]
+        (mapv (fn [{:keys [sql-template source-line]}]
+                (let [{:keys [meta]} (extract-declarations sql-template)]
                   {:name (some-> (:name meta) normalize-query-name)
-                   :sql-template block-sql}))
-              block-sqls)))))
+                   :sql-template sql-template
+                   :source-line source-line}))
+              block-entries)))))
 
 (defn- load-query-resource
   [filename base-path]
@@ -203,15 +233,18 @@
      :query-name query-name
      :base-path base-path
      :resource-path resource-path
+     :project-relative-path (project-relative-path resource-path resource)
      :sql-template (slurp resource)}))
 
 (defn- loaded-template
-  [query-name function-name namespace-suffix base-path resource-path sql-template]
+  [query-name function-name namespace-suffix base-path resource-path project-relative-path source-line sql-template]
   {:query-name query-name
    :function-name function-name
    :namespace-suffix namespace-suffix
    :base-path base-path
    :resource-path resource-path
+   :project-relative-path project-relative-path
+   :source-line source-line
    :sql-template sql-template})
 
 (defn load-queries
@@ -220,7 +253,7 @@
    (load-queries filename {}))
   ([filename {:keys [base-path]
               :or {base-path "sql"}}]
-   (let [{:keys [query-name resource-path sql-template]}
+   (let [{:keys [query-name resource-path project-relative-path sql-template]}
          (load-query-resource filename base-path)]
      (try
        (let [blocks (parse-query-blocks sql-template)
@@ -231,7 +264,7 @@
                             :base-path base-path
                             :resource-path resource-path})))
          (reduce
-          (fn [queries {:keys [name sql-template]}]
+          (fn [queries {:keys [name sql-template source-line]}]
             (let [{:keys [query-name function-name namespace-suffix]}
                   (resolve-query-location query-name name)]
               (when (contains? queries query-name)
@@ -247,6 +280,8 @@
                                       namespace-suffix
                                       base-path
                                       resource-path
+                                      project-relative-path
+                                      source-line
                                       sql-template))))
           {}
           blocks))

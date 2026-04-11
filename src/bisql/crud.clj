@@ -1,5 +1,7 @@
 (ns bisql.crud
-  (:require [clojure.edn :as edn]
+  (:require [bisql.define :as define]
+            [bisql.query :as query]
+            [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [next.jdbc :as jdbc]
@@ -141,6 +143,41 @@
           ""
           (subs normalized-root (count prefix)))))))
 
+(defn- emit-string-literal
+  [s]
+  (str "\""
+       (str/escape s {\\ "\\\\"
+                      \" "\\\""})
+       "\""))
+
+(declare emit-literal)
+
+(defn- emit-map-literal
+  [m indent]
+  (if (empty? m)
+    "{}"
+    (let [padding (apply str (repeat indent " "))
+          child-padding (apply str (repeat (+ indent 2) " "))
+          entries (->> m
+                       (sort-by (comp str key))
+                       (map (fn [[k v]]
+                              (str child-padding
+                                   (pr-str k)
+                                   " "
+                                   (emit-literal v (+ indent 2))))))]
+      (str "{\n"
+           (str/join "\n" entries)
+           "\n"
+           padding
+           "}"))))
+
+(defn- emit-literal
+  [value indent]
+  (cond
+    (string? value) (emit-string-literal value)
+    (map? value) (emit-map-literal value indent)
+    :else (pr-str value)))
+
 (defn- namespace-root-path
   [output-root]
   (or (not-empty (relative-to-classpath-root output-root))
@@ -174,12 +211,33 @@
          "\n"
          sql-template)))
 
+(defn- line-count
+  [s]
+  (if (str/blank? s)
+    0
+    (inc (count (filter #(= % \newline) s)))))
+
+(defn- table-query-entries
+  [templates]
+  (loop [remaining templates
+         current-line 1
+         entries []]
+    (if-let [template (first remaining)]
+      (let [block-content (query-block template)
+            block-lines (line-count block-content)
+            next-line (+ current-line block-lines (if (next remaining) 1 0))]
+        (recur (next remaining)
+               next-line
+               (conj entries (assoc template :source-line current-line))))
+      entries)))
+
 (defn- table-file-entry
   [dialect schema table templates]
-  {:table table
-   :path (table-file-path dialect schema table)
-   :templates templates
-   :content (str/join "\n\n" (map query-block templates))})
+  (let [query-entries (table-query-entries templates)]
+    {:table table
+     :path (table-file-path dialect schema table)
+     :templates query-entries
+     :content (str/join "\n\n" (map query-block query-entries))}))
 
 (def ^:private crud-kind-order
   {:insert 0
@@ -221,7 +279,7 @@
 
 (defn render-crud-query-namespaces
   "Renders one query namespace file per table.
-   Each generated namespace loads the matching SQL directory via bisql/defquery."
+   Each generated namespace declares the generated query vars with docstrings."
   ([crud-result]
    (render-crud-query-namespaces crud-result {:output-root "src/sql"}))
   ([{:keys [dialect schema templates]} {:keys [output-root]
@@ -231,16 +289,30 @@
                                         :schema schema
                                         :templates templates})
                     :files
-                    (mapv (fn [{:keys [table path]}]
+                    (mapv (fn [{:keys [table path templates]}]
                             (let [query-path (subs path 0 (- (count path) 4))
                                   ns-sym (namespace-symbol root-path query-path)
                                   file-path (namespace-file-path query-path)
-                                  absolute-query-path (str "/" (if (str/blank? root-path)
-                                                                 query-path
-                                                                 (str root-path "/" query-path)) ".sql")
-                                  content (str "(ns " ns-sym "\n"
-                                               "  (:require [bisql.core :as bisql]))\n\n"
-                                               "(bisql/defquery " (pr-str absolute-query-path) ")\n")]
+                                  project-relative-path (str (normalize-path output-root) "/" path)
+                                  declare-forms (->> templates
+                                                     (mapv (fn [template]
+                                                             (let [{:keys [function-name namespace-suffix]}
+                                                                   (query/query-location (or (:query-name template)
+                                                                                             (:name template)))
+                                                                   template-data (assoc template
+                                                                                        :query-name (or (:query-name template)
+                                                                                                         (:name template))
+                                                                                        :function-name function-name
+                                                                                        :namespace-suffix namespace-suffix
+                                                                                       :project-relative-path project-relative-path)
+                                                                   metadata (define/navigation-stub-metadata template-data
+                                                                                                             '([datasource] [datasource template-params]))]
+                                                               (str "(declare\n"
+                                                                    "  ^" (emit-literal metadata 2) "\n"
+                                                                    "  " function-name ")\n"))))
+                                                     (str/join "\n"))
+                                  content (str "(ns " ns-sym ")\n\n"
+                                               declare-forms)]
                               {:table table
                                :path file-path
                                :namespace ns-sym

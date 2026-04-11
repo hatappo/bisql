@@ -651,13 +651,16 @@ Example:
     (write-crud-query-namespaces! {:output-root "src/sql"}))
 ```
 
-Each generated namespace file loads the matching SQL file:
+Each generated namespace file declares the generated query vars with docstrings
+derived from the SQL templates:
 
 ```clojure
 (ns sql.postgresql.public.users.crud
-  (:require [bisql.core :as bisql]))
 
-(bisql/defquery "/sql/postgresql/public/users/crud.sql")
+(declare
+  ^{:arglists '([datasource] [datasource template-params])
+    :doc "..."}
+  get-by-id)
 ```
 
 The same generation flow can be exposed as a CLI:
@@ -671,8 +674,9 @@ clojure -M -m bisql.cli gen-ns --config bisql.edn
 The config file is an EDN map with `:db` and `:generate` sections. Generated templates show default values as commented examples. Commands still work without a config file because the precedence order is CLI options > environment variables > config file > defaults.
 
 `gen-ns` is an optional helper. It is useful for projects that prefer explicit
-namespace files and want to avoid defining functions into namespaces that were
-not declared in source ahead of time.
+namespace files and want IDE/REPL navigation stubs with docstrings, without
+letting a shallow `(defquery)` define functions into namespaces that were not
+declared in source ahead of time.
 
 **Reasoning:**
 - Keeps the API surface small

@@ -200,8 +200,10 @@ The same options can also be passed through environment variables such as
 The precedence order is CLI options > environment variables > config file > defaults.
 
 `gen-ns` is an optional helper for projects that prefer explicit namespace
-files over letting a shallow `(defquery)` define functions into namespaces that
-were not declared ahead of time.
+files. It generates navigation-oriented `declare` forms with docstrings derived
+from the SQL templates, so IDEs and the REPL can jump to the intended namespace
+and query source without letting a shallow `(defquery)` populate undeclared
+namespaces.
 
 For more detail on the 2-way SQL syntax and rendering behavior, see:
 
@@ -217,7 +219,6 @@ For local setup, tasks, and dev workflow, see:
 
 - Add Malli integration.
 - Support databases beyond PostgreSQL.
-- The SQL template string, with directives removed, is stored at the end of the docstring, separated by blank lines. For example, `:bisql-raw-sql`
 - Converts between kebab-case and camel-case. Column name, table name, schema name. Default is `:kebab-camel`.
 - Remove `<dialect>` such as `postgresql` from ns because ns is becoming too long.
 - Compile analyzed SQL templates into reusable renderer functions for lower runtime overhead.

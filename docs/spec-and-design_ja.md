@@ -657,13 +657,16 @@ PostgreSQL のスキーマメタデータから、クエリ定義、SQL template
     (write-crud-query-namespaces! {:output-root "src/sql"}))
 ```
 
-生成される namespace ファイルは、対応する SQL ファイルを読む:
+生成される namespace ファイルは、SQL テンプレートから導出した
+docstring 付きの query var を `declare` する:
 
 ```clojure
 (ns sql.postgresql.public.users.crud
-  (:require [bisql.core :as bisql]))
 
-(bisql/defquery "/sql/postgresql/public/users/crud.sql")
+(declare
+  ^{:arglists '([datasource] [datasource template-params])
+    :doc "..."}
+  get-by-id)
 ```
 
 同じ生成フローは CLI としても提供できる:
@@ -677,8 +680,9 @@ clojure -M -m bisql.cli gen-ns --config bisql.edn
 設定ファイルは `:db` と `:generate` を持つ EDN map とし、生成される雛形では既定値をコメントで例示する。設定ファイルがなくても、優先順位が CLI オプション > 環境変数 > 設定ファイル > デフォルトなので各コマンドは動作する。
 
 `gen-ns` は補助機能として残す。浅い階層で `(defquery)` を呼んだときに、
-未宣言の namespace に関数が定義されるのを避けたいプロジェクトでは、
-明示的な namespace ファイルを生成する用途で使える。
+未宣言の namespace に関数が定義されるのを避けたいプロジェクトや、
+IDE / REPL で使うナビゲーション用の declare と docstring がほしい
+プロジェクトでは、明示的な namespace ファイルを生成する用途で使える。
 
 **理由:**
 
