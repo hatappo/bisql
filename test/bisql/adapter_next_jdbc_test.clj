@@ -2,7 +2,8 @@
   (:require [bisql.adapter.next-jdbc :as adapter]
             [bisql.core :as bisql]
             [clojure.test :refer [deftest is]]
-            [next.jdbc :as jdbc]))
+            [next.jdbc :as jdbc]
+            [next.jdbc.result-set :as rs]))
 
 (adapter/defquery "/sql/adapter/postgresql/public/users/crud.sql")
 (bisql/defquery "/sql/adapter/example-declarations-valid.sql")
@@ -29,60 +30,70 @@
 
 (deftest exec-uses-execute-one-when-query-metadata-says-cardinality-one
   (let [captured (atom nil)]
-    (with-redefs [jdbc/execute-one! (fn [_ds statement]
-                                      (reset! captured statement)
+    (with-redefs [jdbc/execute-one! (fn [_ds statement options]
+                                      (reset! captured {:statement statement
+                                                        :options options})
                                       {:id 42})
-                  jdbc/execute! (fn [_ds _statement]
+                  jdbc/execute! (fn [_ds _statement _options]
                                   (throw (ex-info "should not call execute!" {})))]
       (is (= {:id 42}
              (adapter/exec! ::datasource (query-fn 'bisql.adapter-next-jdbc-test 'example-exec-one) {:id 42})))
-      (is (= ["SELECT * FROM users WHERE id = ?" 42]
+      (is (= {:statement ["SELECT * FROM users WHERE id = ?" 42]
+              :options {:builder-fn rs/as-unqualified-kebab-maps}}
              @captured)))))
 
 (deftest exec-uses-execute-many-when-query-metadata-says-cardinality-many
   (let [captured (atom nil)]
-    (with-redefs [jdbc/execute! (fn [_ds statement]
-                                  (reset! captured statement)
+    (with-redefs [jdbc/execute! (fn [_ds statement options]
+                                  (reset! captured {:statement statement
+                                                    :options options})
                                   [{:id 42}])
-                  jdbc/execute-one! (fn [_ds _statement]
+                  jdbc/execute-one! (fn [_ds _statement _options]
                                       (throw (ex-info "should not call execute-one!" {})))]
       (is (= [{:id 42}]
              (adapter/exec! ::datasource (query-fn 'bisql.adapter-next-jdbc-test 'example-exec-many) {:id 42})))
-      (is (= ["SELECT * FROM users WHERE id = ?" 42]
+      (is (= {:statement ["SELECT * FROM users WHERE id = ?" 42]
+              :options {:builder-fn rs/as-unqualified-kebab-maps}}
              @captured)))))
 
 (deftest exec-rejects-missing-execute-mode
   (let [captured (atom nil)]
-    (with-redefs [jdbc/execute! (fn [_ds statement]
-                                  (reset! captured statement)
+    (with-redefs [jdbc/execute! (fn [_ds statement options]
+                                  (reset! captured {:statement statement
+                                                    :options options})
                                   [{:value 1}])
-                  jdbc/execute-one! (fn [_ds _statement]
+                  jdbc/execute-one! (fn [_ds _statement _options]
                                       (throw (ex-info "should not call execute-one!" {})))]
       (is (= [{:value 1}]
              (adapter/exec! ::datasource {:sql-template "SELECT 1"} {})))
-      (is (= ["SELECT 1"]
+      (is (= {:statement ["SELECT 1"]
+              :options {:builder-fn rs/as-unqualified-kebab-maps}}
              @captured)))))
 
 (deftest adapter-defquery-defines-executable-functions
   (let [captured (atom nil)]
-    (with-redefs [jdbc/execute-one! (fn [_ds statement]
-                                      (reset! captured statement)
+    (with-redefs [jdbc/execute-one! (fn [_ds statement options]
+                                      (reset! captured {:statement statement
+                                                        :options options})
                                       {:id 42})
-                  jdbc/execute! (fn [_ds _statement]
+                  jdbc/execute! (fn [_ds _statement _options]
                                   (throw (ex-info "should not call execute!" {})))]
       (is (= {:id 42}
              ((query-fn 'sql.adapter.postgresql.public.users.crud 'get-by-id) ::datasource {:id 42})))
-      (is (= ["SELECT * FROM users\nWHERE id = ?" 42]
+      (is (= {:statement ["SELECT * FROM users\nWHERE id = ?" 42]
+              :options {:builder-fn rs/as-unqualified-kebab-maps}}
              @captured)))))
 
 (deftest core-defquery-facade-defines-executable-functions
   (let [captured (atom nil)]
-    (with-redefs [jdbc/execute-one! (fn [_ds statement]
-                                      (reset! captured statement)
+    (with-redefs [jdbc/execute-one! (fn [_ds statement options]
+                                      (reset! captured {:statement statement
+                                                        :options options})
                                       {:id 42})
-                  jdbc/execute! (fn [_ds _statement]
+                  jdbc/execute! (fn [_ds _statement _options]
                                   (throw (ex-info "should not call execute!" {})))]
       (is (= {:id 42}
              ((query-fn 'sql.adapter.core 'example-declarations-valid) ::datasource {:id 42})))
-      (is (= ["SELECT * FROM users WHERE id = ?" 42]
+      (is (= {:statement ["SELECT * FROM users WHERE id = ?" 42]
+              :options {:builder-fn rs/as-unqualified-kebab-maps}}
              @captured)))))

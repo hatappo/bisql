@@ -1,8 +1,11 @@
 (ns bisql.db-test
-  (:require [bisql.crud :as crud]
+  (:require [bisql.adapter.next-jdbc :as adapter]
+            [bisql.crud :as crud]
             [clojure.string :as str]
             [clojure.test :refer [deftest is]]
             [next.jdbc :as jdbc]))
+
+(adapter/defquery "/sql/adapter/postgresql/public/users/crud.sql")
 
 (defn- datasource
   []
@@ -72,3 +75,13 @@
     (is (= 1 (count (re-seq #"/\*:name crud\.count \*/" content))))
     (is (= 1 (count (re-seq #"/\*:name crud\.count-by-user-id \*/" content))))
     (is (str/includes? content "SELECT COUNT(*) AS count FROM user_devices"))))
+
+(deftest adapter-results-use-kebab-case-keys
+  (let [row ((ns-resolve 'sql.adapter.postgresql.public.users.crud 'get-by-id)
+             (datasource)
+             {:id 1})]
+    (is (= 1 (:id row)))
+    (is (contains? row :display-name))
+    (is (contains? row :created-at))
+    (is (not (contains? row :display_name)))
+    (is (not (contains? row :created_at)))))
