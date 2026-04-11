@@ -19,6 +19,7 @@
   (Object.))
 
 (def ^:private missing ::missing)
+(def ^:private default-namespace-suffix "core")
 
 (defn- skip-leading-whitespace
   [s]
@@ -68,6 +69,31 @@
                           {:directive :name
                            :value value
                            :type (type value)}))))
+
+(defn- split-qualified-query-name
+  [query-name]
+  (let [segments (str/split query-name #"\.")]
+    {:namespace-suffix (not-empty (vec (butlast segments)))
+     :function-name (last segments)}))
+
+(defn- qualified-query-name
+  [namespace-suffix function-name]
+  (str/join "." (concat namespace-suffix [function-name])))
+
+(defn- resolve-query-location
+  [context-query-name declared-query-name]
+  (when-let [fallback-name (or context-query-name declared-query-name)]
+    (let [fallback-parts (split-qualified-query-name fallback-name)
+          declared-parts (when declared-query-name
+                           (split-qualified-query-name declared-query-name))
+          namespace-suffix (vec (or (:namespace-suffix declared-parts)
+                                    (:namespace-suffix fallback-parts)
+                                    [default-namespace-suffix]))
+          function-name (or (:function-name declared-parts)
+                            (:function-name fallback-parts))]
+      {:query-name (qualified-query-name namespace-suffix function-name)
+       :function-name function-name
+       :namespace-suffix namespace-suffix})))
 
 (defn- extract-declarations
   [sql]
@@ -180,8 +206,10 @@
      :sql-template (slurp resource)}))
 
 (defn- loaded-template
-  [query-name base-path resource-path sql-template]
+  [query-name function-name namespace-suffix base-path resource-path sql-template]
   {:query-name query-name
+   :function-name function-name
+   :namespace-suffix namespace-suffix
    :base-path base-path
    :resource-path resource-path
    :sql-template sql-template})
@@ -204,29 +232,33 @@
                             :resource-path resource-path})))
          (reduce
           (fn [queries {:keys [name sql-template]}]
-            (let [resolved-name (or name query-name)]
-              (when (contains? queries resolved-name)
+            (let [{:keys [query-name function-name namespace-suffix]}
+                  (resolve-query-location query-name name)]
+              (when (contains? queries query-name)
                 (throw (ex-info "Duplicate query name."
-                                {:query-name resolved-name
+                                {:query-name query-name
                                  :filename filename
                                  :base-path base-path
                                  :resource-path resource-path})))
               (assoc queries
-                     resolved-name
-                     (loaded-template resolved-name
+                     query-name
+                     (loaded-template query-name
+                                      function-name
+                                      namespace-suffix
                                       base-path
                                       resource-path
                                       sql-template))))
           {}
           blocks))
        (catch clojure.lang.ExceptionInfo ex
+         (let [{:keys [query-name]} (resolve-query-location query-name nil)]
          (throw (ex-info (ex-message ex)
                          (merge {:filename filename
                                  :base-path base-path
                                  :resource-path resource-path
                                  :query-name query-name}
                                 (ex-data ex))
-                         ex)))))))
+                         ex))))))))
 
 (defn load-query
   "Loads a SQL file and returns a single query template.
@@ -249,10 +281,13 @@
   {:pre [(map? template)]}
   (let [context (template-context template)
         {:keys [meta sql-template]} (extract-declarations (:sql-template template))
-        query-name (or (:query-name context)
-                       (some-> (:name meta) normalize-query-name))]
+        declared-query-name (some-> (:name meta) normalize-query-name)
+        {:keys [query-name function-name namespace-suffix]}
+        (resolve-query-location (:query-name context) declared-query-name)]
     (merge context
            {:query-name query-name
+            :function-name function-name
+            :namespace-suffix namespace-suffix
             :sql-template sql-template
             :meta meta})))
 

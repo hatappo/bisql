@@ -40,7 +40,9 @@
   (let [result (bisql/analyze-template
                 (bisql/load-query "example-declarations-valid.sql"
                                   {:base-path "sql"}))]
-    (is (= "example-declarations-valid" (:query-name result)))
+    (is (= "core.example-declarations-valid" (:query-name result)))
+    (is (= "example-declarations-valid" (:function-name result)))
+    (is (= ["core"] (:namespace-suffix result)))
     (is (= {:doc "Loads a user by id."
             :cardinality :one
             :tags [:example :user]
@@ -50,36 +52,38 @@
            (str/trim (:sql-template result))))))
 
 (deftest defrender-defines-a-render-function
-  (let [result ((query-fn 'sql 'example-declarations-valid) {:id 42})]
+  (let [result ((query-fn 'sql.core 'example-declarations-valid) {:id 42})]
     (is (= "SELECT * FROM users WHERE id = ?" (:sql result)))
     (is (= [42] (:params result)))
-    (is (= "example-declarations-valid" (:query-name result)))))
+    (is (= "core.example-declarations-valid" (:query-name result)))))
 
 (deftest defrender-attaches-template-metadata-to-var
-  (let [metadata (query-var-meta 'sql.postgresql.public.users 'get-by-id)]
-    (is (= "get-by-id" (:query-name metadata)))
+  (let [metadata (query-var-meta 'sql.postgresql.public.users.core 'get-by-id)]
+    (is (= "core.get-by-id" (:query-name metadata)))
+    (is (= "get-by-id" (:function-name metadata)))
+    (is (= ["core"] (:namespace-suffix metadata)))
     (is (= "sql/postgresql/public/users/get-by-id.sql" (:resource-path metadata)))
     (is (= "SELECT * FROM users WHERE id = /*$id*/ 1" (str/trim (:sql-template metadata))))))
 
 (deftest defrender-merges-declarations-into-var-metadata
-  (let [metadata (query-var-meta 'sql 'example-declarations-valid)]
+  (let [metadata (query-var-meta 'sql.core 'example-declarations-valid)]
     (is (= "Loads a user by id." (:doc metadata)))
     (is (= :one (:cardinality metadata)))
     (is (= [:example :user] (:tags metadata)))
     (is (= :one (:returns metadata)))
-    (is (= "example-declarations-valid" (:query-name metadata)))))
+    (is (= "core.example-declarations-valid" (:query-name metadata)))))
 
 (deftest defrender-defines-one-function-per-query
-  (let [by-id ((query-fn 'sql 'find-user-by-id) {:id 42})
-        by-email ((query-fn 'sql 'find-user-by-email) {:email "user@example.com"})]
+  (let [by-id ((query-fn 'sql.core 'find-user-by-id) {:id 42})
+        by-email ((query-fn 'sql.core 'find-user-by-email) {:email "user@example.com"})]
     (is (= "SELECT * FROM users WHERE id = ?" (:sql by-id)))
     (is (= [42] (:params by-id)))
     (is (= "SELECT * FROM users WHERE email = ?" (:sql by-email)))
     (is (= ["user@example.com"] (:params by-email)))))
 
 (deftest defrender-attaches-query-declarations-to-var-metadata
-  (let [metadata (query-var-meta 'sql 'find-user-by-email)]
-    (is (= "find-user-by-email" (:query-name metadata)))
+  (let [metadata (query-var-meta 'sql.core 'find-user-by-email)]
+    (is (= "core.find-user-by-email" (:query-name metadata)))
     (is (= 'find-user-by-email (:name metadata)))))
 
 (deftest defrender-loads-all-sql-files-under-a-directory-recursively
@@ -88,8 +92,8 @@
     (is (= 'do (first expanded)))
     (is (not (str/includes? expanded-str "compile-ir")))
     (is (str/includes? expanded-str "StringBuilder"))
-    (is (str/includes? expanded-str "sql/directory-success/get-user-by-id"))
-    (is (str/includes? expanded-str "sql/directory-success/nested/list-users"))))
+    (is (str/includes? expanded-str "sql.directory-success.core"))
+    (is (str/includes? expanded-str "sql.directory-success.nested.core"))))
 
 (deftest defrender-loads-current-namespace-path-recursively
   (create-ns 'sql.directory_success)
@@ -97,8 +101,8 @@
                    (macroexpand '(bisql.core/defrender)))
         expanded-str (pr-str expanded)]
     (is (= 'do (first expanded)))
-    (is (str/includes? expanded-str "sql/directory_success/get-user-by-id"))
-    (is (str/includes? expanded-str "sql/directory_success/nested/list-users"))))
+    (is (str/includes? expanded-str "sql.directory-success.core"))
+    (is (str/includes? expanded-str "sql.directory-success.nested.core"))))
 
 (deftest defrender-loads-relative-path-under-current-namespace
   (create-ns 'sql)
@@ -106,8 +110,8 @@
                    (macroexpand '(bisql.core/defrender "directory-success")))
         expanded-str (pr-str expanded)]
     (is (= 'do (first expanded)))
-    (is (str/includes? expanded-str "sql/directory-success/get-user-by-id"))
-    (is (str/includes? expanded-str "sql/directory-success/nested/list-users"))))
+    (is (str/includes? expanded-str "sql.directory-success.core"))
+    (is (str/includes? expanded-str "sql.directory-success.nested.core"))))
 
 (deftest defrender-rejects-var-name-collisions-when-loading-a-directory
   (let [error (try
@@ -120,13 +124,14 @@
         data (ex-data error)]
     (is (= "Multiple queries resolve to the same var name."
            (ex-message error)))
+    (is (= "sql.directory-collision-same-namespace.core" (:namespace data)))
     (is (= 'get-by-id (:var-name data)))
     (is (some #{"sql/directory-collision-same-namespace/first.sql"} (:resource-paths data)))
     (is (some #{"sql/directory-collision-same-namespace/second.sql"} (:resource-paths data)))))
 
 (deftest defrender-rejects-var-name-collisions
   (let [error (try
-                (binding [*ns* (the-ns 'sql.postgresql.public.users)]
+                (binding [*ns* (the-ns 'sql.postgresql.public.users.core)]
                   (eval '(bisql.core/defrender "/sql/postgresql/public/users/get-by-id.sql")))
                 nil
                 (catch clojure.lang.Compiler$CompilerException ex
@@ -359,7 +364,9 @@
 (deftest load-query-uses-default-base-path
   (let [result (bisql/load-query "postgresql/public/users/get-by-id.sql")]
     (is (= "sql" (:base-path result)))
-    (is (= "get-by-id" (:query-name result)))
+    (is (= "core.get-by-id" (:query-name result)))
+    (is (= "get-by-id" (:function-name result)))
+    (is (= ["core"] (:namespace-suffix result)))
     (is (= "sql/postgresql/public/users/get-by-id.sql"
            (:resource-path result)))
     (is (= "SELECT * FROM users WHERE id = /*$id*/ 1"
@@ -387,18 +394,18 @@
 (deftest load-queries-supports-multiple-templates-in-a-single-file
   (let [queries (bisql/load-queries "example-multi-queries.sql"
                                     {:base-path "sql"})]
-    (is (= #{"find-user-by-id" "find-user-by-email"}
+    (is (= #{"core.find-user-by-id" "core.find-user-by-email"}
            (set (keys queries))))
-    (is (= "find-user-by-id"
-           (:query-name (get queries "find-user-by-id"))))
+    (is (= "core.find-user-by-id"
+           (:query-name (get queries "core.find-user-by-id"))))
     (is (= "sql/example-multi-queries.sql"
-           (:resource-path (get queries "find-user-by-id"))))))
+           (:resource-path (get queries "core.find-user-by-id"))))))
 
 (deftest load-queries-can-select-a-template-by-query-name
   (let [result (get (bisql/load-queries "example-multi-queries.sql"
                                         {:base-path "sql"})
-                    "find-user-by-email")]
-    (is (= "find-user-by-email" (:query-name result)))
+                    "core.find-user-by-email")]
+    (is (= "core.find-user-by-email" (:query-name result)))
     (is (= (str "/*:name find-user-by-email */\n"
                 "SELECT * FROM users WHERE email = /*$email*/'user@example.com'")
            (str/trim (:sql-template result))))))
@@ -412,7 +419,7 @@
                   ex))]
     (is (= "Multiple queries found; use load-queries."
            (ex-message error)))
-    (is (= ["find-user-by-email" "find-user-by-id"]
+    (is (= ["core.find-user-by-email" "core.find-user-by-id"]
            (:query-names (ex-data error))))))
 
 (deftest load-query-requires-sql-extension
@@ -440,7 +447,7 @@
     (is (= "SELECT * FROM users WHERE id = ?"
            (:sql result)))
     (is (= [42] (:params result)))
-    (is (= "example-declarations-valid" (:query-name result)))
+    (is (= "core.example-declarations-valid" (:query-name result)))
     (is (= "sql/example-declarations-valid.sql" (:resource-path result)))))
 
 (deftest render-query-adds-template-context-to-errors
@@ -454,7 +461,7 @@
                   ex))]
     (is (= "Invalid declaration value."
            (ex-message error)))
-    (is (= "example-declarations-invalid-meta"
+    (is (= "core.example-declarations-invalid-meta"
            (:query-name (ex-data error))))
     (is (= "sql/example-declarations-invalid-meta.sql"
            (:resource-path (ex-data error))))))
@@ -471,7 +478,7 @@
     (is (= "Duplicate declaration block."
            (ex-message error)))
     (is (= :doc (:directive (ex-data error))))
-    (is (= "example-declarations-duplicate"
+    (is (= "core.example-declarations-duplicate"
            (:query-name (ex-data error))))
     (is (= "sql/example-declarations-duplicate.sql"
            (:resource-path (ex-data error))))))
@@ -487,7 +494,7 @@
                   ex))]
     (is (= "Declaration blocks must appear at the beginning of the SQL template block."
            (ex-message error)))
-    (is (= "example-declarations-trailing"
+    (is (= "core.example-declarations-trailing"
            (:query-name (ex-data error))))
     (is (= "sql/example-declarations-trailing.sql"
            (:resource-path (ex-data error))))))
@@ -526,7 +533,7 @@
                   ex))]
     (is (= "Invalid declaration block."
            (ex-message error)))
-    (is (= "example-declarations-space-before-name"
+    (is (= "core.example-declarations-space-before-name"
            (:query-name (ex-data error))))
     (is (= "sql/example-declarations-space-before-name.sql"
            (:resource-path (ex-data error))))))

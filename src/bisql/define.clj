@@ -5,24 +5,29 @@
 
 (defn query-function-metadata
   [template]
-  (let [{:keys [query-name resource-path base-path sql-template meta]} template
+  (let [{:keys [query-name function-name namespace-suffix resource-path base-path sql-template meta]} template
         reserved {:query-name query-name
+                  :function-name function-name
+                  :namespace-suffix namespace-suffix
                   :resource-path resource-path
                   :base-path base-path
                   :sql-template sql-template}]
     (merge meta reserved)))
 
-(defn var-symbol-from-query-name
-  [query-name]
-  (symbol query-name))
+(defn var-symbol-from-function-name
+  [function-name]
+  (symbol function-name))
 
 (defn- target-namespace-symbol
-  [resource-path]
+  [resource-path namespace-suffix]
   (let [parent-path (some-> resource-path io/file .getParent str)
-        namespace-path (some-> parent-path
-                              (str/replace "\\" "/")
-                              (str/replace "/" ".")
-                              (str/replace "_" "-"))]
+        parent-segments (cond-> []
+                          parent-path
+                          (into (str/split (str/replace parent-path "\\" "/") #"/")))
+        suffix-segments (or namespace-suffix [])
+        namespace-path (some->> (concat parent-segments suffix-segments)
+                                (map #(str/replace % "_" "-"))
+                                (str/join "."))]
     (symbol namespace-path)))
 
 (defn ensure-var-name-available!
@@ -120,8 +125,9 @@
        (mapv (fn [template]
                (let [analyzed-template (query/analyze-template template)
                      ir (query/parse-template (:sql-template analyzed-template))
-                     target-ns (target-namespace-symbol (:resource-path analyzed-template))
-                     var-name (var-symbol-from-query-name (:query-name analyzed-template))
+                     target-ns (target-namespace-symbol (:resource-path analyzed-template)
+                                                        (:namespace-suffix analyzed-template))
+                     var-name (var-symbol-from-function-name (:function-name analyzed-template))
                      metadata (query-function-metadata analyzed-template)]
                  {:template analyzed-template
                   :ir ir

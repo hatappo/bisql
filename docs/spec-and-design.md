@@ -505,6 +505,10 @@ SELECT * FROM users WHERE email = /*$email*/'user@example.com'
 - `load-query` only supports single-template files
 - `load-queries` returns templates keyed by `query-name`
 - `:name` is used to resolve `query-name` and is also kept inside returned `:meta`
+- Dots in either the SQL filename (without `.sql`) or `/*:name */` are treated as namespace separators
+- The last segment becomes the function name
+- Earlier segments become a namespace suffix appended under the SQL file's parent directory
+- If no namespace suffix is provided, `core` is used by default
 
 ---
 
@@ -586,7 +590,20 @@ namespace derived from that SQL file path.
 1. `/*:name */`
 2. the SQL file name itself
 
-The generated var name is the resolved `query-name`.
+If `/*:name */` does not provide a namespace suffix, the file name can still
+provide one. The generated var name is always the last segment of the resolved
+`query-name`, while the preceding segments become a namespace suffix under the
+SQL file's parent path.
+
+Examples:
+
+- `sql/postgresql/public/users/get-by-id.sql`
+  -> `sql.postgresql.public.users.core/get-by-id`
+- `sql/postgresql/public/users/hoge.list-order-by-created-at.sql`
+  -> `sql.postgresql.public.users.hoge/list-order-by-created-at`
+- `sql/postgresql/public/users/crud.sql` with `/*:name crud.get-by-id */`
+  -> `sql.postgresql.public.users.crud/get-by-id`
+
 When loading a directory, files are processed recursively in sorted path order.
 Var name collisions are errors.
 
@@ -600,11 +617,11 @@ Execution lives behind adapter namespaces.
 Example:
 
 ```clojure
-(ns sql.postgresql.public.users
+(ns sql.postgresql.public.users.core
   (:require [bisql.core :as bisql]
             [bisql.adapter.next-jdbc :as bisql.jdbc]))
 
-(bisql/defquery)
+(bisql/defquery "/sql/postgresql/public/users/get-by-id.sql")
 
 (bisql.jdbc/exec! datasource get-by-id {:id 42})
 ```
@@ -634,13 +651,13 @@ Example:
     (write-crud-query-namespaces! {:output-root "src/sql"}))
 ```
 
-Each generated namespace file loads the matching SQL directory:
+Each generated namespace file loads the matching SQL file:
 
 ```clojure
-(ns sql.postgresql.public.users
+(ns sql.postgresql.public.users.crud
   (:require [bisql.core :as bisql]))
 
-(bisql/defquery)
+(bisql/defquery "/sql/postgresql/public/users/crud.sql")
 ```
 
 The same generation flow can be exposed as a CLI:

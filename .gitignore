@@ -6,7 +6,7 @@ target/
 .clj-kondo/.cache/
 
 # Bisql generated files
-src/sql/**/*-crud.sql
+src/sql/**/crud.sql
 src/sql/**/*.clj
 
 # Bisql config file

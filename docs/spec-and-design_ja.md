@@ -514,6 +514,10 @@ SELECT * FROM users WHERE email = /*$email*/'user@example.com'
 - `load-query` は単一 template ファイルのみを扱う
 - `load-queries` は `query-name` をキーにして template を返す
 - `:name` は `query-name` の解決に使い、返却される `:meta` にも残す
+- SQL ファイル名（`.sql` を除く）や `/*:name */` に含まれる `.` は namespace 区切りとして扱う
+- 最後のセグメントが関数名になる
+- それ以前のセグメントは、SQL ファイルの親ディレクトリ由来 namespace の下に付け足す suffix になる
+- namespace suffix が与えられなかった場合、デフォルトでは `core` を使う
 
 ---
 
@@ -593,7 +597,20 @@ SQL ファイルのパスから導出される namespace に定義される。
 1. `/*:name */`
 2. SQL ファイル名そのもの
 
-生成される var 名は、解決された `query-name` を使う。
+`/*:name */` に namespace suffix が含まれない場合でも、ファイル名側で suffix を
+与えられる。生成される var 名は、最終的に解決された `query-name` の最後の
+セグメントになる。それ以前のセグメントは、SQL ファイルの親ディレクトリ由来
+namespace の下へ付け足す suffix として使う。
+
+例:
+
+- `sql/postgresql/public/users/get-by-id.sql`
+  -> `sql.postgresql.public.users.core/get-by-id`
+- `sql/postgresql/public/users/hoge.list-order-by-created-at.sql`
+  -> `sql.postgresql.public.users.hoge/list-order-by-created-at`
+- `sql/postgresql/public/users/crud.sql` と `/*:name crud.get-by-id */`
+  -> `sql.postgresql.public.users.crud/get-by-id`
+
 ディレクトリを読む場合、ファイルはパス順に再帰処理する。var 名衝突は error とする。
 
 `defquery` は、実行可能な query 関数を定義する高レイヤのファサードである。
@@ -606,11 +623,11 @@ SQL ファイルのパスから導出される namespace に定義される。
 例:
 
 ```clojure
-(ns sql.postgresql.public.users
+(ns sql.postgresql.public.users.core
   (:require [bisql.core :as bisql]
             [bisql.adapter.next-jdbc :as bisql.jdbc]))
 
-(bisql/defquery)
+(bisql/defquery "/sql/postgresql/public/users/get-by-id.sql")
 
 (bisql.jdbc/exec! datasource get-by-id {:id 42})
 ```
@@ -640,13 +657,13 @@ PostgreSQL のスキーマメタデータから、クエリ定義、SQL template
     (write-crud-query-namespaces! {:output-root "src/sql"}))
 ```
 
-生成される namespace ファイルは、対応する SQL ディレクトリを読む:
+生成される namespace ファイルは、対応する SQL ファイルを読む:
 
 ```clojure
-(ns sql.postgresql.public.users
+(ns sql.postgresql.public.users.crud
   (:require [bisql.core :as bisql]))
 
-(bisql/defquery)
+(bisql/defquery "/sql/postgresql/public/users/crud.sql")
 ```
 
 同じ生成フローは CLI としても提供できる:

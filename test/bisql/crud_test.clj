@@ -53,45 +53,45 @@
           names (set (map :name templates))]
       (is (= "postgresql" (:dialect result)))
       (is (= "public" (:schema result)))
-      (is (contains? names "insert"))
-      (is (contains? names "insert-many"))
-      (is (contains? names "update-by-id"))
-      (is (contains? names "update-by-email"))
-      (is (contains? names "delete-by-id"))
-      (is (contains? names "delete-by-email"))
-      (is (contains? names "get-by-id"))
-      (is (contains? names "get-by-email"))
-      (is (contains? names "get-by-user-id-and-device-identifier"))
-      (is (contains? names "get-by-user-id-and-role-code"))
-      (is (contains? names "list-by-user-id-order-by-device-identifier"))
-      (is (contains? names "list-by-user-id-order-by-last-seen-at"))
-      (is (contains? names "list-by-user-id-and-last-seen-at"))
-      (is (contains? names "list-order-by-id"))
-      (is (contains? names "list-order-by-email"))
-      (is (contains? names "list-order-by-state-and-created-at"))
-      (is (contains? names "list-order-by-status-and-last-seen-at"))
-      (is (contains? names "list-order-by-user-id-and-last-seen-at"))
-      (is (contains? names "list-order-by-status-and-device-type-and-last-seen-at"))
-      (is (contains? names "list-order-by-user-id-and-device-identifier"))
-      (is (contains? names "list-by-status-order-by-last-seen-at"))
-      (is (contains? names "list-by-status-order-by-device-type-and-last-seen-at"))
-      (is (contains? names "list-by-status-and-device-type"))
-      (is (contains? names "list-by-status"))
-      (is (contains? names "list"))
-      (is (contains? names "list-by-status-and-last-seen-at"))
-      (is (contains? names "list-by-user-id"))
-      (is (contains? names "list-by-state"))
-      (is (contains? names "list-by-state-and-created-at"))
-      (is (contains? names "update-by-user-id-and-device-identifier"))
-      (is (contains? names "update-by-user-id-and-role-code"))
-      (is (contains? names "delete-by-user-id-and-device-identifier"))
-      (is (contains? names "delete-by-user-id-and-role-code"))
+      (is (contains? names "crud.insert"))
+      (is (contains? names "crud.insert-many"))
+      (is (contains? names "crud.update-by-id"))
+      (is (contains? names "crud.update-by-email"))
+      (is (contains? names "crud.delete-by-id"))
+      (is (contains? names "crud.delete-by-email"))
+      (is (contains? names "crud.get-by-id"))
+      (is (contains? names "crud.get-by-email"))
+      (is (contains? names "crud.get-by-user-id-and-device-identifier"))
+      (is (contains? names "crud.get-by-user-id-and-role-code"))
+      (is (contains? names "crud.list-by-user-id-order-by-device-identifier"))
+      (is (contains? names "crud.list-by-user-id-order-by-last-seen-at"))
+      (is (contains? names "crud.list-by-user-id-and-last-seen-at"))
+      (is (contains? names "crud.list-order-by-id"))
+      (is (contains? names "crud.list-order-by-email"))
+      (is (contains? names "crud.list-order-by-state-and-created-at"))
+      (is (contains? names "crud.list-order-by-status-and-last-seen-at"))
+      (is (contains? names "crud.list-order-by-user-id-and-last-seen-at"))
+      (is (contains? names "crud.list-order-by-status-and-device-type-and-last-seen-at"))
+      (is (contains? names "crud.list-order-by-user-id-and-device-identifier"))
+      (is (contains? names "crud.list-by-status-order-by-last-seen-at"))
+      (is (contains? names "crud.list-by-status-order-by-device-type-and-last-seen-at"))
+      (is (contains? names "crud.list-by-status-and-device-type"))
+      (is (contains? names "crud.list-by-status"))
+      (is (contains? names "crud.list"))
+      (is (contains? names "crud.list-by-status-and-last-seen-at"))
+      (is (contains? names "crud.list-by-user-id"))
+      (is (contains? names "crud.list-by-state"))
+      (is (contains? names "crud.list-by-state-and-created-at"))
+      (is (contains? names "crud.update-by-user-id-and-device-identifier"))
+      (is (contains? names "crud.update-by-user-id-and-role-code"))
+      (is (contains? names "crud.delete-by-user-id-and-device-identifier"))
+      (is (contains? names "crud.delete-by-user-id-and-role-code"))
       (testing "insert template excludes identity columns"
         (let [template (some #(when (and (= "orders" (:table %))
-                                         (= "insert" (:name %)))
+                                         (= "crud.insert" (:name %)))
                                 %)
                              templates)]
-          (is (= "insert" (:query-name template)))
+          (is (= "crud.insert" (:query-name template)))
           (is (= ["user_id" "order_number" "state" "total_amount" "created_at"]
                  (:columns template)))
           (is (= (str "INSERT INTO orders (\n"
@@ -112,10 +112,10 @@
                  (:sql-template template)))))
       (testing "insert-many template renders bulk values with for rows"
         (let [template (some #(when (and (= "orders" (:table %))
-                                         (= "insert-many" (:name %)))
+                                         (= "crud.insert-many" (:name %)))
                                 %)
                              templates)]
-          (is (= "insert-many" (:query-name template)))
+          (is (= "crud.insert-many" (:query-name template)))
           (is (= {:cardinality :many} (:meta template)))
           (is (= ["user_id" "order_number" "state" "total_amount" "created_at"]
                  (:columns template)))
@@ -140,7 +140,7 @@
                  (:sql-template template)))))
       (testing "update template uses plain bind variables"
         (let [template (some #(when (and (= "users" (:table %))
-                                         (= "update-by-id" (:name %)))
+                                         (= "crud.update-by-id" (:name %)))
                                 %)
                              templates)]
           (is (= ["email" "display_name" "status"] (:set-columns template)))
@@ -152,8 +152,8 @@
                       "RETURNING *")
                  (:sql-template template)))))
       (testing "left-prefix list query keeps natural order and limit"
-        (let [template (some #(when (= "list-by-state" (:name %)) %) templates)]
-          (is (= "list-by-state" (:query-name template)))
+        (let [template (some #(when (= "crud.list-by-state" (:name %)) %) templates)]
+          (is (= "crud.list-by-state" (:query-name template)))
           (is (= ["state"] (:columns template)))
           (is (= (str "SELECT * FROM orders\n"
                       "WHERE state = /*$state*/'sample'\n"
@@ -162,8 +162,8 @@
                       "OFFSET /*$offset*/0")
                  (:sql-template template)))))
       (testing "zero-prefix list query is generated for composite indexes"
-        (let [template (some #(when (= "list" (:name %)) %) templates)]
-          (is (= "list" (:query-name template)))
+        (let [template (some #(when (= "crud.list" (:name %)) %) templates)]
+          (is (= "crud.list" (:query-name template)))
           (is (= [] (:columns template)))
           (is (= (str "SELECT * FROM user_roles\n"
                       "ORDER BY user_id, role_code\n"
@@ -171,34 +171,34 @@
                       "OFFSET /*$offset*/0")
                  (:sql-template template)))))
       (testing "composite unique and composite index generate expected templates"
-        (let [get-template (some #(when (= "get-by-user-id-and-device-identifier" (:name %)) %) templates)
-              update-template (some #(when (= "update-by-user-id-and-device-identifier" (:name %)) %) templates)
-              delete-template (some #(when (= "delete-by-user-id-and-device-identifier" (:name %)) %) templates)
-              list-from-two-column-index-template (some #(when (= "list-order-by-status-and-last-seen-at" (:name %))
+        (let [get-template (some #(when (= "crud.get-by-user-id-and-device-identifier" (:name %)) %) templates)
+              update-template (some #(when (= "crud.update-by-user-id-and-device-identifier" (:name %)) %) templates)
+              delete-template (some #(when (= "crud.delete-by-user-id-and-device-identifier" (:name %)) %) templates)
+              list-from-two-column-index-template (some #(when (= "crud.list-order-by-status-and-last-seen-at" (:name %))
                                                            %)
                                                         templates)
-              list-from-three-column-index-template (some #(when (= "list-order-by-status-and-device-type-and-last-seen-at" (:name %))
+              list-from-three-column-index-template (some #(when (= "crud.list-order-by-status-and-device-type-and-last-seen-at" (:name %))
                                                              %)
                                                           templates)
-              list-by-user-id-from-unique-template (some #(when (= "list-by-user-id-order-by-device-identifier" (:name %))
+              list-by-user-id-from-unique-template (some #(when (= "crud.list-by-user-id-order-by-device-identifier" (:name %))
                                                             %)
                                                          templates)
-              list-by-user-id-from-index-template (some #(when (= "list-by-user-id-order-by-last-seen-at" (:name %))
+              list-by-user-id-from-index-template (some #(when (= "crud.list-by-user-id-order-by-last-seen-at" (:name %))
                                                            %)
                                                         templates)
-              list-by-user-id-and-last-seen-at-template (some #(when (= "list-by-user-id-and-last-seen-at" (:name %))
+              list-by-user-id-and-last-seen-at-template (some #(when (= "crud.list-by-user-id-and-last-seen-at" (:name %))
                                                                 %)
                                                              templates)
-              list-by-status-from-two-column-index (some #(when (= "list-by-status-order-by-last-seen-at" (:name %))
+              list-by-status-from-two-column-index (some #(when (= "crud.list-by-status-order-by-last-seen-at" (:name %))
                                                             %)
                                                          templates)
-              list-by-status-from-three-column-index (some #(when (= "list-by-status-order-by-device-type-and-last-seen-at" (:name %))
+              list-by-status-from-three-column-index (some #(when (= "crud.list-by-status-order-by-device-type-and-last-seen-at" (:name %))
                                                               %)
                                                            templates)
-              list-by-status-and-device-type-template (some #(when (= "list-by-status-and-device-type" (:name %))
+              list-by-status-and-device-type-template (some #(when (= "crud.list-by-status-and-device-type" (:name %))
                                                               %)
                                                            templates)
-              list-with-order-template (some #(when (= "list-by-status-and-last-seen-at" (:name %))
+              list-with-order-template (some #(when (= "crud.list-by-status-and-last-seen-at" (:name %))
                                                 %)
                                              templates)]
           (is (= (str "SELECT * FROM user_devices\n"
@@ -273,9 +273,9 @@
                       "OFFSET /*$offset*/0")
                  (:sql-template list-with-order-template)))))
       (testing "composite primary key generates get, update, and delete templates"
-        (let [get-template (some #(when (= "get-by-user-id-and-role-code" (:name %)) %) templates)
-              update-template (some #(when (= "update-by-user-id-and-role-code" (:name %)) %) templates)
-              delete-template (some #(when (= "delete-by-user-id-and-role-code" (:name %)) %) templates)]
+        (let [get-template (some #(when (= "crud.get-by-user-id-and-role-code" (:name %)) %) templates)
+              update-template (some #(when (= "crud.update-by-user-id-and-role-code" (:name %)) %) templates)
+              delete-template (some #(when (= "crud.delete-by-user-id-and-role-code" (:name %)) %) templates)]
           (is (= (str "SELECT * FROM user_roles\n"
                       "WHERE user_id = /*$user-id*/1\n"
                       "  AND role_code = /*$role-code*/'sample'")
@@ -299,22 +299,22 @@
                      :schema "public"
                      :templates [{:table "users"
                                   :kind :get
-                                  :name "get-by-id"
+                                  :name "crud.get-by-id"
                                   :meta {:cardinality :one}
                                   :sql-template "SELECT * FROM users WHERE id = /*$id*/1"}
                                  {:table "users"
                                   :kind :insert
-                                 :name "insert"
+                                 :name "crud.insert"
                                   :meta {:cardinality :one}
                                   :sql-template "INSERT INTO users (...) VALUES (...) RETURNING *"}
                                  {:table "users"
                                   :kind :insert
-                                  :name "insert-many"
+                                  :name "crud.insert-many"
                                   :meta {:cardinality :many}
                                   :sql-template "INSERT INTO users (...) VALUES /*%for row in rows */(...),/*%end */ RETURNING *"}
                                  {:table "orders"
                                   :kind :get
-                                  :name "get-by-id"
+                                  :name "crud.get-by-id"
                                   :meta {:cardinality :one}
                                   :sql-template "SELECT * FROM orders WHERE id = /*$id*/1"}]}
         rendered (crud/render-crud-files crud-result)
@@ -323,20 +323,20 @@
         users-file (second files)]
     (is (= "postgresql" (:dialect rendered)))
     (is (= "public" (:schema rendered)))
-    (is (= ["postgresql/public/orders/orders-crud.sql"
-            "postgresql/public/users/users-crud.sql"]
+    (is (= ["postgresql/public/orders/crud.sql"
+            "postgresql/public/users/crud.sql"]
            (mapv :path files)))
-    (is (= (str "/*:name insert */\n"
+    (is (= (str "/*:name crud.insert */\n"
                 "/*:cardinality :one */\n"
                 "INSERT INTO users (...) VALUES (...) RETURNING *\n\n"
-                "/*:name insert-many */\n"
+                "/*:name crud.insert-many */\n"
                 "/*:cardinality :many */\n"
                 "INSERT INTO users (...) VALUES /*%for row in rows */(...),/*%end */ RETURNING *\n\n"
-                "/*:name get-by-id */\n"
+                "/*:name crud.get-by-id */\n"
                 "/*:cardinality :one */\n"
                 "SELECT * FROM users WHERE id = /*$id*/1")
            (:content users-file)))
-    (is (= (str "/*:name get-by-id */\n"
+    (is (= (str "/*:name crud.get-by-id */\n"
                 "/*:cardinality :one */\n"
                 "SELECT * FROM orders WHERE id = /*$id*/1")
            (:content orders-file)))))
@@ -348,36 +348,36 @@
         crud-result {:dialect "postgresql"
                      :schema "public"
                      :templates [{:table "users"
-                                  :name "get-by-id"
+                                  :name "crud.get-by-id"
                                   :meta {:cardinality :one}
                                   :sql-template "SELECT * FROM users WHERE id = /*$id*/1"}]}
         result (crud/write-crud-files! crud-result {:output-root temp-root})
-        output-file (io/file temp-root "postgresql/public/users/users-crud.sql")]
+        output-file (io/file temp-root "postgresql/public/users/crud.sql")]
     (is (.exists output-file))
-    (is (= (str "/*:name get-by-id */\n"
+    (is (= (str "/*:name crud.get-by-id */\n"
                 "/*:cardinality :one */\n"
                 "SELECT * FROM users WHERE id = /*$id*/1")
            (slurp output-file)))
-    (is (= "postgresql/public/users/users-crud.sql"
+    (is (= "postgresql/public/users/crud.sql"
            (:path (first (:files result)))))))
 
 (deftest render-crud-query-namespaces-groups-tables-into-namespaces
   (let [crud-result {:dialect "postgresql"
                      :schema "public"
                      :templates [{:table "users"
-                                  :name "get-by-id"
+                                  :name "crud.get-by-id"
                                   :meta {:cardinality :one}
                                   :sql-template "SELECT * FROM users WHERE id = /*$id*/1"}
                                  {:table "users"
-                                 :name "insert"
+                                 :name "crud.insert"
                                   :meta {:cardinality :one}
                                   :sql-template "INSERT INTO users (...) VALUES (...) RETURNING *"}
                                  {:table "users"
-                                  :name "insert-many"
+                                  :name "crud.insert-many"
                                   :meta {:cardinality :many}
                                   :sql-template "INSERT INTO users (...) VALUES /*%for row in rows */(...),/*%end */ RETURNING *"}
                                  {:table "orders"
-                                  :name "get-by-id"
+                                  :name "crud.get-by-id"
                                   :meta {:cardinality :one}
                                   :sql-template "SELECT * FROM orders WHERE id = /*$id*/1"}]}
         rendered (crud/render-crud-query-namespaces crud-result {:output-root "src/sql"})
@@ -386,16 +386,16 @@
         users-file (second files)]
     (is (= "postgresql" (:dialect rendered)))
     (is (= "public" (:schema rendered)))
-    (is (= ["postgresql/public/orders.clj"
-            "postgresql/public/users.clj"]
+    (is (= ["postgresql/public/orders/crud.clj"
+            "postgresql/public/users/crud.clj"]
            (mapv :path files)))
-    (is (= 'sql.postgresql.public.users
+    (is (= 'sql.postgresql.public.users.crud
            (:namespace users-file)))
-    (is (= "postgresql/public/users"
+    (is (= "postgresql/public/users/crud"
            (:query-path users-file)))
-    (is (= "(ns sql.postgresql.public.users\n  (:require [bisql.core :as bisql]))\n\n(bisql/defquery)\n"
+    (is (= "(ns sql.postgresql.public.users.crud\n  (:require [bisql.core :as bisql]))\n\n(bisql/defquery \"/sql/postgresql/public/users/crud.sql\")\n"
            (:content users-file)))
-    (is (= "(ns sql.postgresql.public.orders\n  (:require [bisql.core :as bisql]))\n\n(bisql/defquery)\n"
+    (is (= "(ns sql.postgresql.public.orders.crud\n  (:require [bisql.core :as bisql]))\n\n(bisql/defquery \"/sql/postgresql/public/orders/crud.sql\")\n"
            (:content orders-file)))))
 
 (deftest write-crud-query-namespaces-writes-table-namespaces
@@ -405,14 +405,14 @@
         crud-result {:dialect "postgresql"
                      :schema "public"
                      :templates [{:table "users"
-                                  :name "get-by-id"
+                                  :name "crud.get-by-id"
                                   :meta {:cardinality :one}
                                   :sql-template "SELECT * FROM users WHERE id = /*$id*/1"}]}
         output-root (str temp-root "/src/sql")
         result (crud/write-crud-query-namespaces! crud-result {:output-root output-root})
-        output-file (io/file output-root "postgresql/public/users.clj")]
+        output-file (io/file output-root "postgresql/public/users/crud.clj")]
     (is (.exists output-file))
-    (is (= "(ns sql.postgresql.public.users\n  (:require [bisql.core :as bisql]))\n\n(bisql/defquery)\n"
+    (is (= "(ns sql.postgresql.public.users.crud\n  (:require [bisql.core :as bisql]))\n\n(bisql/defquery \"/sql/postgresql/public/users/crud.sql\")\n"
            (slurp output-file)))
-    (is (= "postgresql/public/users.clj"
+    (is (= "postgresql/public/users/crud.clj"
            (:path (first (:files result)))))))

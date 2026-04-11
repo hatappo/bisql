@@ -21,7 +21,7 @@
                                                       :templates [{:table "users"}]})
                                bisql/write-crud-files! (fn [crud-result options]
                                                          (reset! write-args* [crud-result options])
-                                                         {:files [{:path "postgresql/public/users/users-crud.sql"}]})]
+                                                         {:files [{:path "postgresql/public/users/crud.sql"}]})]
                    (cli/-main "gen-crud"
                               "--dbtype" "postgresql"
                               "--host" "db.example.com"
@@ -46,7 +46,7 @@
             {:output-root "src/app/sql"}]
            @write-args*))
     (is (str/includes? output "Wrote 1 CRUD SQL files"))
-    (is (str/includes? output "src/app/sql/postgresql/public/users/users-crud.sql"))))
+    (is (str/includes? output "src/app/sql/postgresql/public/users/crud.sql"))))
 
 (deftest cli-gen-ns-uses-db-spec-defaults-and-root
   (let [datasource-spec* (atom nil)
@@ -63,7 +63,7 @@
                                                       :templates [{:table "users"}]})
                                bisql/write-crud-query-namespaces! (fn [crud-result options]
                                                                     (reset! write-args* [crud-result options])
-                                                                    {:files [{:path "postgresql/public/users.clj"}]})]
+                                                                    {:files [{:path "postgresql/public/users/crud.clj"}]})]
                    (cli/-main "gen-ns"
                               "--host" "db.example.com"
                               "--port" "15432"
@@ -87,7 +87,7 @@
             {:output-root "src/app/sql"}]
            @write-args*))
     (is (str/includes? output "Wrote 1 query namespace files"))
-    (is (str/includes? output "src/app/sql/postgresql/public/users.clj"))))
+    (is (str/includes? output "src/app/sql/postgresql/public/users/crud.clj"))))
 
 (deftest cli-options-fall-back-to-environment-variables
   (let [datasource-spec* (atom nil)
@@ -113,7 +113,7 @@
                                                       :templates [{:table "users"}]})
                                bisql/write-crud-files! (fn [crud-result options]
                                                          (reset! write-args* [crud-result options])
-                                                         {:files [{:path "postgresql/public/users/users-crud.sql"}]})]
+                                                         {:files [{:path "postgresql/public/users/crud.sql"}]})]
                    (cli/-main "gen-crud")))]
     (is (= {:dbtype "postgresql"
             :host "env.example.com"
@@ -129,7 +129,7 @@
              :templates [{:table "users"}]}
             {:output-root "src/env/sql"}]
            @write-args*))
-    (is (str/includes? output "src/env/sql/postgresql/public/users/users-crud.sql"))))
+    (is (str/includes? output "src/env/sql/postgresql/public/users/crud.sql"))))
 
 (deftest cli-options-load-config-file-with-env-and-cli-precedence
   (let [config-file (doto (io/file (str (System/getProperty "java.io.tmpdir")
@@ -154,7 +154,7 @@
                                                       :templates [{:table "users"}]})
                                bisql/write-crud-files! (fn [crud-result options]
                                                          (reset! write-args* [crud-result options])
-                                                         {:files [{:path "postgresql/public/users/users-crud.sql"}]})]
+                                                         {:files [{:path "postgresql/public/users/crud.sql"}]})]
                    (cli/-main "gen-crud"
                               "--port" "45432"
                               "--schema" "cli_schema")))]
@@ -172,7 +172,7 @@
              :templates [{:table "users"}]}
             {:output-root "src/env/sql"}]
            @write-args*))
-    (is (str/includes? output "src/env/sql/postgresql/public/users/users-crud.sql"))))
+    (is (str/includes? output "src/env/sql/postgresql/public/users/crud.sql"))))
 
 (deftest cli-gen-config-writes-template
   (let [config-file (str (System/getProperty "java.io.tmpdir")

@@ -1,26 +1,26 @@
-/*:name delete-by-email */
+/*:name crud.delete-by-email */
 /*:cardinality :one */
 DELETE FROM users
 WHERE email = /*$email*/'user@example.com'
 RETURNING *
 
-/*:name delete-by-id */
+/*:name crud.delete-by-id */
 /*:cardinality :one */
 DELETE FROM users
 WHERE id = /*$id*/1
 RETURNING *
 
-/*:name get-by-email */
+/*:name crud.get-by-email */
 /*:cardinality :one */
 SELECT * FROM users
 WHERE email = /*$email*/'user@example.com'
 
-/*:name get-by-id */
+/*:name crud.get-by-id */
 /*:cardinality :one */
 SELECT * FROM users
 WHERE id = /*$id*/1
 
-/*:name insert */
+/*:name crud.insert */
 /*:cardinality :one */
 INSERT INTO users (
   email,
@@ -36,13 +36,13 @@ VALUES (
 )
 RETURNING *
 
-/*:name list-by-status */
+/*:name crud.list-by-status */
 /*:cardinality :many */
 SELECT * FROM users
 WHERE status = /*$status*/'sample'
 LIMIT /*$limit*/100
 
-/*:name update-by-email */
+/*:name crud.update-by-email */
 /*:cardinality :one */
 UPDATE users
 SET display_name = /*$display-name*/'sample'
@@ -51,7 +51,7 @@ SET display_name = /*$display-name*/'sample'
 WHERE email = /*$email*/'user@example.com'
 RETURNING *
 
-/*:name update-by-id */
+/*:name crud.update-by-id */
 /*:cardinality :one */
 UPDATE users
 SET email = /*$email*/'user@example.com'

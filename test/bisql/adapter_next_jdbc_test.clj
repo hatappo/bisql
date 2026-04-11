@@ -4,7 +4,7 @@
             [clojure.test :refer [deftest is]]
             [next.jdbc :as jdbc]))
 
-(adapter/defquery "/sql/adapter/postgresql/public/users/users-crud.sql")
+(adapter/defquery "/sql/adapter/postgresql/public/users/crud.sql")
 (bisql/defquery "/sql/adapter/example-declarations-valid.sql")
 
 (def example-exec-one
@@ -71,7 +71,7 @@
                   jdbc/execute! (fn [_ds _statement]
                                   (throw (ex-info "should not call execute!" {})))]
       (is (= {:id 42}
-             ((query-fn 'sql.adapter.postgresql.public.users 'get-by-id) ::datasource {:id 42})))
+             ((query-fn 'sql.adapter.postgresql.public.users.crud 'get-by-id) ::datasource {:id 42})))
       (is (= ["SELECT * FROM users\nWHERE id = ?" 42]
              @captured)))))
 
@@ -83,6 +83,6 @@
                   jdbc/execute! (fn [_ds _statement]
                                   (throw (ex-info "should not call execute!" {})))]
       (is (= {:id 42}
-             ((query-fn 'sql.adapter 'example-declarations-valid) ::datasource {:id 42})))
+             ((query-fn 'sql.adapter.core 'example-declarations-valid) ::datasource {:id 42})))
       (is (= ["SELECT * FROM users WHERE id = ?" 42]
              @captured)))))

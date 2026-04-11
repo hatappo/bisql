@@ -83,9 +83,13 @@
      :else
      [])))
 
+(defn- crud-query-name
+  [name]
+  (str "crud." name))
+
 (defn- template-entry
   [_schema table kind columns sql-template & {:as extra}]
-  (let [name (str (name kind) "-by-" (joined-name columns))]
+  (let [name (crud-query-name (str (name kind) "-by-" (joined-name columns)))]
     (merge
      {:table table
       :kind kind
@@ -97,6 +101,7 @@
 
 (defn- named-template-entry
   [_schema table kind name columns sql-template & {:as extra}]
+  (let [name (crud-query-name name)]
   (merge
    {:table table
     :kind kind
@@ -104,11 +109,11 @@
     :columns columns
     :query-name name
     :sql-template sql-template}
-   extra))
+   extra)))
 
 (defn- table-file-path
   [dialect schema table]
-  (str dialect "/" schema "/" table "/" table "-crud.sql"))
+  (str dialect "/" schema "/" table "/crud.sql"))
 
 (defn- normalize-path
   [path]
@@ -222,17 +227,20 @@
   ([{:keys [dialect schema templates]} {:keys [output-root]
                                         :or {output-root "src/sql"}}]
    (let [root-path (namespace-root-path output-root)
-         files (->> templates
-                    (map :table)
-                    distinct
-                    sort
-                    (mapv (fn [table]
-                            (let [query-path (str dialect "/" schema "/" table)
+         files (->> (render-crud-files {:dialect dialect
+                                        :schema schema
+                                        :templates templates})
+                    :files
+                    (mapv (fn [{:keys [table path]}]
+                            (let [query-path (subs path 0 (- (count path) 4))
                                   ns-sym (namespace-symbol root-path query-path)
                                   file-path (namespace-file-path query-path)
+                                  absolute-query-path (str "/" (if (str/blank? root-path)
+                                                                 query-path
+                                                                 (str root-path "/" query-path)) ".sql")
                                   content (str "(ns " ns-sym "\n"
                                                "  (:require [bisql.core :as bisql]))\n\n"
-                                               "(bisql/defquery)\n")]
+                                               "(bisql/defquery " (pr-str absolute-query-path) ")\n")]
                               {:table table
                                :path file-path
                                :namespace ns-sym
