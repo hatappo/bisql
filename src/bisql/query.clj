@@ -287,13 +287,73 @@
           blocks))
        (catch clojure.lang.ExceptionInfo ex
          (let [{:keys [query-name]} (resolve-query-location query-name nil)]
-         (throw (ex-info (ex-message ex)
-                         (merge {:filename filename
+           (throw (ex-info (ex-message ex)
+                           (merge {:filename filename
+                                   :base-path base-path
+                                   :resource-path resource-path
+                                   :query-name query-name}
+                                  (ex-data ex))
+                           ex))))))))
+
+(defn load-queries-from-file
+  "Loads query templates directly from a filesystem SQL file."
+  ([relative-path file-path]
+   (load-queries-from-file relative-path file-path {}))
+  ([relative-path file-path {:keys [base-path]
+                             :or {base-path "sql"}}]
+   (when-not (sql-filename? relative-path)
+     (throw (ex-info "Query file name must end with .sql."
+                     {:filename relative-path
+                      :base-path base-path
+                      :file-path file-path})))
+   (let [query-name (query-name-from-filename relative-path)
+         resource-path (resource-path-for base-path relative-path)
+         sql-template (slurp file-path)
+         project-relative-file-path (try
+                                      (let [project-root (.toPath (.getCanonicalFile (io/file ".")))
+                                            path (.toPath (.getCanonicalFile (io/file file-path)))]
+                                        (str/replace (str (.relativize project-root path)) #"\\+" "/"))
+                                      (catch Exception _
+                                        resource-path))]
+     (try
+       (let [blocks (parse-query-blocks sql-template)
+             multiple? (> (count blocks) 1)]
+         (when (and multiple? (some #(nil? (:name %)) blocks))
+           (throw (ex-info "Multiple queries require :name declarations."
+                           {:filename relative-path
+                            :base-path base-path
+                            :resource-path resource-path})))
+         (reduce
+          (fn [queries {:keys [name sql-template source-line]}]
+            (let [{:keys [query-name function-name namespace-suffix]}
+                  (resolve-query-location query-name name)]
+              (when (contains? queries query-name)
+                (throw (ex-info "Duplicate query name."
+                                {:query-name query-name
+                                 :filename relative-path
                                  :base-path base-path
-                                 :resource-path resource-path
-                                 :query-name query-name}
-                                (ex-data ex))
-                         ex))))))))
+                                 :resource-path resource-path})))
+              (assoc queries
+                     query-name
+                     (loaded-template query-name
+                                      function-name
+                                      namespace-suffix
+                                      base-path
+                                      resource-path
+                                      project-relative-file-path
+                                      source-line
+                                      sql-template))))
+          {}
+          blocks))
+       (catch clojure.lang.ExceptionInfo ex
+         (let [{:keys [query-name]} (resolve-query-location query-name nil)]
+           (throw (ex-info (ex-message ex)
+                           (merge {:filename relative-path
+                                   :base-path base-path
+                                   :resource-path resource-path
+                                   :query-name query-name}
+                                  (ex-data ex))
+                           ex))))))))
 
 (defn load-query
   "Loads a SQL file and returns a single query template.
@@ -868,12 +928,12 @@
     (let [sql (:sql node)]
       `(let [sql# ~sql
              sql# (if ~skip-leading-operator-sym
-                      (if-let [trimmed# (~(var consume-leading-conditional-operator-from-text) sql#)]
-                        trimmed#
-                        (do
-                          (~(var remove-trailing-clause-keyword) ~out-sym)
-                          sql#))
-                      sql#)]
+                    (if-let [trimmed# (~(var consume-leading-conditional-operator-from-text) sql#)]
+                      trimmed#
+                      (do
+                        (~(var remove-trailing-clause-keyword) ~out-sym)
+                        sql#))
+                    sql#)]
          (.append ~out-sym ^String sql#)
          false))
 
@@ -1036,9 +1096,9 @@
                                        (~(var trim-trailing-for-separator) fragment-sql#)
                                        fragment-sql#)
                        fragment-sql# (:sql (~(var normalize-fragment-for-context)
-                                           ~out-sym
-                                           {:sql fragment-sql#
-                                            :bind-params []}))]
+                                            ~out-sym
+                                            {:sql fragment-sql#
+                                             :bind-params []}))]
                    (.append ~out-sym ^String fragment-sql#)
                    (reduce conj! ~bind-params-sym (persistent! ~body-bind-params-sym)))))
              false)

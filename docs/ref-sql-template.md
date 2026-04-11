@@ -48,14 +48,14 @@ A Clojure library for using SQL.
 
 - https://github.com/launchbadge/sqlx
 
-### sqlc
+### sqlc (Go)
 
 Generate type-safe code from SQL
 
 - https://sqlc.dev/
 - https://github.com/sqlc-dev/sqlc
 
-### MyBatis
+### MyBatis (Java)
 
 MyBatis SQL mapper framework for Java
 

@@ -45,13 +45,13 @@
             :task (shell "bb scripts/db/reset_postgres_sample.bb")}
 
   gen-config {:doc "Generate a bisql.edn config template"
-              :task (clojure "-M" "-m" "bisql.cli" "gen-config")}
+              :task (apply clojure "-M" "-m" "bisql.cli" "gen-config" *command-line-args*)}
 
   gen-crud {:doc "Generate CRUD SQL files from local PostgreSQL"
-            :task (clojure "-M" "-m" "bisql.cli" "gen-crud")}
+            :task (apply clojure "-M" "-m" "bisql.cli" "gen-crud" *command-line-args*)}
 
-  gen-declarations {:doc "Generate declaration namespace files from local PostgreSQL"
-                    :task (clojure "-M" "-m" "bisql.cli" "gen-declarations")}
+  gen-declarations {:doc "Generate declaration namespace files from local SQL templates"
+                    :task (apply clojure "-M" "-m" "bisql.cli" "gen-declarations" *command-line-args*)}
 
   jar {:doc "Build the jar via build.clj; accepts `bb jar 0.1.0` or raw build args"
        :task (build-task "jar")}

@@ -50,6 +50,12 @@ If you prefer `bb`, you can also add tasks like:
   :gen-declarations (clojure "-M:bisql" "gen-declarations")}}
 ```
 
+When passing CLI flags through `bb`, use `--` as a separator. For example:
+
+```sh
+bb gen-declarations -- --include-sql-template --suppress-unused-public-var
+```
+
 ## Getting Started
 
 ### 1. Create a Minimal Table
@@ -143,7 +149,7 @@ Depending on the tables present in the target database, this writes files such a
 - `src/sql/postgresql/public/orders/crud.sql`
 
 Generated CRUD SQL includes templates such as `insert`, `insert-many`, `get-by-*`,
-`update-by-*`, `delete-by-*`, `list`, and `list-by-*`.
+`upsert-by-*`, `count`, `count-by-*`, `update-by-*`, `delete-by-*`, `list`, and `list-by-*`.
 
 These generated queries are meant to cover the typical index-friendly SQL patterns
 you would usually write by hand. In practice, that often means you do not need to
@@ -154,14 +160,20 @@ For the sample tables above, this typically includes:
 
 - `users.crud/insert`
 - `users.crud/insert-many`
+- `users.crud/upsert-by-id`
+- `users.crud/upsert-by-email`
 - `users.crud/get-by-id`
 - `users.crud/get-by-email`
+- `users.crud/count`
+- `users.crud/count-by-status`
 - `users.crud/update-by-id`
 - `users.crud/update-by-email`
 - `users.crud/delete-by-id`
 - `users.crud/delete-by-email`
 - `orders.crud/insert`
 - `orders.crud/insert-many`
+- `orders.crud/upsert-by-id`
+- `orders.crud/count`
 - `orders.crud/list`
 - `orders.crud/get-by-id`
 - `orders.crud/update-by-id`
@@ -203,7 +215,9 @@ The precedence order is CLI options > environment variables > config file > defa
 files. It generates navigation-oriented `declare` forms with docstrings derived
 from the SQL templates, so IDEs and the REPL can jump to the intended namespace
 and query source without letting a shallow `(defquery)` populate undeclared
-namespaces.
+namespaces. By default those docstrings include the project-relative SQL file path
+and line number; pass `--include-sql-template` if you also want the SQL template
+body included.
 
 For more detail on the 2-way SQL syntax and rendering behavior, see:
 
@@ -219,9 +233,7 @@ For local setup, tasks, and dev workflow, see:
 
 - Add Malli integration.
 - Support databases beyond PostgreSQL.
-- Converts between kebab-case and camel-case. Column name, table name, schema name. Default is `:kebab-camel`.
-- Remove `<dialect>` such as `postgresql` from ns because ns is becoming too long.
+- Consider `for ... separating <separator>` syntax, plus inline `elseif/else => <fragment>` branches, to reduce trailing-separator trimming and keep control-flow templates flatter. See [docs/spec-draft-for-then-separator-proposal.md](docs/spec-draft-for-then-separator-proposal.md).
 - Compile analyzed SQL templates into reusable renderer functions for lower runtime overhead.
   - Restrict `bisql/default` to valid SQL value contexts if context-aware rendering becomes necessary.
   - Detect dangerous `nil` comparisons consistently in `WHERE` / `HAVING` clauses instead of letting expressions such as `= NULL`, `LIKE NULL`, or `IN (NULL)` silently behave unexpectedly. This likely needs stricter SQL context parsing, because `= NULL` is dangerous in `WHERE` / `HAVING` but can still be valid assignment syntax in `SET`.
-- Expand CRUD generation output and integration coverage further.

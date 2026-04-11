@@ -46,11 +46,11 @@
 (def write-crud-files!
   crud/write-crud-files!)
 
-(def render-crud-query-namespaces
-  crud/render-crud-query-namespaces)
+(def render-declaration-files
+  define/render-declaration-files)
 
-(def write-crud-query-namespaces!
-  crud/write-crud-query-namespaces!)
+(def write-declaration-files!
+  define/write-declaration-files!)
 
 (defmacro defrender
   "Defines one rendering function per query found under the current query namespace path,
@@ -126,4 +126,4 @@
      (case adapter
        :next-jdbc `(bisql.adapter.next-jdbc/defquery ~path ~load-options)
        (throw (ex-info "Unsupported adapter."
-                       {:adapter adapter})))))) 
+                       {:adapter adapter}))))))

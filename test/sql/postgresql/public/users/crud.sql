@@ -16,6 +16,7 @@ SELECT * FROM users
 WHERE email = /*$email*/'user@example.com'
 
 /*:name crud.get-by-id */
+/*:doc Find one user by id. */
 /*:cardinality :one */
 SELECT * FROM users
 WHERE id = /*$id*/1

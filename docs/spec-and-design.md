@@ -648,7 +648,7 @@ Example:
     (write-crud-files! {:output-root "src/sql"}))
 
 (-> (generate-crud datasource {:schema "public"})
-    (write-crud-query-namespaces! {:output-root "src/sql"}))
+    (write-declaration-files! {:output-root "src/sql"}))
 ```
 
 Each generated namespace file declares the generated query vars with docstrings
@@ -657,10 +657,9 @@ derived from the SQL templates:
 ```clojure
 (ns sql.postgresql.public.users.crud
 
-(declare
-  ^{:arglists '([datasource] [datasource template-params])
-    :doc "..."}
-  get-by-id)
+(declare ^{:arglists '([datasource] [datasource template-params])
+           :doc "..."}
+ get-by-id)
 ```
 
 The same generation flow can be exposed as a CLI:
@@ -676,7 +675,9 @@ The config file is an EDN map with `:db` and `:generate` sections. Generated tem
 `gen-declarations` is an optional helper. It is useful for projects that prefer explicit
 namespace files and want IDE/REPL navigation stubs with docstrings, without
 letting a shallow `(defquery)` define functions into namespaces that were not
-declared in source ahead of time.
+declared in source ahead of time. By default those docstrings include the
+project-relative SQL file path and line number; `--include-sql-template` can be
+used when the SQL template body should also be embedded.
 
 **Reasoning:**
 - Keeps the API surface small
@@ -713,7 +714,45 @@ CRUD functions are generated from database schema:
 
 ---
 
-## 7.3 Update
+## 7.3 Upsert
+
+Generated for:
+
+- primary key
+- unique constraints
+
+Uses PostgreSQL `INSERT ... ON CONFLICT ON CONSTRAINT ... DO UPDATE RETURNING *`.
+
+```clojure
+(upsert-by-id! db row)
+```
+
+Composite key example:
+
+```clojure
+(upsert-by-user-id-and-device-identifier! db row)
+```
+
+Generated upsert queries expect insertion values under `:inserting`. They may also
+accept `:non-updating-cols` to preserve selected columns from the conflicting row:
+
+```clojure
+(users.crud/upsert-by-id
+  datasource
+  {:inserting {:email "alice@example.com"
+               :display-name "Alice"
+               :status "active"
+               :created-at #inst "2026-04-12T00:00:00Z"}
+   :non-updating-cols {:created-at true}})
+```
+
+This renders `INSERT INTO ... AS t` and uses `t.<column>` instead of
+`EXCLUDED.<column>` for columns whose `:non-updating-cols.<column>` value is truthy,
+so the existing value is kept unchanged for those columns.
+
+---
+
+## 7.4 Update
 
 Generated only for:
 
@@ -735,7 +774,7 @@ Composite key example:
 
 ---
 
-## 7.4 Delete
+## 7.5 Delete
 
 Generated only for:
 
@@ -906,7 +945,6 @@ Rules:
 
 The following are intentionally excluded:
 
-- count functions (planned for future)
 - range queries (`>=`, `<=`)
 - OR conditions
 - JOIN queries
@@ -951,7 +989,6 @@ This system provides:
 
 # 10. Future Extensions
 
-- count functions
 - range-based queries
 - cursor-based pagination
 - richer metadata annotations

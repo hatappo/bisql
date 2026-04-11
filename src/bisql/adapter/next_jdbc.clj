@@ -1,7 +1,11 @@
 (ns bisql.adapter.next-jdbc
   (:require [bisql.define :as define]
             [bisql.query :as query]
-            [next.jdbc :as jdbc]))
+            [next.jdbc :as jdbc]
+            [next.jdbc.result-set :as rs]))
+
+(def ^:private result-set-options
+  {:builder-fn rs/as-unqualified-kebab-maps})
 
 (defn- rendered-query
   [queryish template-params]
@@ -42,8 +46,8 @@
          cardinality (result-cardinality queryish rendered)
          statement (into [sql] params)]
      (case cardinality
-       :one (jdbc/execute-one! datasource statement)
-       :many (jdbc/execute! datasource statement)
+       :one (jdbc/execute-one! datasource statement result-set-options)
+       :many (jdbc/execute! datasource statement result-set-options)
        (throw (ex-info "Unsupported result cardinality."
                        {:cardinality cardinality
                         :query queryish}))))))

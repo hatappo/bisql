@@ -34,8 +34,8 @@
     (is (fn? bisql/generate-crud))
     (is (fn? bisql/render-crud-files))
     (is (fn? bisql/write-crud-files!))
-    (is (fn? bisql/render-crud-query-namespaces))
-    (is (fn? bisql/write-crud-query-namespaces!))))
+    (is (fn? bisql/render-declaration-files))
+    (is (fn? bisql/write-declaration-files!))))
 
 (deftest analyze-template-extracts-metadata
   (let [result (bisql/analyze-template
@@ -74,7 +74,7 @@
   (let [metadata (query-var-meta 'sql.core 'example-declarations-valid)]
     (is (= "Loads a user by id." (:declared-doc metadata)))
     (is (str/includes? (:doc metadata) "Loads a user by id."))
-    (is (str/includes? (:doc metadata) "This var and docstring are generated from the following SQL template:"))
+    (is (str/includes? (:doc metadata) "This function is generated from SQL: "))
     (is (str/includes? (:doc metadata) "test/sql/example-declarations-valid.sql:1"))
     (is (str/includes? (:doc metadata) "SELECT * FROM users WHERE id = /*$id*/1"))
     (is (= :one (:cardinality metadata)))
@@ -84,6 +84,15 @@
     (is (= '([]
              [template-params])
            (:arglists metadata)))))
+
+(deftest navigation-stub-metadata-stringifies-symbol-doc
+  (let [metadata (define/navigation-stub-metadata
+                  {:meta {:doc 'foo}
+                   :project-relative-path "src/sql/example.sql"
+                   :source-line 1
+                   :sql-template "SELECT 1"}
+                  '([datasource] [datasource template-params]))]
+    (is (str/includes? (:doc metadata) "foo\nThis function is generated from SQL: src/sql/example.sql:1"))))
 
 (deftest defrender-defines-one-function-per-query
   (let [by-id ((query-fn 'sql.core 'find-user-by-id) {:id 42})
@@ -103,7 +112,7 @@
   (let [template (bisql/analyze-template
                   (bisql/load-query "postgresql/public/users/get-by-id.sql" {:base-path "sql"}))
         stub-metadata (define/navigation-stub-metadata template '([]
-                                                                 [template-params]))]
+                                                                  [template-params]))]
     (binding [*ns* (the-ns 'sql.postgresql.public.users.core)]
       (intern *ns* (with-meta 'get-by-id stub-metadata))
       (eval '(bisql.core/defrender "/sql/postgresql/public/users/get-by-id.sql")))
@@ -656,7 +665,7 @@
     (is (= (str/join "\n"
                      ["SELECT *"
                       "FROM users"
-                     "WHERE 1 = 1"])
+                      "WHERE 1 = 1"])
            (:sql result)))
     (is (= [] (:params result)))))
 
@@ -730,7 +739,7 @@
     (is (= (str/join "\n"
                      ["SELECT status, count(*)"
                       "FROM users"
-                     "GROUP BY status"])
+                      "GROUP BY status"])
            (:sql result)))
     (is (= [] (:params result)))))
 

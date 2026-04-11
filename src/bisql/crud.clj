@@ -1,8 +1,5 @@
 (ns bisql.crud
-  (:require [bisql.define :as define]
-            [bisql.query :as query]
-            [clojure.edn :as edn]
-            [clojure.java.io :as io]
+  (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs]))
@@ -31,8 +28,16 @@
     :else "'sample'"))
 
 (defn- bind-comment
-  [column]
-  (str "/*$" (kebab-name (:column_name column)) "*/" (sample-token column)))
+  ([column]
+   (bind-comment nil column))
+  ([parameter-prefix column]
+   (let [segments (cond-> []
+                    parameter-prefix (conj parameter-prefix)
+                    true (conj (kebab-name (:column_name column))))]
+     (str "/*$"
+          (str/join "." segments)
+          "*/"
+          (sample-token column)))))
 
 (defn- where-clause
   [columns]
@@ -65,6 +70,13 @@
                      (where-clause predicate-columns)
                      (order-by-clause order-columns)
                      (list-limit-clause)])))
+
+(defn- count-template
+  [table predicate-columns]
+  (str/join "\n"
+            (remove nil?
+                    [(str "SELECT COUNT(*) AS count FROM " table)
+                     (where-clause predicate-columns)])))
 
 (defn- get-template
   [table predicate-columns]
@@ -104,97 +116,18 @@
 (defn- named-template-entry
   [_schema table kind name columns sql-template & {:as extra}]
   (let [name (crud-query-name name)]
-  (merge
-   {:table table
-    :kind kind
-    :name name
-    :columns columns
-    :query-name name
-    :sql-template sql-template}
-   extra)))
+    (merge
+     {:table table
+      :kind kind
+      :name name
+      :columns columns
+      :query-name name
+      :sql-template sql-template}
+     extra)))
 
 (defn- table-file-path
   [dialect schema table]
   (str dialect "/" schema "/" table "/crud.sql"))
-
-(defn- normalize-path
-  [path]
-  (some-> path
-          (str/replace "\\" "/")
-          (str/replace #"^\./" "")
-          (str/replace #"/+$" "")))
-
-(defn- deps-classpath-roots
-  []
-  (let [deps-edn (-> "deps.edn" io/file slurp edn/read-string)]
-    (mapv normalize-path (:paths deps-edn))))
-
-(defn- relative-to-classpath-root
-  [output-root]
-  (let [normalized-root (normalize-path output-root)
-        matching-root (->> (deps-classpath-roots)
-                           (filter #(or (= normalized-root %)
-                                        (str/starts-with? normalized-root (str % "/"))))
-                           (sort-by count >)
-                           first)]
-    (when matching-root
-      (let [prefix (str matching-root "/")]
-        (if (= normalized-root matching-root)
-          ""
-          (subs normalized-root (count prefix)))))))
-
-(defn- emit-string-literal
-  [s]
-  (str "\""
-       (str/escape s {\\ "\\\\"
-                      \" "\\\""})
-       "\""))
-
-(declare emit-literal)
-
-(defn- emit-map-literal
-  [m indent]
-  (if (empty? m)
-    "{}"
-    (let [padding (apply str (repeat indent " "))
-          child-padding (apply str (repeat (+ indent 2) " "))
-          entries (->> m
-                       (sort-by (comp str key))
-                       (map (fn [[k v]]
-                              (str child-padding
-                                   (pr-str k)
-                                   " "
-                                   (emit-literal v (+ indent 2))))))]
-      (str "{\n"
-           (str/join "\n" entries)
-           "\n"
-           padding
-           "}"))))
-
-(defn- emit-literal
-  [value indent]
-  (cond
-    (string? value) (emit-string-literal value)
-    (map? value) (emit-map-literal value indent)
-    :else (pr-str value)))
-
-(defn- namespace-root-path
-  [output-root]
-  (or (not-empty (relative-to-classpath-root output-root))
-      (normalize-path (.getName (io/file output-root)))))
-
-(defn- query-namespace-segments
-  [root-path query-path]
-  (->> (str/split (str root-path "/" query-path) #"/")
-       (mapv kebab-name)))
-
-(defn- namespace-file-path
-  [query-path]
-  (str query-path ".clj"))
-
-(defn- namespace-symbol
-  [root-path query-path]
-  (symbol (str/join "." (query-namespace-segments root-path query-path))))
 
 (defn- query-block
   [{:keys [name meta sql-template]}]
@@ -241,16 +174,65 @@
 
 (def ^:private crud-kind-order
   {:insert 0
-   :get 1
-   :list 2
-   :update 3
-   :delete 4})
+   :upsert 1
+   :get 2
+   :count 3
+   :list 4
+   :update 5
+   :delete 6})
+
+(def ^:private crud-generation-issue-url
+  "https://github.com/hatappo/bisql/issues")
 
 (defn- sort-templates-for-file
   [templates]
   (sort-by (juxt #(get crud-kind-order (:kind %) Long/MAX_VALUE)
                  :name)
            templates))
+
+(defn- duplicate-template-warning
+  [table name duplicate-count]
+  (str "WARNING: Multiple generated CRUD templates resolved to the same name `"
+       name
+       "` for table `"
+       table
+       "`, and their SQL template or metadata differed. "
+       "The first template was kept from "
+       duplicate-count
+       " candidates. "
+       "This likely indicates a gap in bisql's CRUD generation logic. "
+       "Please report it here: "
+       crud-generation-issue-url))
+
+(defn- dedupe-templates-by-name
+  [templates]
+  (let [{:keys [ordered-names templates-by-name]}
+        (reduce (fn [{:keys [ordered-names templates-by-name] :as acc} template]
+                  (let [template-key [(:table template) (:name template)]]
+                    (if (contains? templates-by-name template-key)
+                      (update acc :templates-by-name update template-key conj template)
+                      {:ordered-names (conj ordered-names template-key)
+                       :templates-by-name (assoc templates-by-name template-key [template])})))
+                {:ordered-names []
+                 :templates-by-name {}}
+                templates)]
+    (reduce (fn [{:keys [templates warnings]} template-key]
+              (let [grouped (get templates-by-name template-key)
+                    kept-template (first grouped)
+                    distinct-shapes (->> grouped
+                                         (map (juxt :meta :sql-template))
+                                         distinct)]
+                {:templates (conj templates kept-template)
+                 :warnings (cond-> warnings
+                             (and (> (count grouped) 1)
+                                  (> (count distinct-shapes) 1))
+                             (conj (duplicate-template-warning
+                                    (:table kept-template)
+                                    (:name kept-template)
+                                    (count grouped))))}))
+            {:templates []
+             :warnings []}
+            ordered-names)))
 
 (defn render-crud-files
   "Groups generated CRUD templates into one SQL file per table."
@@ -264,7 +246,7 @@
                        (table-file-entry dialect
                                          schema
                                          table
-                                         (sort-templates-for-file table-templates)))))} )
+                                         (sort-templates-for-file table-templates)))))})
 
 (defn write-crud-files!
   "Writes generated CRUD templates as one SQL file per table."
@@ -276,67 +258,6 @@
         (io/make-parents output-file)
         (spit output-file content)))
     file-result))
-
-(defn render-crud-query-namespaces
-  "Renders one query namespace file per table.
-   Each generated namespace declares the generated query vars with docstrings."
-  ([crud-result]
-   (render-crud-query-namespaces crud-result {:output-root "src/sql"}))
-  ([{:keys [dialect schema templates]} {:keys [output-root suppress-unused-public-var?]
-                                        :or {output-root "src/sql"
-                                             suppress-unused-public-var? false}}]
-   (let [root-path (namespace-root-path output-root)
-         files (->> (render-crud-files {:dialect dialect
-                                        :schema schema
-                                        :templates templates})
-                    :files
-                    (mapv (fn [{:keys [table path templates]}]
-                            (let [query-path (subs path 0 (- (count path) 4))
-                                  ns-sym (namespace-symbol root-path query-path)
-                                  file-path (namespace-file-path query-path)
-                                  project-relative-path (str (normalize-path output-root) "/" path)
-                                  declare-forms (->> templates
-                                                     (mapv (fn [template]
-                                                             (let [{:keys [function-name namespace-suffix]}
-                                                                   (query/query-location (or (:query-name template)
-                                                                                             (:name template)))
-                                                                   template-data (assoc template
-                                                                                        :query-name (or (:query-name template)
-                                                                                                         (:name template))
-                                                                                        :function-name function-name
-                                                                                        :namespace-suffix namespace-suffix
-                                                                                        :project-relative-path project-relative-path)
-                                                                   metadata (define/navigation-stub-metadata template-data
-                                                                                                             '([datasource] [datasource template-params]))]
-                                                               (str (when suppress-unused-public-var?
-                                                                      "#_{:clojure-lsp/ignore [:clojure-lsp/unused-public-var]}\n")
-                                                                    "(declare\n"
-                                                                    "  ^" (emit-literal metadata 2) "\n"
-                                                                    "  " function-name ")\n"))))
-                                                     (str/join "\n"))
-                                  content (str "(ns " ns-sym ")\n\n"
-                                               declare-forms)]
-                              {:table table
-                               :path file-path
-                               :namespace ns-sym
-                               :query-path query-path
-                               :content content}))))]
-     {:dialect dialect
-      :schema schema
-      :files files})))
-
-(defn write-crud-query-namespaces!
-  "Writes generated query namespace files, one per table."
-  [crud-result {:keys [output-root suppress-unused-public-var?]
-                :or {output-root "src/sql"
-                     suppress-unused-public-var? false}}]
-  (let [rendered (render-crud-query-namespaces crud-result {:output-root output-root
-                                                            :suppress-unused-public-var? suppress-unused-public-var?})]
-    (doseq [{:keys [path content]} (:files rendered)]
-      (let [output-file (io/file output-root path)]
-        (io/make-parents output-file)
-        (spit output-file content)))
-    rendered))
 
 (defn- generate-get-templates
   [schema table columns-by-name unique-column-groups]
@@ -453,6 +374,76 @@
                              (insert-many-template table insert-columns)
                              :meta {:cardinality :many})])))
 
+(defn- upsert-template
+  [table constraint-name insert-columns update-columns]
+  (let [lhs-width (apply max 0 (map #(count (:column_name %)) update-columns))
+        if-width (apply max 0 (map #(count (str "/*%if non-updating-cols."
+                                                (kebab-name (:column_name %))
+                                                " */"))
+                                   update-columns))
+        target-width (apply max 0 (map #(count (str "t." (:column_name %))) update-columns))
+        excluded-width (apply max 0 (map #(count (str "EXCLUDED." (:column_name %))) update-columns))
+        pad-right (fn [s width]
+                    (str s (apply str (repeat (max 0 (- width (count s))) " "))))
+        update-lines (map-indexed
+                      (fn [idx column]
+                        (let [column-name (:column_name column)
+                              target-expr (str "t." column-name)
+                              excluded-expr (str "EXCLUDED." column-name)
+                              if-expr (str "/*%if non-updating-cols."
+                                           (kebab-name column-name)
+                                           " */")]
+                          (str (if (zero? idx) "SET " "  , ")
+                               (pad-right column-name lhs-width)
+                               " = "
+                               (pad-right if-expr if-width)
+                               " "
+                               (pad-right target-expr target-width)
+                               " /*%else*/ "
+                               (pad-right excluded-expr excluded-width)
+                               " /*%end*/")))
+                      update-columns)]
+    (str/join
+     "\n"
+     (concat
+      [(str "INSERT INTO " table " AS t (")
+       (str/join "\n" (map-indexed (fn [idx column]
+                                     (str "  "
+                                          (:column_name column)
+                                          (when (< idx (dec (count insert-columns))) ",")))
+                                   insert-columns))
+       ")"
+       "VALUES ("
+       (str/join "\n" (map-indexed (fn [idx column]
+                                     (str "  "
+                                          (bind-comment "inserting" column)
+                                          (when (< idx (dec (count insert-columns))) ",")))
+                                   insert-columns))
+       ")"
+       (str "ON CONFLICT ON CONSTRAINT " constraint-name)]
+      (if (seq update-columns)
+        (into ["DO UPDATE"] update-lines)
+        ["DO NOTHING"])
+      ["RETURNING *"]))))
+
+(defn- generate-upsert-templates
+  [schema table columns constraints]
+  (let [insert-columns (filterv insertable-column? columns)]
+    (->> constraints
+         (map (fn [{:keys [constraint_name column_names]}]
+                (let [predicate-column-names (set column_names)
+                      update-columns (filterv (partial updatable-column? predicate-column-names)
+                                              columns)]
+                  (named-template-entry schema
+                                        table
+                                        :upsert
+                                        (str "upsert-by-" (joined-name column_names))
+                                        column_names
+                                        (upsert-template table constraint_name insert-columns update-columns)
+                                        :meta {:cardinality :one}
+                                        :set-columns (mapv :column_name update-columns)))))
+         vec)))
+
 (defn- generate-delete-templates
   [schema table columns-by-name unique-column-groups]
   (mapv
@@ -483,6 +474,37 @@
                                   :set-columns (mapv :column_name set-columns))))))
        (remove nil?)
        vec))
+
+(defn- generate-count-templates
+  [schema table columns-by-name unique-column-groups index-column-groups]
+  (letfn [(count-template-candidates [column-groups strict-prefix?]
+            (->> column-groups
+                 (mapcat
+                  (fn [column-group]
+                    (let [column-group (normalize-column-names column-group)
+                          prefix-lengths (if strict-prefix?
+                                           (range 0 (count column-group))
+                                           (range 0 (inc (count column-group))))]
+                      (map (fn [prefix-length]
+                             (subvec column-group 0 prefix-length))
+                           prefix-lengths))))
+                 distinct))
+          (count-template-name [prefix-column-names]
+            (if (seq prefix-column-names)
+              (str "count-by-" (joined-name prefix-column-names))
+              "count"))]
+    (let [candidates (concat (count-template-candidates unique-column-groups true)
+                             (count-template-candidates index-column-groups false))]
+      (mapv (fn [prefix-column-names]
+              (let [predicate-columns (mapv columns-by-name prefix-column-names)]
+                (named-template-entry schema
+                                      table
+                                      :count
+                                      (count-template-name prefix-column-names)
+                                      prefix-column-names
+                                      (count-template table predicate-columns)
+                                      :meta {:cardinality :one})))
+            candidates))))
 
 (defn- generate-list-templates
   [schema table columns-by-name unique-column-groups index-column-groups]
@@ -595,6 +617,7 @@
        (vals)
        (mapv (fn [constraint-rows]
                {:table_name (:table_name (first constraint-rows))
+                :constraint_name (:constraint_name (first constraint-rows))
                 :constraint_type (:constraint_type (first constraint-rows))
                 :column_names (mapv :column_name constraint-rows)}))))
 
@@ -628,7 +651,7 @@
               schema "public"}} options
         {:keys [columns-by-table constraints-by-table indexes-by-table]}
         (load-schema-metadata datasource schema)
-        templates
+        generated-templates
         (->> columns-by-table
              (mapcat
               (fn [[table columns]]
@@ -637,18 +660,27 @@
                                                 (map :column_names))
                       index-column-groups (->> (get indexes-by-table table [])
                                                (mapv :column_names))]
-                  (concat
+                 (concat
                    (generate-insert-templates schema table columns)
-                   (generate-update-templates schema table columns columns-by-name unique-column-groups)
-                   (generate-delete-templates schema table columns-by-name unique-column-groups)
-                   (generate-get-templates schema table columns-by-name unique-column-groups)
-                   (generate-list-templates schema
+                  (generate-upsert-templates schema table columns (get constraints-by-table table []))
+                  (generate-update-templates schema table columns columns-by-name unique-column-groups)
+                  (generate-delete-templates schema table columns-by-name unique-column-groups)
+                  (generate-get-templates schema table columns-by-name unique-column-groups)
+                  (generate-count-templates schema
+                                            table
+                                            columns-by-name
+                                            unique-column-groups
+                                            index-column-groups)
+                  (generate-list-templates schema
                                             table
                                             columns-by-name
                                             unique-column-groups
                                             index-column-groups)))))
              (sort-by (juxt :table :kind :name))
-             vec)]
+             vec)
+        {:keys [templates warnings]}
+        (dedupe-templates-by-name generated-templates)]
     {:dialect dialect
      :schema schema
-     :templates templates}))
+     :templates templates
+     :warnings warnings}))

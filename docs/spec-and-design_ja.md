@@ -654,7 +654,7 @@ PostgreSQL のスキーマメタデータから、クエリ定義、SQL template
     (write-crud-files! {:output-root "src/sql"}))
 
 (-> (generate-crud datasource {:schema "public"})
-    (write-crud-query-namespaces! {:output-root "src/sql"}))
+    (write-declaration-files! {:output-root "src/sql"}))
 ```
 
 生成される namespace ファイルは、SQL テンプレートから導出した
@@ -663,10 +663,9 @@ docstring 付きの query var を `declare` する:
 ```clojure
 (ns sql.postgresql.public.users.crud
 
-(declare
-  ^{:arglists '([datasource] [datasource template-params])
-    :doc "..."}
-  get-by-id)
+(declare ^{:arglists '([datasource] [datasource template-params])
+           :doc "..."}
+ get-by-id)
 ```
 
 同じ生成フローは CLI としても提供できる:
@@ -683,6 +682,8 @@ clojure -M -m bisql.cli gen-declarations --config bisql.edn
 未宣言の namespace に関数が定義されるのを避けたいプロジェクトや、
 IDE / REPL で使うナビゲーション用の declare と docstring がほしい
 プロジェクトでは、明示的な namespace ファイルを生成する用途で使える。
+デフォルトでは docstring にはプロジェクトルートからの相対 SQL パスと行番号だけを含め、
+SQL テンプレート本文も含めたい場合は `--include-sql-template` を使う。
 
 **理由:**
 
@@ -720,7 +721,46 @@ CRUD 関数はデータベーススキーマから生成する:
 
 ---
 
-## 7.3 Update
+## 7.3 Upsert
+
+以下の場合に生成する:
+
+- 主キー
+- unique 制約
+
+PostgreSQL の `INSERT ... ON CONFLICT ON CONSTRAINT ... DO UPDATE RETURNING *` を使う。
+
+```clojure
+(upsert-by-id! db row)
+```
+
+複合キーの例:
+
+```clojure
+(upsert-by-user-id-and-device-identifier! db row)
+```
+
+生成される upsert query は、挿入時の値を `:inserting` に入れて受け取る。
+また、衝突時に既存行の値を維持したい列は `:non-updating-cols` で指定できる:
+
+```clojure
+(users.crud/upsert-by-id
+  datasource
+  {:inserting {:email "alice@example.com"
+               :display-name "Alice"
+               :status "active"
+               :created-at #inst "2026-04-12T00:00:00Z"}
+   :non-updating-cols {:created-at true}})
+```
+
+このとき生成 SQL は `INSERT INTO ... AS t` を使い、
+`:non-updating-cols.<column>` が truthy な列では
+`EXCLUDED.<column>` の代わりに `t.<column>` を使う。
+その結果、その列の値は変更されず既存値が維持される。
+
+---
+
+## 7.4 Update
 
 以下の場合にのみ生成する:
 
@@ -742,7 +782,7 @@ CRUD 関数はデータベーススキーマから生成する:
 
 ---
 
-## 7.4 Delete
+## 7.5 Delete
 
 以下の場合にのみ生成する:
 
@@ -917,7 +957,6 @@ list-by-customer-id-and-created-at
 
 以下は意図的に除外する:
 
-- count 関数（将来対応予定）
 - 範囲クエリ（`>=`, `<=`）
 - OR 条件
 - JOIN クエリ
@@ -964,7 +1003,6 @@ list-by-customer-id-and-created-at
 
 # 10. 今後の拡張
 
-- count 関数
 - 範囲ベースクエリ
 - カーソルベースページネーション
 - より豊かなメタデータ注釈
