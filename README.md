@@ -203,7 +203,9 @@ The precedence order is CLI options > environment variables > config file > defa
 files. It generates navigation-oriented `declare` forms with docstrings derived
 from the SQL templates, so IDEs and the REPL can jump to the intended namespace
 and query source without letting a shallow `(defquery)` populate undeclared
-namespaces.
+namespaces. By default those docstrings include the project-relative SQL file path
+and line number; pass `--include-sql-template` if you also want the SQL template
+body included.
 
 For more detail on the 2-way SQL syntax and rendering behavior, see:
 

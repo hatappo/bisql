@@ -74,7 +74,7 @@
   (let [metadata (query-var-meta 'sql.core 'example-declarations-valid)]
     (is (= "Loads a user by id." (:declared-doc metadata)))
     (is (str/includes? (:doc metadata) "Loads a user by id."))
-    (is (str/includes? (:doc metadata) "This var and docstring are generated from the following SQL template:"))
+    (is (str/includes? (:doc metadata) "Generated from SQL template:\n"))
     (is (str/includes? (:doc metadata) "test/sql/example-declarations-valid.sql:1"))
     (is (str/includes? (:doc metadata) "SELECT * FROM users WHERE id = /*$id*/1"))
     (is (= :one (:cardinality metadata)))
@@ -103,7 +103,7 @@
   (let [template (bisql/analyze-template
                   (bisql/load-query "postgresql/public/users/get-by-id.sql" {:base-path "sql"}))
         stub-metadata (define/navigation-stub-metadata template '([]
-                                                                 [template-params]))]
+                                                                  [template-params]))]
     (binding [*ns* (the-ns 'sql.postgresql.public.users.core)]
       (intern *ns* (with-meta 'get-by-id stub-metadata))
       (eval '(bisql.core/defrender "/sql/postgresql/public/users/get-by-id.sql")))
@@ -656,7 +656,7 @@
     (is (= (str/join "\n"
                      ["SELECT *"
                       "FROM users"
-                     "WHERE 1 = 1"])
+                      "WHERE 1 = 1"])
            (:sql result)))
     (is (= [] (:params result)))))
 
@@ -730,7 +730,7 @@
     (is (= (str/join "\n"
                      ["SELECT status, count(*)"
                       "FROM users"
-                     "GROUP BY status"])
+                      "GROUP BY status"])
            (:sql result)))
     (is (= [] (:params result)))))
 

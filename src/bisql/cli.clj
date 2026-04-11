@@ -50,6 +50,7 @@
     "  --password PASSWORD"
     "  --schema SCHEMA"
     "  --base-dir PATH"
+    "  --include-sql-template"
     "  --suppress-unused-public-var"
     "  --help"
     ""
@@ -86,6 +87,10 @@
           (= option "--suppress-unused-public-var")
           (recur rest-args
                  (assoc options (normalize-option-key option) true))
+
+          (= option "--include-sql-template")
+          (recur rest-args
+                 (assoc options :include-sql-template? true))
 
           (not (str/starts-with? option "--"))
           (throw (ex-info "Unknown command line argument."
@@ -219,7 +224,9 @@
         generated-crud (crud-result options)
         file-result (bisql/write-crud-query-namespaces! generated-crud {:output-root base-dir
                                                                         :suppress-unused-public-var?
-                                                                        (true? (:suppress-unused-public-var? options))})
+                                                                        (true? (:suppress-unused-public-var? options))
+                                                                        :include-sql-template?
+                                                                        (true? (:include-sql-template? options))})
         file-count (count (:files file-result))]
     (print-generated-files!
      (str "Wrote " file-count " declaration namespace files to " base-dir)

@@ -657,10 +657,9 @@ derived from the SQL templates:
 ```clojure
 (ns sql.postgresql.public.users.crud
 
-(declare
-  ^{:arglists '([datasource] [datasource template-params])
-    :doc "..."}
-  get-by-id)
+(declare ^{:arglists '([datasource] [datasource template-params])
+           :doc "..."}
+ get-by-id)
 ```
 
 The same generation flow can be exposed as a CLI:
@@ -676,7 +675,9 @@ The config file is an EDN map with `:db` and `:generate` sections. Generated tem
 `gen-declarations` is an optional helper. It is useful for projects that prefer explicit
 namespace files and want IDE/REPL navigation stubs with docstrings, without
 letting a shallow `(defquery)` define functions into namespaces that were not
-declared in source ahead of time.
+declared in source ahead of time. By default those docstrings include the
+project-relative SQL file path and line number; `--include-sql-template` can be
+used when the SQL template body should also be embedded.
 
 **Reasoning:**
 - Keeps the API surface small

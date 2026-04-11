@@ -126,4 +126,4 @@
      (case adapter
        :next-jdbc `(bisql.adapter.next-jdbc/defquery ~path ~load-options)
        (throw (ex-info "Unsupported adapter."
-                       {:adapter adapter})))))) 
+                       {:adapter adapter}))))))

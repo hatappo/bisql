@@ -287,13 +287,13 @@
           blocks))
        (catch clojure.lang.ExceptionInfo ex
          (let [{:keys [query-name]} (resolve-query-location query-name nil)]
-         (throw (ex-info (ex-message ex)
-                         (merge {:filename filename
-                                 :base-path base-path
-                                 :resource-path resource-path
-                                 :query-name query-name}
-                                (ex-data ex))
-                         ex))))))))
+           (throw (ex-info (ex-message ex)
+                           (merge {:filename filename
+                                   :base-path base-path
+                                   :resource-path resource-path
+                                   :query-name query-name}
+                                  (ex-data ex))
+                           ex))))))))
 
 (defn load-query
   "Loads a SQL file and returns a single query template.
@@ -868,12 +868,12 @@
     (let [sql (:sql node)]
       `(let [sql# ~sql
              sql# (if ~skip-leading-operator-sym
-                      (if-let [trimmed# (~(var consume-leading-conditional-operator-from-text) sql#)]
-                        trimmed#
-                        (do
-                          (~(var remove-trailing-clause-keyword) ~out-sym)
-                          sql#))
-                      sql#)]
+                    (if-let [trimmed# (~(var consume-leading-conditional-operator-from-text) sql#)]
+                      trimmed#
+                      (do
+                        (~(var remove-trailing-clause-keyword) ~out-sym)
+                        sql#))
+                    sql#)]
          (.append ~out-sym ^String sql#)
          false))
 
@@ -1036,9 +1036,9 @@
                                        (~(var trim-trailing-for-separator) fragment-sql#)
                                        fragment-sql#)
                        fragment-sql# (:sql (~(var normalize-fragment-for-context)
-                                           ~out-sym
-                                           {:sql fragment-sql#
-                                            :bind-params []}))]
+                                            ~out-sym
+                                            {:sql fragment-sql#
+                                             :bind-params []}))]
                    (.append ~out-sym ^String fragment-sql#)
                    (reduce conj! ~bind-params-sym (persistent! ~body-bind-params-sym)))))
              false)

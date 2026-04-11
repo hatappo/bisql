@@ -12,8 +12,8 @@
         write-args* (atom nil)
         output (with-out-str
                  (with-redefs [jdbc/get-datasource (fn [spec]
-                                                    (reset! datasource-spec* spec)
-                                                    ::datasource)
+                                                     (reset! datasource-spec* spec)
+                                                     ::datasource)
                                bisql/generate-crud (fn [datasource options]
                                                      (reset! crud-args* [datasource options])
                                                      {:dialect "postgresql"
@@ -54,8 +54,8 @@
         write-args* (atom nil)
         output (with-out-str
                  (with-redefs [jdbc/get-datasource (fn [spec]
-                                                    (reset! datasource-spec* spec)
-                                                    ::datasource)
+                                                     (reset! datasource-spec* spec)
+                                                     ::datasource)
                                bisql/generate-crud (fn [datasource options]
                                                      (reset! crud-args* [datasource options])
                                                      {:dialect "postgresql"
@@ -85,7 +85,8 @@
              :schema "public"
              :templates [{:table "users"}]}
             {:output-root "src/app/sql"
-             :suppress-unused-public-var? false}]
+             :suppress-unused-public-var? false
+             :include-sql-template? false}]
            @write-args*))
     (is (str/includes? output "Wrote 1 declaration namespace files"))
     (is (str/includes? output "src/app/sql/postgresql/public/users/crud.clj"))))
@@ -105,7 +106,27 @@
              :schema "public"
              :templates [{:table "users"}]}
             {:output-root "src/sql"
-             :suppress-unused-public-var? true}]
+             :suppress-unused-public-var? true
+             :include-sql-template? false}]
+           @write-args*))))
+
+(deftest cli-gen-declarations-supports-including-sql-template
+  (let [write-args* (atom nil)]
+    (with-redefs [jdbc/get-datasource (constantly ::datasource)
+                  bisql/generate-crud (fn [_ _]
+                                        {:dialect "postgresql"
+                                         :schema "public"
+                                         :templates [{:table "users"}]})
+                  bisql/write-crud-query-namespaces! (fn [crud-result options]
+                                                       (reset! write-args* [crud-result options])
+                                                       {:files []})]
+      (cli/-main "gen-declarations" "--include-sql-template"))
+    (is (= [{:dialect "postgresql"
+             :schema "public"
+             :templates [{:table "users"}]}
+            {:output-root "src/sql"
+             :suppress-unused-public-var? false
+             :include-sql-template? true}]
            @write-args*))))
 
 (deftest cli-options-fall-back-to-environment-variables
@@ -123,8 +144,8 @@
                                                   "BISQL_BASE_DIR" "src/env/sql"}
                                                  name))
                                jdbc/get-datasource (fn [spec]
-                                                    (reset! datasource-spec* spec)
-                                                    ::datasource)
+                                                     (reset! datasource-spec* spec)
+                                                     ::datasource)
                                bisql/generate-crud (fn [datasource options]
                                                      (reset! crud-args* [datasource options])
                                                      {:dialect "postgresql"
@@ -164,8 +185,8 @@
                                                   "BISQL_BASE_DIR" "src/env/sql"}
                                                  name))
                                jdbc/get-datasource (fn [spec]
-                                                    (reset! datasource-spec* spec)
-                                                    ::datasource)
+                                                     (reset! datasource-spec* spec)
+                                                     ::datasource)
                                bisql/generate-crud (fn [datasource options]
                                                      (reset! crud-args* [datasource options])
                                                      {:dialect "postgresql"

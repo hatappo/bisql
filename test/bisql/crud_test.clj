@@ -400,12 +400,25 @@
     (is (str/includes? (:content users-file) ":arglists (quote ([datasource] [datasource template-params]))"))
     (is (str/includes? (:content users-file) ":cardinality :one"))
     (is (str/includes? (:content users-file) ":bisql.define/navigation-stub true"))
-    (is (str/includes? (:content users-file) "This var and docstring are generated from the following SQL template:"))
+    (is (str/includes? (:content users-file) "Generated from SQL template:\nsrc/sql/postgresql/public/users/crud.sql:1"))
     (is (str/includes? (:content users-file) "src/sql/postgresql/public/users/crud.sql:1"))
-    (is (str/includes? (:content users-file) "SELECT * FROM users WHERE id = /*$id*/1"))
+    (is (not (str/includes? (:content users-file) "SELECT * FROM users WHERE id = /*$id*/1")))
     (is (not (str/includes? (:content users-file) ":sql-template")))
     (is (str/starts-with? (:content orders-file) "(ns sql.postgresql.public.orders.crud)\n\n"))
     (is (str/includes? (:content orders-file) "src/sql/postgresql/public/orders/crud.sql:1"))))
+
+(deftest render-crud-query-namespaces-can-include-sql-template-in-docstrings
+  (let [crud-result {:dialect "postgresql"
+                     :schema "public"
+                     :templates [{:table "users"
+                                  :name "crud.get-by-id"
+                                  :meta {:cardinality :one}
+                                  :sql-template "SELECT * FROM users WHERE id = /*$id*/1"}]}
+        rendered (crud/render-crud-query-namespaces crud-result {:output-root "src/sql"
+                                                                 :include-sql-template? true})
+        users-file (first (:files rendered))]
+    (is (str/includes? (:content users-file) "src/sql/postgresql/public/users/crud.sql:1"))
+    (is (str/includes? (:content users-file) "SELECT * FROM users WHERE id = /*$id*/1"))))
 
 (deftest write-crud-query-namespaces-writes-table-namespaces
   (let [temp-root (str (System/getProperty "java.io.tmpdir")
@@ -425,6 +438,8 @@
       (is (str/starts-with? content
                             "(ns sql.postgresql.public.users.crud)\n\n(declare ^{:arglists "))
       (is (str/includes? content
-                         "src/sql/postgresql/public/users/crud.sql:1")))
+                         "src/sql/postgresql/public/users/crud.sql:1"))
+      (is (not (str/includes? content
+                              "SELECT * FROM users WHERE id = /*$id*/1"))))
     (is (= "postgresql/public/users/crud.clj"
            (:path (first (:files result)))))))

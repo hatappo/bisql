@@ -6,18 +6,20 @@
 (def ^:private navigation-stub-key ::navigation-stub)
 
 (defn build-query-docstring
-  [{:keys [meta project-relative-path resource-path source-line sql-template]}]
+  ([template]
+   (build-query-docstring template {:include-sql-template? true}))
+  ([{:keys [meta project-relative-path resource-path source-line sql-template]}
+    {:keys [include-sql-template?]
+     :or {include-sql-template? true}}]
   (let [declared-doc (some-> (:doc meta) str/trim not-empty)
         source-ref (str (or project-relative-path resource-path) ":" (or source-line 1))
-        sections (cond-> []
-                   declared-doc
-                   (conj declared-doc)
-
-                   true
-                   (conj "This var and docstring are generated from the following SQL template:"
-                         source-ref
-                         sql-template))]
-    (str/join "\n\n" sections)))
+        source-section (str "Generated from SQL template:\n" source-ref)]
+    (str
+     (when declared-doc
+       (str declared-doc "\n\n"))
+     source-section
+     (when include-sql-template?
+       (str "\n\n" sql-template))))))
 
 (defn query-function-metadata
   [template]
@@ -37,7 +39,9 @@
                navigation-stub-key false))))
 
 (defn navigation-stub-metadata
-  [template arglists]
+  ([template arglists]
+   (navigation-stub-metadata template arglists {}))
+  ([template arglists options]
   (let [cardinality (some-> template :meta :cardinality)]
     (cond-> (array-map :arglists (list 'quote arglists))
       cardinality
@@ -45,7 +49,7 @@
 
       true
       (assoc navigation-stub-key true
-             :doc (build-query-docstring template)))))
+             :doc (build-query-docstring template options))))))
 
 (defn render-function-metadata
   [template]

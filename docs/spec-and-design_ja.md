@@ -663,10 +663,9 @@ docstring 付きの query var を `declare` する:
 ```clojure
 (ns sql.postgresql.public.users.crud
 
-(declare
-  ^{:arglists '([datasource] [datasource template-params])
-    :doc "..."}
-  get-by-id)
+(declare ^{:arglists '([datasource] [datasource template-params])
+           :doc "..."}
+ get-by-id)
 ```
 
 同じ生成フローは CLI としても提供できる:
@@ -683,6 +682,8 @@ clojure -M -m bisql.cli gen-declarations --config bisql.edn
 未宣言の namespace に関数が定義されるのを避けたいプロジェクトや、
 IDE / REPL で使うナビゲーション用の declare と docstring がほしい
 プロジェクトでは、明示的な namespace ファイルを生成する用途で使える。
+デフォルトでは docstring にはプロジェクトルートからの相対 SQL パスと行番号だけを含め、
+SQL テンプレート本文も含めたい場合は `--include-sql-template` を使う。
 
 **理由:**
 
