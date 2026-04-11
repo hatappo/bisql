@@ -50,6 +50,12 @@ If you prefer `bb`, you can also add tasks like:
   :gen-declarations (clojure "-M:bisql" "gen-declarations")}}
 ```
 
+When passing CLI flags through `bb`, use `--` as a separator. For example:
+
+```sh
+bb gen-declarations -- --include-sql-template --suppress-unused-public-var
+```
+
 ## Getting Started
 
 ### 1. Create a Minimal Table
@@ -222,7 +228,6 @@ For local setup, tasks, and dev workflow, see:
 - Add Malli integration.
 - Support databases beyond PostgreSQL.
 - Converts between kebab-case and camel-case. Column name, table name, schema name. Default is `:kebab-camel`.
-- Remove `<dialect>` such as `postgresql` from ns because ns is becoming too long.
 - Compile analyzed SQL templates into reusable renderer functions for lower runtime overhead.
   - Restrict `bisql/default` to valid SQL value contexts if context-aware rendering becomes necessary.
   - Detect dangerous `nil` comparisons consistently in `WHERE` / `HAVING` clauses instead of letting expressions such as `= NULL`, `LIKE NULL`, or `IN (NULL)` silently behave unexpectedly. This likely needs stricter SQL context parsing, because `= NULL` is dangerous in `WHERE` / `HAVING` but can still be valid assignment syntax in `SET`.
