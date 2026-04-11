@@ -4,4 +4,7 @@
 
 (shell {:inherit true}
        "sh" "-lc"
-       "docker exec -i bisql-postgres psql -U bisql -d bisql_dev -f /dev/stdin < docker/postgres/init/001_sample_schema.sql")
+       "{
+          printf 'SET client_min_messages TO warning;\\n';
+          cat docker/postgres/init/001_sample_schema.sql;
+        } | docker exec -i bisql-postgres psql -q -v ON_ERROR_STOP=1 -U bisql -d bisql_dev -f /dev/stdin")
