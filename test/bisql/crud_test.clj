@@ -1,5 +1,6 @@
 (ns bisql.crud-test
   (:require [bisql.crud :as crud]
+            [bisql.define :as define]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]))
@@ -362,84 +363,43 @@
     (is (= "postgresql/public/users/crud.sql"
            (:path (first (:files result)))))))
 
-(deftest render-crud-query-namespaces-groups-tables-into-namespaces
-  (let [crud-result {:dialect "postgresql"
-                     :schema "public"
-                     :templates [{:table "users"
-                                  :name "crud.get-by-id"
-                                  :meta {:cardinality :one}
-                                  :sql-template "SELECT * FROM users WHERE id = /*$id*/1"}
-                                 {:table "users"
-                                  :name "crud.insert"
-                                  :meta {:cardinality :one}
-                                  :sql-template "INSERT INTO users (...) VALUES (...) RETURNING *"}
-                                 {:table "users"
-                                  :name "crud.insert-many"
-                                  :meta {:cardinality :many}
-                                  :sql-template "INSERT INTO users (...) VALUES /*%for row in rows */(...),/*%end */ RETURNING *"}
-                                 {:table "orders"
-                                  :name "crud.get-by-id"
-                                  :meta {:cardinality :one}
-                                  :sql-template "SELECT * FROM orders WHERE id = /*$id*/1"}]}
-        rendered (crud/render-crud-query-namespaces crud-result {:output-root "src/sql"})
+(deftest render-declaration-files-groups-queries-into-namespaces
+  (let [rendered (define/render-declaration-files {:output-root "test/sql/postgresql/public"})
         files (:files rendered)
-        orders-file (first files)
-        users-file (second files)]
-    (is (= "postgresql" (:dialect rendered)))
-    (is (= "public" (:schema rendered)))
-    (is (= ["postgresql/public/orders/crud.clj"
-            "postgresql/public/users/crud.clj"]
-           (mapv :path files)))
+        users-file (some #(when (= "users/crud.clj" (:path %)) %) files)]
+    (is (some #(= "users/crud.clj" (:path %)) files))
     (is (= 'sql.postgresql.public.users.crud
            (:namespace users-file)))
-    (is (= "postgresql/public/users/crud"
-           (:query-path users-file)))
     (is (str/starts-with? (:content users-file) "(ns sql.postgresql.public.users.crud)\n\n"))
     (is (str/includes? (:content users-file) "(declare ^{:arglists "))
     (is (str/includes? (:content users-file) "get-by-id"))
     (is (str/includes? (:content users-file) ":arglists (quote ([datasource] [datasource template-params]))"))
     (is (str/includes? (:content users-file) ":cardinality :one"))
     (is (str/includes? (:content users-file) ":bisql.define/navigation-stub true"))
-    (is (str/includes? (:content users-file) "Generated from SQL template:\nsrc/sql/postgresql/public/users/crud.sql:1"))
-    (is (str/includes? (:content users-file) "src/sql/postgresql/public/users/crud.sql:1"))
+    (is (str/includes? (:content users-file) "Find one user by id.\nThis function is generated from SQL: "))
+    (is (str/includes? (:content users-file) "This function is generated from SQL: test/sql/postgresql/public/users/crud.sql:1"))
+    (is (str/includes? (:content users-file) "test/sql/postgresql/public/users/crud.sql:1"))
     (is (not (str/includes? (:content users-file) "SELECT * FROM users WHERE id = /*$id*/1")))
-    (is (not (str/includes? (:content users-file) ":sql-template")))
-    (is (str/starts-with? (:content orders-file) "(ns sql.postgresql.public.orders.crud)\n\n"))
-    (is (str/includes? (:content orders-file) "src/sql/postgresql/public/orders/crud.sql:1"))))
+    (is (not (str/includes? (:content users-file) ":sql-template")))))
 
-(deftest render-crud-query-namespaces-can-include-sql-template-in-docstrings
-  (let [crud-result {:dialect "postgresql"
-                     :schema "public"
-                     :templates [{:table "users"
-                                  :name "crud.get-by-id"
-                                  :meta {:cardinality :one}
-                                  :sql-template "SELECT * FROM users WHERE id = /*$id*/1"}]}
-        rendered (crud/render-crud-query-namespaces crud-result {:output-root "src/sql"
-                                                                 :include-sql-template? true})
-        users-file (first (:files rendered))]
-    (is (str/includes? (:content users-file) "src/sql/postgresql/public/users/crud.sql:1"))
-    (is (str/includes? (:content users-file) "SELECT * FROM users WHERE id = /*$id*/1"))))
+(deftest render-declaration-files-can-include-sql-template-in-docstrings
+  (let [rendered (define/render-declaration-files {:output-root "test/sql/postgresql/public"
+                                                   :include-sql-template? true})
+        users-file (some #(when (= "users/crud.clj" (:path %)) %) (:files rendered))]
+    (is (str/includes? (:content users-file) "test/sql/postgresql/public/users/crud.sql:1"))
+    (is (str/includes? (:content users-file) "SELECT * FROM users\nWHERE id = /*$id*/1"))))
 
-(deftest write-crud-query-namespaces-writes-table-namespaces
+(deftest write-declaration-files-writes-generated-files
   (let [temp-root (str (System/getProperty "java.io.tmpdir")
-                       "/bisql-crud-ns-test-"
+                       "/bisql-declarations-test-"
                        (System/nanoTime))
-        crud-result {:dialect "postgresql"
-                     :schema "public"
-                     :templates [{:table "users"
-                                  :name "crud.get-by-id"
-                                  :meta {:cardinality :one}
-                                  :sql-template "SELECT * FROM users WHERE id = /*$id*/1"}]}
-        output-root (str temp-root "/src/sql")
-        result (crud/write-crud-query-namespaces! crud-result {:output-root output-root})
-        output-file (io/file output-root "postgresql/public/users/crud.clj")]
+        result (with-redefs [define/render-declaration-files (fn [_]
+                                                               {:files [{:path "postgresql/public/users/crud.clj"
+                                                                         :content "(ns sql.postgresql.public.users.crud)\n"}]})]
+                 (define/write-declaration-files! {:output-root temp-root}))
+        output-file (io/file temp-root "postgresql/public/users/crud.clj")]
     (is (.exists output-file))
-    (let [content (slurp output-file)]
-      (is (str/starts-with? content
-                            "(ns sql.postgresql.public.users.crud)\n\n(declare ^{:arglists "))
-      (is (str/includes? content
-                         "src/sql/postgresql/public/users/crud.sql:1"))
-      (is (not (str/includes? content
-                              "SELECT * FROM users WHERE id = /*$id*/1"))))
+    (is (= "(ns sql.postgresql.public.users.crud)\n"
+           (slurp output-file)))
     (is (= "postgresql/public/users/crud.clj"
            (:path (first (:files result)))))))

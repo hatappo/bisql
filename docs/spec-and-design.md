@@ -648,7 +648,7 @@ Example:
     (write-crud-files! {:output-root "src/sql"}))
 
 (-> (generate-crud datasource {:schema "public"})
-    (write-crud-query-namespaces! {:output-root "src/sql"}))
+    (write-declaration-files! {:output-root "src/sql"}))
 ```
 
 Each generated namespace file declares the generated query vars with docstrings

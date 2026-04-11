@@ -11,12 +11,12 @@
   ([{:keys [meta project-relative-path resource-path source-line sql-template]}
     {:keys [include-sql-template?]
      :or {include-sql-template? true}}]
-  (let [declared-doc (some-> (:doc meta) str/trim not-empty)
+  (let [declared-doc (some-> (:doc meta) str str/trim not-empty)
         source-ref (str (or project-relative-path resource-path) ":" (or source-line 1))
-        source-section (str "Generated from SQL template:\n" source-ref)]
+        source-section (str "This function is generated from SQL: " source-ref)]
     (str
      (when declared-doc
-       (str declared-doc "\n\n"))
+       (str declared-doc "\n"))
      source-section
      (when include-sql-template?
        (str "\n\n" sql-template))))))
@@ -120,6 +120,41 @@
       (str/replace "." "/")
       (str/replace "-" "_")))
 
+(defn- normalize-path
+  [path]
+  (some-> path
+          (str/replace "\\" "/")
+          (str/replace #"^\./" "")
+          (str/replace #"/+$" "")))
+
+(defn- deps-classpath-roots
+  []
+  (let [deps-edn (-> "deps.edn" io/file slurp read-string)]
+    (mapv normalize-path (:paths deps-edn))))
+
+(defn- relative-to-classpath-root
+  [path]
+  (let [normalized-path (normalize-path path)
+        matching-root (->> (deps-classpath-roots)
+                           (filter #(or (= normalized-path %)
+                                        (str/starts-with? normalized-path (str % "/"))))
+                           (sort-by count >)
+                           first)]
+    (when matching-root
+      (let [prefix (str matching-root "/")]
+        (if (= normalized-path matching-root)
+          ""
+          (subs normalized-path (count prefix)))))))
+
+(defn- path-from-sql-segment
+  [path]
+  (let [segments (str/split (normalize-path path) #"/")
+        sql-index (first (keep-indexed (fn [idx segment]
+                                         (when (= segment "sql") idx))
+                                       segments))]
+    (when sql-index
+      (str/join "/" (subvec (vec segments) sql-index)))))
+
 (defn- resolve-target-path
   [ns-sym path]
   (let [current-path (namespace-path ns-sym)]
@@ -128,6 +163,15 @@
       (str/blank? path) current-path
       (str/starts-with? path "/") (subs path 1)
       :else (str current-path "/" path))))
+
+(defn- target-namespace-file-path
+  [root-ns-sym target-ns]
+  (let [root-prefix (str root-ns-sym)
+        target (str target-ns)
+        relative-ns (if (= target root-prefix)
+                      ""
+                      (subs target (inc (count root-prefix))))]
+    (str (namespace-path relative-ns) ".clj")))
 
 (defn- resource-file
   [resource-path]
@@ -186,3 +230,133 @@
                   :metadata metadata
                   :resource-path (:resource-path analyzed-template)
                   :query-name (:query-name analyzed-template)})))))
+
+(defn declaration-entries
+  [templates]
+  (->> templates
+       (mapv (fn [template]
+               (let [analyzed-template (query/analyze-template template)
+                     target-ns (target-namespace-symbol (:resource-path analyzed-template)
+                                                        (:namespace-suffix analyzed-template))
+                     var-name (var-symbol-from-function-name (:function-name analyzed-template))]
+                 {:template analyzed-template
+                  :target-ns target-ns
+                  :var-name var-name
+                  :resource-path (:resource-path analyzed-template)
+                  :query-name (:query-name analyzed-template)})))))
+
+(defn- sql-relative-paths-under
+  [root-dir]
+  (let [root-file (io/file root-dir)]
+    (when-not (.exists root-file)
+      (throw (ex-info "SQL base directory not found."
+                      {:output-root root-dir})))
+    (->> (file-seq root-file)
+         (filter #(.isFile %))
+         (map (fn [file]
+                (-> (.toPath root-file)
+                    (.relativize (.toPath file))
+                    str
+                    (str/replace #"\\+" "/"))))
+         (filter sql-filename?)
+         sort
+         vec)))
+
+(declare emit-literal)
+
+(defn- emit-string-literal
+  [s]
+  (str "\""
+       (str/escape s {\\ "\\\\"
+                      \" "\\\""})
+       "\""))
+
+(defn- emit-map-literal
+  [m indent]
+  (if (empty? m)
+    "{}"
+    (let [child-padding (apply str (repeat (+ indent 2) " "))
+          [[first-k first-v] & rest-entries] (seq m)
+          first-entry (str "{"
+                           (pr-str first-k)
+                           " "
+                           (emit-literal first-v (+ indent 1)))
+          remaining (map (fn [[k v]]
+                           (str child-padding
+                                (pr-str k)
+                                " "
+                                (emit-literal v (+ indent 1))))
+                         rest-entries)
+          entries (cons first-entry remaining)]
+      (str (str/join "\n" entries)
+           "}"))))
+
+(defn- emit-metadata-literal
+  [m indent]
+  (if (empty? m)
+    "^{}"
+    (str "^" (emit-map-literal m indent))))
+
+(defn- emit-literal
+  [value indent]
+  (cond
+    (string? value) (emit-string-literal value)
+    (map? value) (emit-map-literal value indent)
+    :else (pr-str value)))
+
+(defn render-declaration-files
+  ([]
+   (render-declaration-files {}))
+  ([{:keys [output-root suppress-unused-public-var? include-sql-template?]
+     :or {output-root "src/sql"
+          suppress-unused-public-var? false
+          include-sql-template? false}}]
+   (let [root-path (or (not-empty (relative-to-classpath-root output-root))
+                       (not-empty (path-from-sql-segment output-root))
+                       (normalize-path (.getName (io/file output-root))))
+         root-ns-sym (symbol (str/replace root-path "/" "."))
+         templates (->> (sql-relative-paths-under output-root)
+                        (mapcat (fn [relative-path]
+                                  (->> (query/load-queries-from-file relative-path
+                                                                     (io/file output-root relative-path)
+                                                                     {:base-path root-path})
+                                       vals)))
+                        (sort-by (juxt :resource-path :query-name))
+                        vec)
+         files (->> (declaration-entries templates)
+                    (group-by :target-ns)
+                    (sort-by (comp str key))
+                    (mapv (fn [[target-ns entries]]
+                            (let [content (str "(ns " target-ns ")\n\n"
+                                               (->> entries
+                                                    (sort-by (juxt :resource-path :query-name))
+                                                    (mapv (fn [{:keys [template var-name]}]
+                                                            (let [metadata (navigation-stub-metadata template
+                                                                                                     '([datasource] [datasource template-params])
+                                                                                                     {:include-sql-template? include-sql-template?})]
+                                                              (str (when suppress-unused-public-var?
+                                                                     "#_{:clojure-lsp/ignore [:clojure-lsp/unused-public-var]}\n")
+                                                                   "(declare "
+                                                                   (emit-metadata-literal metadata 9) "\n"
+                                                                   " " var-name ")\n"))))
+                                                    (str/join "\n")))]
+                              {:path (target-namespace-file-path root-ns-sym target-ns)
+                               :namespace target-ns
+                               :content content}))))]
+     {:files files})))
+
+(defn write-declaration-files!
+  ([]
+   (write-declaration-files! {}))
+  ([{:keys [output-root suppress-unused-public-var? include-sql-template?]
+     :or {output-root "src/sql"
+          suppress-unused-public-var? false
+          include-sql-template? false}}]
+   (let [rendered (render-declaration-files {:output-root output-root
+                                             :suppress-unused-public-var? suppress-unused-public-var?
+                                             :include-sql-template? include-sql-template?})]
+     (doseq [{:keys [path content]} (:files rendered)]
+       (let [output-file (io/file output-root path)]
+         (io/make-parents output-file)
+         (spit output-file content)))
+     rendered)))

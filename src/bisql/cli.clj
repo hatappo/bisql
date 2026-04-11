@@ -79,32 +79,36 @@
          options {}]
     (if (empty? remaining)
       options
-      (let [[option value & rest-args] remaining]
+      (let [option (first remaining)
+            more (rest remaining)]
         (cond
           (= option "--help")
           (assoc options :help? true)
 
+          (= option "--")
+          (recur more options)
+
           (= option "--suppress-unused-public-var")
-          (recur rest-args
+          (recur more
                  (assoc options (normalize-option-key option) true))
 
           (= option "--include-sql-template")
-          (recur rest-args
+          (recur more
                  (assoc options :include-sql-template? true))
 
           (not (str/starts-with? option "--"))
           (throw (ex-info "Unknown command line argument."
                           {:argument option}))
 
-          (nil? value)
+          (empty? more)
           (throw (ex-info "Missing value for command line option."
                           {:option option}))
 
           :else
-          (recur rest-args
+          (recur (rest more)
                  (assoc options
                         (normalize-option-key option)
-                        value)))))))
+                        (first more))))))))
 
 (defn- env-options
   []
@@ -221,12 +225,11 @@
 (defn- run-gen-declarations!
   [options]
   (let [base-dir (or (:base-dir options) default-base-dir)
-        generated-crud (crud-result options)
-        file-result (bisql/write-crud-query-namespaces! generated-crud {:output-root base-dir
-                                                                        :suppress-unused-public-var?
-                                                                        (true? (:suppress-unused-public-var? options))
-                                                                        :include-sql-template?
-                                                                        (true? (:include-sql-template? options))})
+        file-result (bisql/write-declaration-files! {:output-root base-dir
+                                                     :suppress-unused-public-var?
+                                                     (true? (:suppress-unused-public-var? options))
+                                                     :include-sql-template?
+                                                     (true? (:include-sql-template? options))})
         file-count (count (:files file-result))]
     (print-generated-files!
      (str "Wrote " file-count " declaration namespace files to " base-dir)

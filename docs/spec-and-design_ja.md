@@ -654,7 +654,7 @@ PostgreSQL のスキーマメタデータから、クエリ定義、SQL template
     (write-crud-files! {:output-root "src/sql"}))
 
 (-> (generate-crud datasource {:schema "public"})
-    (write-crud-query-namespaces! {:output-root "src/sql"}))
+    (write-declaration-files! {:output-root "src/sql"}))
 ```
 
 生成される namespace ファイルは、SQL テンプレートから導出した
