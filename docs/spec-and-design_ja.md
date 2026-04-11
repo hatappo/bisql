@@ -229,8 +229,6 @@ bind 値:
 WHERE 1 = 1
 /*%if name */
   AND name = /*$name*/'foo'
-/*%elseif status */
-  AND status = /*$status*/'active'
 /*%else */
   AND status = 'inactive'
 /*%end */
@@ -239,7 +237,7 @@ WHERE 1 = 1
 ### サポートする形式
 
 - `x`
-- `if / elseif / else / end`
+- `if / else / end`
 
 ### 評価ルール
 
@@ -252,7 +250,7 @@ WHERE 1 = 1
 
 ### 初期実装での制約
 
-- `if` と `elseif` でサポートするのは単一の変数名だけ
+- `if` でサポートするのは単一の変数名だけ
 - 式構文は初期実装では意図的にサポートしない
 - `else` は式を取らない
 

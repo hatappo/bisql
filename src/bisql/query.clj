@@ -710,7 +710,7 @@
         (throw (ex-info "Unterminated conditional block."
                         {:sql sql
                          :start if-start}))
-        (let [{:keys [directive arg1 start end]} (parse-control-directive matcher)]
+        (let [{:keys [directive start end]} (parse-control-directive matcher)]
           (cond
             (> depth 1)
             (recur end
@@ -732,17 +732,9 @@
                    else-seen?)
 
             (= directive "elseif")
-            (do
-              (when else-seen?
-                (throw (ex-info "Conditional block cannot contain elseif after else."
-                                {:sql sql
-                                 :start start})))
-              (recur end
-                     depth
-                     (append-conditional-branch branches current-expr branch-start start sql)
-                     arg1
-                     end
-                     else-seen?))
+            (throw (ex-info "Elseif is not supported. Use nested if blocks, raw variables, or collection parameters instead."
+                            {:sql sql
+                             :start start}))
 
             (= directive "else")
             (do

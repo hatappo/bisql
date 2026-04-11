@@ -829,29 +829,6 @@
            (:sql result)))
     (is (= [] (:params result)))))
 
-(deftest render-query-supports-elseif-branch
-  (let [result (bisql/render-query
-                {:sql-template (str/join "\n"
-                                         ["SELECT *"
-                                          "FROM users"
-                                          "WHERE"
-                                          "/*%if active */"
-                                          "  active = true"
-                                          "/*%elseif pending */"
-                                          "  status = 'pending'"
-                                          "/*%else */"
-                                          "  status = 'inactive'"
-                                          "/*%end */"])}
-                {:active false
-                 :pending true})]
-    (is (= (str/join "\n"
-                     ["SELECT *"
-                      "FROM users"
-                      "WHERE"
-                      "  status = 'pending'"])
-           (:sql result)))
-    (is (= [] (:params result)))))
-
 (deftest render-query-supports-else-branch-with-operator-trimming
   (let [result (bisql/render-query
                 {:sql-template (str/join "\n"
@@ -860,12 +837,9 @@
                                           "WHERE"
                                           "/*%if active */"
                                           "  active = true"
-                                          "/*%elseif pending */"
-                                          "  pending = true"
                                           "/*%end */"
                                           "AND status = /*$status*/'active'"])}
                 {:active false
-                 :pending false
                  :status "active"})]
     (is (= (str/join "\n"
                      ["SELECT *"
@@ -875,7 +849,7 @@
            (:sql result)))
     (is (= ["active"] (:params result)))))
 
-(deftest render-query-rejects-elseif-after-else
+(deftest render-query-rejects-elseif
   (let [error (try
                 (bisql/render-query
                  {:sql-template (str/join "\n"
@@ -883,8 +857,6 @@
                                            "FROM users"
                                            "/*%if active */"
                                            "  active = true"
-                                           "/*%else */"
-                                           "  active = false"
                                            "/*%elseif pending */"
                                            "  pending = true"
                                            "/*%end */"])}
@@ -893,7 +865,7 @@
                 nil
                 (catch clojure.lang.ExceptionInfo ex
                   ex))]
-    (is (= "Conditional block cannot contain elseif after else."
+    (is (= "Elseif is not supported. Use nested if blocks, raw variables, or collection parameters instead."
            (ex-message error)))))
 
 (deftest render-query-rejects-multiple-else-blocks

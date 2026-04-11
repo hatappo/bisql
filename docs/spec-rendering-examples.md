@@ -249,11 +249,11 @@ GROUP BY status
 ```
 
 
-### Control flow 5. elseif and else 
+### Control flow 5. else 
 
 1. Input Form:
 ```clj
-(render-query (load-query "demo-if-elseif-else.sql") {:active false, :pending true})
+(render-query (load-query "demo-if-else.sql") {:active false})
 ```
 
 2. Input SQL:
@@ -263,8 +263,6 @@ FROM users
 WHERE
 /*%if active */
   active = true
-/*%elseif pending */
-  status = 'pending'
 /*%else */
   status = 'inactive'
 /*%end */
@@ -275,15 +273,15 @@ WHERE
 SELECT *
 FROM users
 WHERE
-  status = 'pending'
+  status = 'inactive'
 ```
 
 4. Output Data:
 ```clj
-{:query-name "demo-if-elseif-else",
+{:query-name "demo-if-else",
  :base-path "sql",
- :resource-path "sql/demo-if-elseif-else.sql",
- :sql "SELECT *\nFROM users\nWHERE\n  status = 'pending'",
+ :resource-path "sql/demo-if-else.sql",
+ :sql "SELECT *\nFROM users\nWHERE\n  status = 'inactive'",
  :params [],
  :meta {}}
 ```

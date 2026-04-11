@@ -222,8 +222,6 @@ binds:
 WHERE 1 = 1
 /*%if name */
   AND name = /*$name*/'foo'
-/*%elseif status */
-  AND status = /*$status*/'active'
 /*%else */
   AND status = 'inactive'
 /*%end */
@@ -232,7 +230,7 @@ WHERE 1 = 1
 ### Supported Form
 
 - `x`
-- `if / elseif / else / end`
+- `if / else / end`
 
 ### Evaluation Rules
 
@@ -245,7 +243,7 @@ WHERE 1 = 1
 
 ### Initial Implementation Constraint
 
-- Only a single variable name is supported in `if` and `elseif`
+- Only a single variable name is supported in `if`
 - Expression syntax is intentionally not supported in the initial implementation
 - `else` does not take an expression
 

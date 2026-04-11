@@ -233,7 +233,6 @@ For local setup, tasks, and dev workflow, see:
 
 - Add Malli integration.
 - Support databases beyond PostgreSQL.
-- Consider inline `elseif/else => <fragment>` branches to keep control-flow templates flatter. See [docs/spec-draft-for-then-separator-proposal.md](docs/spec-draft-for-then-separator-proposal.md).
 - Compile analyzed SQL templates into reusable renderer functions for lower runtime overhead.
   - Simplify emitted renderer forms further, especially around branch and loop body handling.
   - Reduce helper calls in emitted code where fragment normalization is still delegated.
