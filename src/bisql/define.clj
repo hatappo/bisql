@@ -38,10 +38,14 @@
 
 (defn navigation-stub-metadata
   [template arglists]
-  {:arglists (list 'quote arglists)
-   :cardinality (some-> template :meta :cardinality)
-   :doc (build-query-docstring template)
-   navigation-stub-key true})
+  (let [cardinality (some-> template :meta :cardinality)]
+    (cond-> (array-map :arglists (list 'quote arglists))
+      cardinality
+      (assoc :cardinality cardinality)
+
+      true
+      (assoc navigation-stub-key true
+             :doc (build-query-docstring template)))))
 
 (defn render-function-metadata
   [template]

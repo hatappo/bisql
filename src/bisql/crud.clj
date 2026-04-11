@@ -104,14 +104,14 @@
 (defn- named-template-entry
   [_schema table kind name columns sql-template & {:as extra}]
   (let [name (crud-query-name name)]
-  (merge
-   {:table table
-    :kind kind
-    :name name
-    :columns columns
-    :query-name name
-    :sql-template sql-template}
-   extra)))
+    (merge
+     {:table table
+      :kind kind
+      :name name
+      :columns columns
+      :query-name name
+      :sql-template sql-template}
+     extra)))
 
 (defn- table-file-path
   [dialect schema table]
@@ -158,17 +158,36 @@
     "{}"
     (let [padding (apply str (repeat indent " "))
           child-padding (apply str (repeat (+ indent 2) " "))
-          entries (->> m
-                       (sort-by (comp str key))
-                       (map (fn [[k v]]
-                              (str child-padding
-                                   (pr-str k)
-                                   " "
-                                   (emit-literal v (+ indent 2))))))]
+          entries (map (fn [[k v]]
+                         (str child-padding
+                              (pr-str k)
+                              " "
+                              (emit-literal v (+ indent 2))))
+                       m)]
       (str "{\n"
            (str/join "\n" entries)
            "\n"
            padding
+           "}"))))
+
+(defn- emit-metadata-literal
+  [m indent]
+  (if (empty? m)
+    "^{}"
+    (let [child-padding (apply str (repeat (+ indent 2) " "))
+          [[first-k first-v] & rest-entries] (seq m)
+          first-entry (str "^{"
+                           (pr-str first-k)
+                           " "
+                           (emit-literal first-v (+ indent 1)))
+          remaining (map (fn [[k v]]
+                           (str child-padding
+                                (pr-str k)
+                                " "
+                                (emit-literal v (+ indent 1))))
+                         rest-entries)
+          entries (cons first-entry remaining)]
+      (str (str/join "\n" entries)
            "}"))))
 
 (defn- emit-literal
@@ -264,7 +283,7 @@
                        (table-file-entry dialect
                                          schema
                                          table
-                                         (sort-templates-for-file table-templates)))))} )
+                                         (sort-templates-for-file table-templates)))))})
 
 (defn write-crud-files!
   "Writes generated CRUD templates as one SQL file per table."
@@ -302,7 +321,7 @@
                                                                                              (:name template)))
                                                                    template-data (assoc template
                                                                                         :query-name (or (:query-name template)
-                                                                                                         (:name template))
+                                                                                                        (:name template))
                                                                                         :function-name function-name
                                                                                         :namespace-suffix namespace-suffix
                                                                                         :project-relative-path project-relative-path)
@@ -310,9 +329,10 @@
                                                                                                              '([datasource] [datasource template-params]))]
                                                                (str (when suppress-unused-public-var?
                                                                       "#_{:clojure-lsp/ignore [:clojure-lsp/unused-public-var]}\n")
-                                                                    "(declare\n"
-                                                                    "  ^" (emit-literal metadata 2) "\n"
-                                                                    "  " function-name ")\n"))))
+                                                                    "(declare "
+                                                                    (emit-metadata-literal metadata 9) "\n"
+                                                                    "\n"
+                                                                    " " function-name ")\n"))))
                                                      (str/join "\n"))
                                   content (str "(ns " ns-sym ")\n\n"
                                                declare-forms)]

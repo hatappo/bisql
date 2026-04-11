@@ -42,9 +42,9 @@
                     "user_roles" [{:constraint_type "PRIMARY KEY"
                                    :column_names ["user_id" "role_code"]}]}
                    :indexes-by-table
-                    {"users" [{:column_names ["status"]}]
-                     "orders" [{:column_names ["user_id"]}
-                               {:column_names ["state" "created_at"]}]
+                   {"users" [{:column_names ["status"]}]
+                    "orders" [{:column_names ["user_id"]}
+                              {:column_names ["state" "created_at"]}]
                     "user_devices" [{:column_names ["status" "last_seen_at"]}
                                     {:column_names ["user_id" "last_seen_at"]}
                                     {:column_names ["status" "device_type" "last_seen_at"]}]
@@ -188,8 +188,8 @@
                                                            %)
                                                         templates)
               list-by-user-id-and-last-seen-at-template (some #(when (= "crud.list-by-user-id-and-last-seen-at" (:name %))
-                                                                %)
-                                                             templates)
+                                                                 %)
+                                                              templates)
               list-by-status-from-two-column-index (some #(when (= "crud.list-by-status-order-by-last-seen-at" (:name %))
                                                             %)
                                                          templates)
@@ -197,8 +197,8 @@
                                                               %)
                                                            templates)
               list-by-status-and-device-type-template (some #(when (= "crud.list-by-status-and-device-type" (:name %))
-                                                              %)
-                                                           templates)
+                                                               %)
+                                                            templates)
               list-with-order-template (some #(when (= "crud.list-by-status-and-last-seen-at" (:name %))
                                                 %)
                                              templates)]
@@ -305,7 +305,7 @@
                                   :sql-template "SELECT * FROM users WHERE id = /*$id*/1"}
                                  {:table "users"
                                   :kind :insert
-                                 :name "crud.insert"
+                                  :name "crud.insert"
                                   :meta {:cardinality :one}
                                   :sql-template "INSERT INTO users (...) VALUES (...) RETURNING *"}
                                  {:table "users"
@@ -370,7 +370,7 @@
                                   :meta {:cardinality :one}
                                   :sql-template "SELECT * FROM users WHERE id = /*$id*/1"}
                                  {:table "users"
-                                 :name "crud.insert"
+                                  :name "crud.insert"
                                   :meta {:cardinality :one}
                                   :sql-template "INSERT INTO users (...) VALUES (...) RETURNING *"}
                                  {:table "users"
@@ -395,10 +395,11 @@
     (is (= "postgresql/public/users/crud"
            (:query-path users-file)))
     (is (str/starts-with? (:content users-file) "(ns sql.postgresql.public.users.crud)\n\n"))
-    (is (str/includes? (:content users-file) "(declare"))
+    (is (str/includes? (:content users-file) "(declare ^{:arglists "))
     (is (str/includes? (:content users-file) "get-by-id"))
     (is (str/includes? (:content users-file) ":arglists (quote ([datasource] [datasource template-params]))"))
     (is (str/includes? (:content users-file) ":cardinality :one"))
+    (is (str/includes? (:content users-file) ":bisql.define/navigation-stub true"))
     (is (str/includes? (:content users-file) "This var and docstring are generated from the following SQL template:"))
     (is (str/includes? (:content users-file) "src/sql/postgresql/public/users/crud.sql:1"))
     (is (str/includes? (:content users-file) "SELECT * FROM users WHERE id = /*$id*/1"))
@@ -422,7 +423,7 @@
     (is (.exists output-file))
     (let [content (slurp output-file)]
       (is (str/starts-with? content
-                            "(ns sql.postgresql.public.users.crud)\n\n(declare\n"))
+                            "(ns sql.postgresql.public.users.crud)\n\n(declare ^{:arglists "))
       (is (str/includes? content
                          "src/sql/postgresql/public/users/crud.sql:1")))
     (is (= "postgresql/public/users/crud.clj"
