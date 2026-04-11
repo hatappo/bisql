@@ -52,6 +52,7 @@
                     "user_roles" []}})]
     (let [result (crud/generate-crud ::datasource {:schema "public"})
           templates (:templates result)
+          warnings (:warnings result)
           names (set (map :name templates))]
       (is (= "postgresql" (:dialect result)))
       (is (= "public" (:schema result)))
@@ -65,6 +66,12 @@
       (is (contains? names "crud.get-by-email"))
       (is (contains? names "crud.get-by-user-id-and-device-identifier"))
       (is (contains? names "crud.get-by-user-id-and-role-code"))
+      (is (contains? names "crud.count"))
+      (is (contains? names "crud.count-by-status"))
+      (is (contains? names "crud.count-by-state"))
+      (is (contains? names "crud.count-by-state-and-created-at"))
+      (is (contains? names "crud.count-by-user-id"))
+      (is (= 0 (count warnings)))
       (is (contains? names "crud.list-by-user-id-order-by-device-identifier"))
       (is (contains? names "crud.list-by-user-id-order-by-last-seen-at"))
       (is (contains? names "crud.list-by-user-id-and-last-seen-at"))
@@ -163,6 +170,40 @@
                       "LIMIT /*$limit*/100\n"
                       "OFFSET /*$offset*/0")
                  (:sql-template template)))))
+      (testing "count queries are generated without order-by or pagination"
+        (let [count-template (some #(when (and (= "user_roles" (:table %))
+                                               (= "crud.count" (:name %)))
+                                      %)
+                                   templates)
+              count-by-state-template (some #(when (and (= "orders" (:table %))
+                                                        (= "crud.count-by-state" (:name %)))
+                                               %)
+                                            templates)
+              count-by-state-and-created-at-template (some #(when (and (= "orders" (:table %))
+                                                                       (= "crud.count-by-state-and-created-at" (:name %)))
+                                                              %)
+                                                           templates)]
+          (is (= "crud.count" (:query-name count-template)))
+          (is (= [] (:columns count-template)))
+          (is (= {:cardinality :one} (:meta count-template)))
+          (is (= "SELECT COUNT(*) AS count FROM user_roles"
+                 (:sql-template count-template)))
+          (is (= (str "SELECT COUNT(*) AS count FROM orders\n"
+                      "WHERE state = /*$state*/'sample'")
+                 (:sql-template count-by-state-template)))
+          (is (= (str "SELECT COUNT(*) AS count FROM orders\n"
+                      "WHERE state = /*$state*/'sample'\n"
+                      "  AND created_at = /*$created-at*/CURRENT_TIMESTAMP")
+                 (:sql-template count-by-state-and-created-at-template)))))
+      (testing "count query duplicates are deduplicated by name with warnings"
+        (let [user-device-count-templates (filter #(and (= "user_devices" (:table %))
+                                                        (= :count (:kind %)))
+                                                  templates)
+              count-template-names (->> user-device-count-templates
+                                        (map :name)
+                                        frequencies)]
+          (is (= 1 (get count-template-names "crud.count")))
+          (is (= 1 (get count-template-names "crud.count-by-user-id")))))
       (testing "zero-prefix list query is generated for composite indexes"
         (let [template (some #(when (= "crud.list" (:name %)) %) templates)]
           (is (= "crud.list" (:query-name template)))
@@ -296,19 +337,47 @@
                       "RETURNING *")
                  (:sql-template delete-template))))))))
 
+(deftest dedupe-templates-by-name-warns-when-same-name-has-different-sql
+  (let [result (#'crud/dedupe-templates-by-name
+                [{:table "users"
+                  :kind :count
+                  :name "crud.count"
+                  :meta {:cardinality :one}
+                  :sql-template "SELECT COUNT(*) AS count FROM users"}
+                 {:table "users"
+                  :kind :count
+                  :name "crud.count"
+                  :meta {:cardinality :one}
+                  :sql-template "SELECT COUNT(*) AS count FROM users WHERE status = /*$status*/'sample'"}])]
+    (is (= 1 (count (:templates result))))
+    (is (= "SELECT COUNT(*) AS count FROM users"
+           (:sql-template (first (:templates result)))))
+    (is (= 1 (count (:warnings result))))
+    (is (str/includes? (first (:warnings result))
+                       "https://github.com/hatappo/bisql/issues"))
+    (is (str/includes? (first (:warnings result))
+                       "`crud.count`"))
+    (is (str/includes? (first (:warnings result))
+                       "`users`"))))
+
 (deftest render-crud-files-groups-templates-by-table
   (let [crud-result {:dialect "postgresql"
                      :schema "public"
                      :templates [{:table "users"
+                                  :kind :insert
+                                  :name "crud.insert"
+                                  :meta {:cardinality :one}
+                                  :sql-template "INSERT INTO users (...) VALUES (...) RETURNING *"}
+                                 {:table "users"
                                   :kind :get
                                   :name "crud.get-by-id"
                                   :meta {:cardinality :one}
                                   :sql-template "SELECT * FROM users WHERE id = /*$id*/1"}
                                  {:table "users"
-                                  :kind :insert
-                                  :name "crud.insert"
+                                  :kind :count
+                                  :name "crud.count"
                                   :meta {:cardinality :one}
-                                  :sql-template "INSERT INTO users (...) VALUES (...) RETURNING *"}
+                                  :sql-template "SELECT COUNT(*) AS count FROM users"}
                                  {:table "users"
                                   :kind :insert
                                   :name "crud.insert-many"
@@ -336,7 +405,10 @@
                 "INSERT INTO users (...) VALUES /*%for row in rows */(...),/*%end */ RETURNING *\n\n"
                 "/*:name crud.get-by-id */\n"
                 "/*:cardinality :one */\n"
-                "SELECT * FROM users WHERE id = /*$id*/1")
+                "SELECT * FROM users WHERE id = /*$id*/1\n\n"
+                "/*:name crud.count */\n"
+                "/*:cardinality :one */\n"
+                "SELECT COUNT(*) AS count FROM users")
            (:content users-file)))
     (is (= (str "/*:name crud.get-by-id */\n"
                 "/*:cardinality :one */\n"

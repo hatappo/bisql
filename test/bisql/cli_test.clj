@@ -18,7 +18,8 @@
                                                      (reset! crud-args* [datasource options])
                                                      {:dialect "postgresql"
                                                       :schema "public"
-                                                      :templates [{:table "users"}]})
+                                                      :templates [{:table "users"}]
+                                                      :warnings ["WARNING: duplicate generated CRUD template. Please report it here: https://github.com/hatappo/bisql/issues"]})
                                bisql/write-crud-files! (fn [crud-result options]
                                                          (reset! write-args* [crud-result options])
                                                          {:files [{:path "postgresql/public/users/crud.sql"}]})]
@@ -42,11 +43,13 @@
            @crud-args*))
     (is (= [{:dialect "postgresql"
              :schema "public"
-             :templates [{:table "users"}]}
+             :templates [{:table "users"}]
+             :warnings ["WARNING: duplicate generated CRUD template. Please report it here: https://github.com/hatappo/bisql/issues"]}
             {:output-root "src/app/sql"}]
            @write-args*))
     (is (str/includes? output "Wrote 1 CRUD SQL files"))
-    (is (str/includes? output "src/app/sql/postgresql/public/users/crud.sql"))))
+    (is (str/includes? output "src/app/sql/postgresql/public/users/crud.sql"))
+    (is (str/includes? output "https://github.com/hatappo/bisql/issues"))))
 
 (deftest cli-gen-declarations-uses-db-spec-defaults-and-root
   (let [write-args* (atom nil)

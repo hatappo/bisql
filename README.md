@@ -149,7 +149,7 @@ Depending on the tables present in the target database, this writes files such a
 - `src/sql/postgresql/public/orders/crud.sql`
 
 Generated CRUD SQL includes templates such as `insert`, `insert-many`, `get-by-*`,
-`update-by-*`, `delete-by-*`, `list`, and `list-by-*`.
+`count`, `count-by-*`, `update-by-*`, `delete-by-*`, `list`, and `list-by-*`.
 
 These generated queries are meant to cover the typical index-friendly SQL patterns
 you would usually write by hand. In practice, that often means you do not need to
@@ -162,12 +162,15 @@ For the sample tables above, this typically includes:
 - `users.crud/insert-many`
 - `users.crud/get-by-id`
 - `users.crud/get-by-email`
+- `users.crud/count`
+- `users.crud/count-by-status`
 - `users.crud/update-by-id`
 - `users.crud/update-by-email`
 - `users.crud/delete-by-id`
 - `users.crud/delete-by-email`
 - `orders.crud/insert`
 - `orders.crud/insert-many`
+- `orders.crud/count`
 - `orders.crud/list`
 - `orders.crud/get-by-id`
 - `orders.crud/update-by-id`

@@ -907,7 +907,6 @@ Rules:
 
 The following are intentionally excluded:
 
-- count functions (planned for future)
 - range queries (`>=`, `<=`)
 - OR conditions
 - JOIN queries
@@ -952,7 +951,6 @@ This system provides:
 
 # 10. Future Extensions
 
-- count functions
 - range-based queries
 - cursor-based pagination
 - richer metadata annotations

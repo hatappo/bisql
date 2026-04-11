@@ -63,6 +63,13 @@
                      (order-by-clause order-columns)
                      (list-limit-clause)])))
 
+(defn- count-template
+  [table predicate-columns]
+  (str/join "\n"
+            (remove nil?
+                    [(str "SELECT COUNT(*) AS count FROM " table)
+                     (where-clause predicate-columns)])))
+
 (defn- get-template
   [table predicate-columns]
   (str/join "\n"
@@ -160,15 +167,63 @@
 (def ^:private crud-kind-order
   {:insert 0
    :get 1
-   :list 2
-   :update 3
-   :delete 4})
+   :count 2
+   :list 3
+   :update 4
+   :delete 5})
+
+(def ^:private crud-generation-issue-url
+  "https://github.com/hatappo/bisql/issues")
 
 (defn- sort-templates-for-file
   [templates]
   (sort-by (juxt #(get crud-kind-order (:kind %) Long/MAX_VALUE)
                  :name)
            templates))
+
+(defn- duplicate-template-warning
+  [table name duplicate-count]
+  (str "WARNING: Multiple generated CRUD templates resolved to the same name `"
+       name
+       "` for table `"
+       table
+       "`, and their SQL template or metadata differed. "
+       "The first template was kept from "
+       duplicate-count
+       " candidates. "
+       "This likely indicates a gap in bisql's CRUD generation logic. "
+       "Please report it here: "
+       crud-generation-issue-url))
+
+(defn- dedupe-templates-by-name
+  [templates]
+  (let [{:keys [ordered-names templates-by-name]}
+        (reduce (fn [{:keys [ordered-names templates-by-name] :as acc} template]
+                  (let [template-key [(:table template) (:name template)]]
+                    (if (contains? templates-by-name template-key)
+                      (update acc :templates-by-name update template-key conj template)
+                      {:ordered-names (conj ordered-names template-key)
+                       :templates-by-name (assoc templates-by-name template-key [template])})))
+                {:ordered-names []
+                 :templates-by-name {}}
+                templates)]
+    (reduce (fn [{:keys [templates warnings]} template-key]
+              (let [grouped (get templates-by-name template-key)
+                    kept-template (first grouped)
+                    distinct-shapes (->> grouped
+                                         (map (juxt :meta :sql-template))
+                                         distinct)]
+                {:templates (conj templates kept-template)
+                 :warnings (cond-> warnings
+                             (and (> (count grouped) 1)
+                                  (> (count distinct-shapes) 1))
+                             (conj (duplicate-template-warning
+                                    (:table kept-template)
+                                    (:name kept-template)
+                                    (count grouped))))}))
+            {:templates []
+             :warnings []}
+            ordered-names)))
 
 (defn render-crud-files
   "Groups generated CRUD templates into one SQL file per table."
@@ -341,6 +396,37 @@
        (remove nil?)
        vec))
 
+(defn- generate-count-templates
+  [schema table columns-by-name unique-column-groups index-column-groups]
+  (letfn [(count-template-candidates [column-groups strict-prefix?]
+            (->> column-groups
+                 (mapcat
+                  (fn [column-group]
+                    (let [column-group (normalize-column-names column-group)
+                          prefix-lengths (if strict-prefix?
+                                           (range 0 (count column-group))
+                                           (range 0 (inc (count column-group))))]
+                      (map (fn [prefix-length]
+                             (subvec column-group 0 prefix-length))
+                           prefix-lengths))))
+                 distinct))
+          (count-template-name [prefix-column-names]
+            (if (seq prefix-column-names)
+              (str "count-by-" (joined-name prefix-column-names))
+              "count"))]
+    (let [candidates (concat (count-template-candidates unique-column-groups true)
+                             (count-template-candidates index-column-groups false))]
+      (mapv (fn [prefix-column-names]
+              (let [predicate-columns (mapv columns-by-name prefix-column-names)]
+                (named-template-entry schema
+                                      table
+                                      :count
+                                      (count-template-name prefix-column-names)
+                                      prefix-column-names
+                                      (count-template table predicate-columns)
+                                      :meta {:cardinality :one})))
+            candidates))))
+
 (defn- generate-list-templates
   [schema table columns-by-name unique-column-groups index-column-groups]
   (letfn [(list-template-candidates [column-groups strict-prefix?]
@@ -485,7 +571,7 @@
               schema "public"}} options
         {:keys [columns-by-table constraints-by-table indexes-by-table]}
         (load-schema-metadata datasource schema)
-        templates
+        generated-templates
         (->> columns-by-table
              (mapcat
               (fn [[table columns]]
@@ -496,16 +582,24 @@
                                                (mapv :column_names))]
                   (concat
                    (generate-insert-templates schema table columns)
-                   (generate-update-templates schema table columns columns-by-name unique-column-groups)
-                   (generate-delete-templates schema table columns-by-name unique-column-groups)
-                   (generate-get-templates schema table columns-by-name unique-column-groups)
-                   (generate-list-templates schema
+                  (generate-update-templates schema table columns columns-by-name unique-column-groups)
+                  (generate-delete-templates schema table columns-by-name unique-column-groups)
+                  (generate-get-templates schema table columns-by-name unique-column-groups)
+                  (generate-count-templates schema
+                                            table
+                                            columns-by-name
+                                            unique-column-groups
+                                            index-column-groups)
+                  (generate-list-templates schema
                                             table
                                             columns-by-name
                                             unique-column-groups
                                             index-column-groups)))))
              (sort-by (juxt :table :kind :name))
-             vec)]
+             vec)
+        {:keys [templates warnings]}
+        (dedupe-templates-by-name generated-templates)]
     {:dialect dialect
      :schema schema
-     :templates templates}))
+     :templates templates
+     :warnings warnings}))

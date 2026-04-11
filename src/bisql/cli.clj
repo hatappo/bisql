@@ -210,6 +210,11 @@
   (doseq [{:keys [path]} files]
     (println (project-relative-path output-root path))))
 
+(defn- print-warnings!
+  [warnings]
+  (doseq [warning warnings]
+    (println warning)))
+
 (defn- run-gen-crud!
   [options]
   (let [base-dir (or (:base-dir options) default-base-dir)
@@ -220,7 +225,8 @@
     (print-generated-files!
      (str "Wrote " file-count " CRUD SQL files (" template-count " SQL templates) to " base-dir)
      base-dir
-     (:files file-result))))
+     (:files file-result))
+    (print-warnings! (:warnings generated-crud))))
 
 (defn- run-gen-declarations!
   [options]

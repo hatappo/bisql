@@ -918,7 +918,6 @@ list-by-customer-id-and-created-at
 
 以下は意図的に除外する:
 
-- count 関数（将来対応予定）
 - 範囲クエリ（`>=`, `<=`）
 - OR 条件
 - JOIN クエリ
@@ -965,7 +964,6 @@ list-by-customer-id-and-created-at
 
 # 10. 今後の拡張
 
-- count 関数
 - 範囲ベースクエリ
 - カーソルベースページネーション
 - より豊かなメタデータ注釈
