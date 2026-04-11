@@ -50,8 +50,8 @@
   gen-crud {:doc "Generate CRUD SQL files from local PostgreSQL"
             :task (clojure "-M" "-m" "bisql.cli" "gen-crud")}
 
-  gen-ns {:doc "Generate query namespace files from local PostgreSQL"
-          :task (clojure "-M" "-m" "bisql.cli" "gen-ns")}
+  gen-declarations {:doc "Generate declaration namespace files from local PostgreSQL"
+                    :task (clojure "-M" "-m" "bisql.cli" "gen-declarations")}
 
   jar {:doc "Build the jar via build.clj; accepts `bb jar 0.1.0` or raw build args"
        :task (build-task "jar")}

@@ -48,7 +48,7 @@
     (is (str/includes? output "Wrote 1 CRUD SQL files"))
     (is (str/includes? output "src/app/sql/postgresql/public/users/crud.sql"))))
 
-(deftest cli-gen-ns-uses-db-spec-defaults-and-root
+(deftest cli-gen-declarations-uses-db-spec-defaults-and-root
   (let [datasource-spec* (atom nil)
         crud-args* (atom nil)
         write-args* (atom nil)
@@ -64,7 +64,7 @@
                                bisql/write-crud-query-namespaces! (fn [crud-result options]
                                                                     (reset! write-args* [crud-result options])
                                                                     {:files [{:path "postgresql/public/users/crud.clj"}]})]
-                   (cli/-main "gen-ns"
+                   (cli/-main "gen-declarations"
                               "--host" "db.example.com"
                               "--port" "15432"
                               "--dbname" "app_dev"
@@ -84,10 +84,29 @@
     (is (= [{:dialect "postgresql"
              :schema "public"
              :templates [{:table "users"}]}
-            {:output-root "src/app/sql"}]
+            {:output-root "src/app/sql"
+             :suppress-unused-public-var? false}]
            @write-args*))
-    (is (str/includes? output "Wrote 1 query namespace files"))
+    (is (str/includes? output "Wrote 1 declaration namespace files"))
     (is (str/includes? output "src/app/sql/postgresql/public/users/crud.clj"))))
+
+(deftest cli-gen-declarations-supports-unused-public-var-suppression
+  (let [write-args* (atom nil)]
+    (with-redefs [jdbc/get-datasource (constantly ::datasource)
+                  bisql/generate-crud (fn [_ _]
+                                        {:dialect "postgresql"
+                                         :schema "public"
+                                         :templates [{:table "users"}]})
+                  bisql/write-crud-query-namespaces! (fn [crud-result options]
+                                                       (reset! write-args* [crud-result options])
+                                                       {:files []})]
+      (cli/-main "gen-declarations" "--suppress-unused-public-var"))
+    (is (= [{:dialect "postgresql"
+             :schema "public"
+             :templates [{:table "users"}]}
+            {:output-root "src/sql"
+             :suppress-unused-public-var? true}]
+           @write-args*))))
 
 (deftest cli-options-fall-back-to-environment-variables
   (let [datasource-spec* (atom nil)

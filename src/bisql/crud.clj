@@ -282,8 +282,9 @@
    Each generated namespace declares the generated query vars with docstrings."
   ([crud-result]
    (render-crud-query-namespaces crud-result {:output-root "src/sql"}))
-  ([{:keys [dialect schema templates]} {:keys [output-root]
-                                        :or {output-root "src/sql"}}]
+  ([{:keys [dialect schema templates]} {:keys [output-root suppress-unused-public-var?]
+                                        :or {output-root "src/sql"
+                                             suppress-unused-public-var? false}}]
    (let [root-path (namespace-root-path output-root)
          files (->> (render-crud-files {:dialect dialect
                                         :schema schema
@@ -304,10 +305,12 @@
                                                                                                          (:name template))
                                                                                         :function-name function-name
                                                                                         :namespace-suffix namespace-suffix
-                                                                                       :project-relative-path project-relative-path)
+                                                                                        :project-relative-path project-relative-path)
                                                                    metadata (define/navigation-stub-metadata template-data
                                                                                                              '([datasource] [datasource template-params]))]
-                                                               (str "(declare\n"
+                                                               (str (when suppress-unused-public-var?
+                                                                      "#_{:clojure-lsp/ignore [:clojure-lsp/unused-public-var]}\n")
+                                                                    "(declare\n"
                                                                     "  ^" (emit-literal metadata 2) "\n"
                                                                     "  " function-name ")\n"))))
                                                      (str/join "\n"))
@@ -324,9 +327,11 @@
 
 (defn write-crud-query-namespaces!
   "Writes generated query namespace files, one per table."
-  [crud-result {:keys [output-root]
-                :or {output-root "src/sql"}}]
-  (let [rendered (render-crud-query-namespaces crud-result {:output-root output-root})]
+  [crud-result {:keys [output-root suppress-unused-public-var?]
+                :or {output-root "src/sql"
+                     suppress-unused-public-var? false}}]
+  (let [rendered (render-crud-query-namespaces crud-result {:output-root output-root
+                                                            :suppress-unused-public-var? suppress-unused-public-var?})]
     (doseq [{:keys [path content]} (:files rendered)]
       (let [output-file (io/file output-root path)]
         (io/make-parents output-file)

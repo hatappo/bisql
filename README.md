@@ -38,7 +38,7 @@ Then commands such as these become available:
 ```sh
 clojure -M:bisql gen-config
 clojure -M:bisql gen-crud
-clojure -M:bisql gen-ns
+clojure -M:bisql gen-declarations
 ```
 
 If you prefer `bb`, you can also add tasks like:
@@ -47,7 +47,7 @@ If you prefer `bb`, you can also add tasks like:
 {:tasks
  {:gen-config (clojure "-M:bisql" "gen-config")
   :gen-crud   (clojure "-M:bisql" "gen-crud")
-  :gen-ns     (clojure "-M:bisql" "gen-ns")}}
+  :gen-declarations (clojure "-M:bisql" "gen-declarations")}}
 ```
 
 ## Getting Started
@@ -199,7 +199,7 @@ The same options can also be passed through environment variables such as
 
 The precedence order is CLI options > environment variables > config file > defaults.
 
-`gen-ns` is an optional helper for projects that prefer explicit namespace
+`gen-declarations` is an optional helper for projects that prefer explicit namespace
 files. It generates navigation-oriented `declare` forms with docstrings derived
 from the SQL templates, so IDEs and the REPL can jump to the intended namespace
 and query source without letting a shallow `(defquery)` populate undeclared

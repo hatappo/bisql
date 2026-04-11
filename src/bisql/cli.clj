@@ -38,7 +38,7 @@
    ["Usage:"
     "  clojure -M -m bisql.cli gen-config [options]"
     "  clojure -M -m bisql.cli gen-crud [options]"
-    "  clojure -M -m bisql.cli gen-ns [options]"
+    "  clojure -M -m bisql.cli gen-declarations [options]"
     ""
     "Options:"
     "  --config PATH"
@@ -50,6 +50,7 @@
     "  --password PASSWORD"
     "  --schema SCHEMA"
     "  --base-dir PATH"
+    "  --suppress-unused-public-var"
     "  --help"
     ""
     "Environment variables:"
@@ -68,6 +69,7 @@
   (let [k (keyword (subs option 2))]
     (cond
       (= k :output-root) :base-dir
+      (= k :suppress-unused-public-var) :suppress-unused-public-var?
       :else k)))
 
 (defn- parse-cli-options
@@ -80,6 +82,10 @@
         (cond
           (= option "--help")
           (assoc options :help? true)
+
+          (= option "--suppress-unused-public-var")
+          (recur rest-args
+                 (assoc options (normalize-option-key option) true))
 
           (not (str/starts-with? option "--"))
           (throw (ex-info "Unknown command line argument."
@@ -207,14 +213,16 @@
      base-dir
      (:files file-result))))
 
-(defn- run-gen-ns!
+(defn- run-gen-declarations!
   [options]
   (let [base-dir (or (:base-dir options) default-base-dir)
         generated-crud (crud-result options)
-        file-result (bisql/write-crud-query-namespaces! generated-crud {:output-root base-dir})
+        file-result (bisql/write-crud-query-namespaces! generated-crud {:output-root base-dir
+                                                                        :suppress-unused-public-var?
+                                                                        (true? (:suppress-unused-public-var? options))})
         file-count (count (:files file-result))]
     (print-generated-files!
-     (str "Wrote " file-count " query namespace files to " base-dir)
+     (str "Wrote " file-count " declaration namespace files to " base-dir)
      base-dir
      (:files file-result))))
 
@@ -237,8 +245,8 @@
           (= command "gen-crud")
           (run-gen-crud! options)
 
-          (= command "gen-ns")
-          (run-gen-ns! options)
+          (= command "gen-declarations")
+          (run-gen-declarations! options)
 
           :else
           (throw (ex-info "Unknown command."

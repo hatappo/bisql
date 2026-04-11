@@ -668,12 +668,12 @@ The same generation flow can be exposed as a CLI:
 ```sh
 clojure -M -m bisql.cli gen-config
 clojure -M -m bisql.cli gen-crud --config bisql.edn
-clojure -M -m bisql.cli gen-ns --config bisql.edn
+clojure -M -m bisql.cli gen-declarations --config bisql.edn
 ```
 
 The config file is an EDN map with `:db` and `:generate` sections. Generated templates show default values as commented examples. Commands still work without a config file because the precedence order is CLI options > environment variables > config file > defaults.
 
-`gen-ns` is an optional helper. It is useful for projects that prefer explicit
+`gen-declarations` is an optional helper. It is useful for projects that prefer explicit
 namespace files and want IDE/REPL navigation stubs with docstrings, without
 letting a shallow `(defquery)` define functions into namespaces that were not
 declared in source ahead of time.
