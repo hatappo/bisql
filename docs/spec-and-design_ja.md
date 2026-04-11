@@ -740,6 +740,24 @@ PostgreSQL の `INSERT ... ON CONFLICT ON CONSTRAINT ... DO UPDATE RETURNING *` 
 (upsert-by-user-id-and-device-identifier! db row)
 ```
 
+生成される upsert query は、挿入時の値を `:inserting` に入れて受け取る。
+また、衝突時に既存行の値を維持したい列は `:non-updating-cols` で指定できる:
+
+```clojure
+(users.crud/upsert-by-id
+  datasource
+  {:inserting {:email "alice@example.com"
+               :display-name "Alice"
+               :status "active"
+               :created-at #inst "2026-04-12T00:00:00Z"}
+   :non-updating-cols {:created-at true}})
+```
+
+このとき生成 SQL は `INSERT INTO ... AS t` を使い、
+`:non-updating-cols.<column>` が truthy な列では
+`EXCLUDED.<column>` の代わりに `t.<column>` を使う。
+その結果、その列の値は変更されず既存値が維持される。
+
 ---
 
 ## 7.4 Update

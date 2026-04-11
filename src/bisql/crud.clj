@@ -376,45 +376,55 @@
 
 (defn- upsert-template
   [table constraint-name insert-columns update-columns]
-  (str/join
-   "\n"
-   (concat
-    [(str "INSERT INTO " table " AS t (")
-     (str/join "\n" (map-indexed (fn [idx column]
-                                   (str "  "
-                                        (:column_name column)
-                                        (when (< idx (dec (count insert-columns))) ",")))
-                                 insert-columns))
-     ")"
-     "VALUES ("
-     (str/join "\n" (map-indexed (fn [idx column]
-                                   (str "  "
-                                        (bind-comment "inserting" column)
-                                        (when (< idx (dec (count insert-columns))) ",")))
-                                 insert-columns))
-     ")"
-     (str "ON CONFLICT ON CONSTRAINT " constraint-name)]
-    (if (seq update-columns)
-      ["DO UPDATE"
-       (str/join "\n" (map-indexed
-                       (fn [idx column]
-                         (str (if (zero? idx) "SET " "  , ")
-                              (:column_name column)
-                              " = "
-                              "/*%if non-updating-cols."
-                              (kebab-name (:column_name column))
-                              " */"
-                              "t."
-                              (:column_name column)
-                              " "
-                              "/*%else*/"
-                              "EXCLUDED."
-                              (:column_name column)
-                              " "
-                              "/*%end*/"))
-                       update-columns))]
-      ["DO NOTHING"])
-    ["RETURNING *"])))
+  (let [lhs-width (apply max 0 (map #(count (:column_name %)) update-columns))
+        if-width (apply max 0 (map #(count (str "/*%if non-updating-cols."
+                                                (kebab-name (:column_name %))
+                                                " */"))
+                                   update-columns))
+        target-width (apply max 0 (map #(count (str "t." (:column_name %))) update-columns))
+        excluded-width (apply max 0 (map #(count (str "EXCLUDED." (:column_name %))) update-columns))
+        pad-right (fn [s width]
+                    (str s (apply str (repeat (max 0 (- width (count s))) " "))))
+        update-lines (map-indexed
+                      (fn [idx column]
+                        (let [column-name (:column_name column)
+                              target-expr (str "t." column-name)
+                              excluded-expr (str "EXCLUDED." column-name)
+                              if-expr (str "/*%if non-updating-cols."
+                                           (kebab-name column-name)
+                                           " */")]
+                          (str (if (zero? idx) "SET " "  , ")
+                               (pad-right column-name lhs-width)
+                               " = "
+                               (pad-right if-expr if-width)
+                               " "
+                               (pad-right target-expr target-width)
+                               " /*%else*/ "
+                               (pad-right excluded-expr excluded-width)
+                               " /*%end*/")))
+                      update-columns)]
+    (str/join
+     "\n"
+     (concat
+      [(str "INSERT INTO " table " AS t (")
+       (str/join "\n" (map-indexed (fn [idx column]
+                                     (str "  "
+                                          (:column_name column)
+                                          (when (< idx (dec (count insert-columns))) ",")))
+                                   insert-columns))
+       ")"
+       "VALUES ("
+       (str/join "\n" (map-indexed (fn [idx column]
+                                     (str "  "
+                                          (bind-comment "inserting" column)
+                                          (when (< idx (dec (count insert-columns))) ",")))
+                                   insert-columns))
+       ")"
+       (str "ON CONFLICT ON CONSTRAINT " constraint-name)]
+      (if (seq update-columns)
+        (into ["DO UPDATE"] update-lines)
+        ["DO NOTHING"])
+      ["RETURNING *"]))))
 
 (defn- generate-upsert-templates
   [schema table columns constraints]

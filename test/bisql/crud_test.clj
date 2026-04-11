@@ -176,9 +176,9 @@
                       ")\n"
                       "ON CONFLICT ON CONSTRAINT users_pkey\n"
                       "DO UPDATE\n"
-                      "SET email = /*%if non-updating-cols.email */t.email /*%else*/EXCLUDED.email /*%end*/\n"
-                      "  , display_name = /*%if non-updating-cols.display-name */t.display_name /*%else*/EXCLUDED.display_name /*%end*/\n"
-                      "  , status = /*%if non-updating-cols.status */t.status /*%else*/EXCLUDED.status /*%end*/\n"
+                      "SET email        = /*%if non-updating-cols.email */        t.email        /*%else*/ EXCLUDED.email        /*%end*/\n"
+                      "  , display_name = /*%if non-updating-cols.display-name */ t.display_name /*%else*/ EXCLUDED.display_name /*%end*/\n"
+                      "  , status       = /*%if non-updating-cols.status */       t.status       /*%else*/ EXCLUDED.status       /*%end*/\n"
                       "RETURNING *")
                  (:sql-template template)))))
       (testing "upsert uses the same non-updating-cols guard for composite keys"
@@ -201,8 +201,8 @@
                       ")\n"
                       "ON CONFLICT ON CONSTRAINT user_roles_pkey\n"
                       "DO UPDATE\n"
-                      "SET granted_at = /*%if non-updating-cols.granted-at */t.granted_at /*%else*/EXCLUDED.granted_at /*%end*/\n"
-                      "  , granted_by = /*%if non-updating-cols.granted-by */t.granted_by /*%else*/EXCLUDED.granted_by /*%end*/\n"
+                      "SET granted_at = /*%if non-updating-cols.granted-at */ t.granted_at /*%else*/ EXCLUDED.granted_at /*%end*/\n"
+                      "  , granted_by = /*%if non-updating-cols.granted-by */ t.granted_by /*%else*/ EXCLUDED.granted_by /*%end*/\n"
                       "RETURNING *")
                  (:sql-template template)))))
       (testing "update template uses plain bind variables"
