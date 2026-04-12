@@ -222,8 +222,6 @@ binds:
 WHERE 1 = 1
 /*%if name */
   AND name = /*$name*/'foo'
-/*%elseif status */
-  AND status = /*$status*/'active'
 /*%else */
   AND status = 'inactive'
 /*%end */
@@ -232,7 +230,8 @@ WHERE 1 = 1
 ### Supported Form
 
 - `x`
-- `if / elseif / else / end`
+- `if / else / end`
+- Optional inline else fragment: `/*%else => <fragment> */`
 
 ### Evaluation Rules
 
@@ -240,12 +239,14 @@ WHERE 1 = 1
 - Only `nil` and `false` are treated as false
 - Missing parameters are treated as `nil`
 - Empty strings and empty collections are treated as true
+- If `else` uses `=> <fragment>`, that inline fragment becomes the else body
+- If an inline `else => <fragment>` also has block body content before `/*%end */`, the template is rejected as invalid
 - If a falsy conditional block is immediately followed by `AND` or `OR`, that trailing operator is also removed
 - If a falsy conditional block is not followed by `AND` or `OR` and is immediately preceded by `WHERE` or `HAVING`, that clause keyword is also removed
 
 ### Initial Implementation Constraint
 
-- Only a single variable name is supported in `if` and `elseif`
+- Only a single variable name is supported in `if`
 - Expression syntax is intentionally not supported in the initial implementation
 - `else` does not take an expression
 
@@ -254,8 +255,8 @@ WHERE 1 = 1
 ```sql
 UPDATE users
 SET
-/*%for item in items */
-  /*!item.name*/ = /*$item.value*/'sample',
+/*%for item in items separating , */
+  /*!item.name*/ = /*$item.value*/'sample'
 /*%end */
 WHERE id = /*$id*/1
 ```
@@ -263,13 +264,15 @@ WHERE id = /*$id*/1
 ### Rules
 
 - Syntax: `/*%for item in items */ ... /*%end */`
+- Optional separator syntax: `/*%for item in items separating , */ ... /*%end */`
 - `item` is a loop-local variable name
 - Dot-path references such as `item.name`, `item.value`, or `user.profile.name` are supported
 - Dot-path lookup checks keys in this order: `keyword`, `string`, `symbol`
 - Empty collections are not treated as errors
 - If an empty `for` block is immediately followed by `AND` or `OR`, that trailing operator should also be removed
 - If an empty `for` block is not followed by `AND` or `OR` and is immediately preceded by `WHERE` or `HAVING`, that clause keyword should also be removed
-- If the repeated body ends with `,`, `AND`, or `OR`, that trailing token should be removed for the last element
+- With `separating`, the separator is emitted before the second and subsequent iterations
+- Trailing `,`, `AND`, or `OR` are not trimmed from the repeated body anymore; use `separating` instead when separators are needed
 
 ### Initial Implementation Constraint
 
@@ -307,6 +310,18 @@ SET
 WHERE id = /*$id*/1
 ```
 
+#### Inline `else` Fragment
+
+```sql
+SELECT *
+FROM users
+WHERE
+/*%if active */
+  active = true
+/*%else => status = 'inactive' */
+/*%end */
+```
+
 #### Conditional `ORDER BY` / `LIMIT`
 
 ```sql
@@ -328,8 +343,8 @@ LIMIT /*$limit*/100
 SELECT *
 FROM users
 WHERE
-/*%for item in filters */
-  /*!item.column*/ = /*$item.value*/'sample' AND
+/*%for item in filters separating AND */
+  /*!item.column*/ = /*$item.value*/'sample'
 /*%end */
 ```
 
@@ -338,8 +353,8 @@ WHERE
 ```sql
 UPDATE users
 SET
-/*%for item in items */
-  /*!item.name*/ = /*$item.value*/'sample',
+/*%for item in items separating , */
+  /*!item.name*/ = /*$item.value*/'sample'
 /*%end */
 WHERE id = /*$id*/1
 ```
@@ -348,12 +363,12 @@ WHERE id = /*$id*/1
 
 ```sql
 INSERT INTO users (
-/*%for column in columns */
-  /*!column.name*/,
+/*%for column in columns separating , */
+  /*!column.name*/
 /*%end */
 ) VALUES (
-/*%for column in columns */
-  /*$column.value*/'sample',
+/*%for column in columns separating , */
+  /*$column.value*/'sample'
 /*%end */
 )
 ```
@@ -363,8 +378,8 @@ INSERT INTO users (
 ```sql
 INSERT INTO users (email, status)
 VALUES
-/*%for row in rows */
-  (/*$row.email*/'user@example.com', /*$row.status*/'active'),
+/*%for row in rows separating , */
+  (/*$row.email*/'user@example.com', /*$row.status*/'active')
 /*%end */
 ```
 

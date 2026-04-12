@@ -829,7 +829,7 @@
            (:sql result)))
     (is (= [] (:params result)))))
 
-(deftest render-query-supports-elseif-branch
+(deftest render-query-supports-inline-else-fragment
   (let [result (bisql/render-query
                 {:sql-template (str/join "\n"
                                          ["SELECT *"
@@ -837,18 +837,14 @@
                                           "WHERE"
                                           "/*%if active */"
                                           "  active = true"
-                                          "/*%elseif pending */"
-                                          "  status = 'pending'"
-                                          "/*%else */"
-                                          "  status = 'inactive'"
+                                          "/*%else => status = 'inactive' */"
                                           "/*%end */"])}
-                {:active false
-                 :pending true})]
+                {:active false})]
     (is (= (str/join "\n"
                      ["SELECT *"
                       "FROM users"
                       "WHERE"
-                      "  status = 'pending'"])
+                      "status = 'inactive'"])
            (:sql result)))
     (is (= [] (:params result)))))
 
@@ -860,12 +856,9 @@
                                           "WHERE"
                                           "/*%if active */"
                                           "  active = true"
-                                          "/*%elseif pending */"
-                                          "  pending = true"
                                           "/*%end */"
                                           "AND status = /*$status*/'active'"])}
                 {:active false
-                 :pending false
                  :status "active"})]
     (is (= (str/join "\n"
                      ["SELECT *"
@@ -875,7 +868,7 @@
            (:sql result)))
     (is (= ["active"] (:params result)))))
 
-(deftest render-query-rejects-elseif-after-else
+(deftest render-query-rejects-elseif
   (let [error (try
                 (bisql/render-query
                  {:sql-template (str/join "\n"
@@ -883,8 +876,6 @@
                                            "FROM users"
                                            "/*%if active */"
                                            "  active = true"
-                                           "/*%else */"
-                                           "  active = false"
                                            "/*%elseif pending */"
                                            "  pending = true"
                                            "/*%end */"])}
@@ -893,7 +884,7 @@
                 nil
                 (catch clojure.lang.ExceptionInfo ex
                   ex))]
-    (is (= "Conditional block cannot contain elseif after else."
+    (is (= "Elseif is not supported. Use nested if blocks, raw variables, or collection parameters instead."
            (ex-message error)))))
 
 (deftest render-query-rejects-multiple-else-blocks
@@ -916,6 +907,25 @@
     (is (= "Conditional block cannot contain multiple else blocks."
            (ex-message error)))))
 
+(deftest render-query-rejects-mixed-inline-and-block-else
+  (let [error (try
+                (bisql/render-query
+                 {:sql-template (str/join "\n"
+                                          ["SELECT *"
+                                           "FROM users"
+                                           "WHERE"
+                                           "/*%if active */"
+                                           "  active = true"
+                                           "/*%else => status = 'inactive' */"
+                                           "  status = 'pending'"
+                                           "/*%end */"])}
+                 {:active false})
+                nil
+                (catch clojure.lang.ExceptionInfo ex
+                  ex))]
+    (is (= "Conditional branch cannot mix inline else fragments with block body content."
+           (ex-message error)))))
+
 (deftest render-query-supports-dot-path-bind-lookup
   (let [result (bisql/render-query
                 {:sql-template "SELECT * FROM users WHERE status = /*$user.profile.status*/'active'"}
@@ -928,8 +938,8 @@
                 {:sql-template (str/join "\n"
                                          ["UPDATE users"
                                           "SET"
-                                          "/*%for item in items */"
-                                          "  /*!item.name*/ = /*$item.value*/'sample',"
+                                          "/*%for item in items separating , */"
+                                          "  /*!item.name*/ = /*$item.value*/'sample'"
                                           "/*%end */"
                                           "WHERE id = /*$id*/1"])}
                 {:id 42
@@ -944,12 +954,54 @@
            (:sql result)))
     (is (= ["Alice" "active" 42] (:params result)))))
 
+(deftest render-query-does-not-trim-trailing-comma-from-for-body
+  (let [result (bisql/render-query
+                {:sql-template (str/join "\n"
+                                         ["UPDATE users"
+                                          "SET"
+                                          "/*%for item in items */"
+                                          "  /*!item.name*/ = /*$item.value*/'sample',"
+                                          "/*%end */"
+                                          "WHERE id = /*$id*/1"])}
+                {:id 42
+                 :items [{:name "display_name" :value "Alice"}]})]
+    (is (= (str/join "\n"
+                     ["UPDATE users"
+                      "SET"
+                      "  display_name = ?,"
+                      ""
+                      "WHERE id = ?"])
+           (:sql result)))
+    (is (= ["Alice" 42] (:params result)))))
+
+(deftest render-query-does-not-trim-trailing-and-from-for-body
+  (let [result (bisql/render-query
+                {:sql-template (str/join "\n"
+                                         ["SELECT *"
+                                          "FROM users"
+                                          "WHERE"
+                                          "/*%for item in items */"
+                                          "  /*!item.name*/ = /*$item.value*/'sample' AND"
+                                          "/*%end */"
+                                          "status = /*$status*/'active'"])}
+                {:items [{:name "display_name" :value "Alice"}]
+                 :status "active"})]
+    (is (= (str/join "\n"
+                     ["SELECT *"
+                      "FROM users"
+                      "WHERE"
+                      "  display_name = ? AND"
+                      ""
+                      "status = ?"])
+           (:sql result)))
+    (is (= ["Alice" "active"] (:params result)))))
+
 (deftest evaluate-ir-matches-render-query-for-for-blocks
   (let [sql-template (str/join "\n"
                                ["UPDATE users"
                                 "SET"
-                                "/*%for item in items */"
-                                "  /*!item.name*/ = /*$item.value*/'sample',"
+                                "/*%for item in items separating , */"
+                                "  /*!item.name*/ = /*$item.value*/'sample'"
                                 "/*%end */"
                                 "WHERE id = /*$id*/1"])
         ir (bisql/parse-template sql-template)
@@ -967,8 +1019,8 @@
   (let [sql-template (str/join "\n"
                                ["UPDATE users"
                                 "SET"
-                                "/*%for item in items */"
-                                "  /*!item.name*/ = /*$item.value*/'sample',"
+                                "/*%for item in items separating , */"
+                                "  /*!item.name*/ = /*$item.value*/'sample'"
                                 "/*%end */"
                                 "WHERE id = /*$id*/1"])
         ir (bisql/parse-template sql-template)
@@ -1041,10 +1093,10 @@
   (let [error (try
                 (bisql/render-query
                  {:sql-template (str/join "\n"
-                                          ["UPDATE users"
-                                           "SET"
-                                           "/*%for item in items */"
-                                           "  /*!item.name*/ = /*$item.value*/'sample',"
+                                         ["UPDATE users"
+                                          "SET"
+                                          "/*%for item in items */"
+                                           "  /*!item.name*/ = /*$item.value*/'sample'"
                                            "/*%end */"
                                            "WHERE id = /*$id*/1"])}
                  {:id 42
@@ -1063,11 +1115,11 @@
                  {:sql-template (str/join "\n"
                                           ["INSERT INTO users (email, status)"
                                            "VALUES"
-                                           "/*%for row in rows */"
+                                           "/*%for row in rows separating , */"
                                            "("
                                            "  /*$row.email*/'a@example.com',"
                                            "  /*$row.status*/'active'"
-                                           "),"
+                                           ")"
                                            "/*%end */"
                                            "RETURNING *"])}
                  {:rows []})

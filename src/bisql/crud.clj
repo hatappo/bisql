@@ -313,7 +313,7 @@
                                 columns))
     ")"
     "VALUES"
-    "/*%for row in rows */"
+    "/*%for row in rows separating , */"
     "("
     (str/join "\n" (map-indexed (fn [idx column]
                                   (str "  "
@@ -321,7 +321,7 @@
                                        (sample-token column)
                                        (when (< idx (dec (count columns))) ",")))
                                 columns))
-    "),"
+    ")"
     "/*%end */"
     "RETURNING *"]))
 
@@ -382,7 +382,6 @@
                                                 " */"))
                                    update-columns))
         target-width (apply max 0 (map #(count (str "t." (:column_name %))) update-columns))
-        excluded-width (apply max 0 (map #(count (str "EXCLUDED." (:column_name %))) update-columns))
         pad-right (fn [s width]
                     (str s (apply str (repeat (max 0 (- width (count s))) " "))))
         update-lines (map-indexed
@@ -399,8 +398,10 @@
                                (pad-right if-expr if-width)
                                " "
                                (pad-right target-expr target-width)
-                               " /*%else*/ "
-                               (pad-right excluded-expr excluded-width)
+                               " "
+                               "/*%else => "
+                               excluded-expr
+                               " */"
                                " /*%end*/")))
                       update-columns)]
     (str/join

@@ -85,3 +85,23 @@
     (is (contains? row :created-at))
     (is (not (contains? row :display_name)))
     (is (not (contains? row :created_at)))))
+
+(deftest adapter-supports-insert-many-with-separating-for-block
+  (let [rows [{:email "separating-1@example.com"
+               :display-name "Separating One"
+               :status "active"
+               :created-at (java.time.OffsetDateTime/parse "2025-01-01T00:00:00Z")}
+              {:email "separating-2@example.com"
+               :display-name "Separating Two"
+               :status "inactive"
+               :created-at (java.time.OffsetDateTime/parse "2025-01-02T00:00:00Z")}]
+        inserted ((ns-resolve 'sql.adapter.postgresql.public.users.crud 'insert-many)
+                  (datasource)
+                  {:rows rows})]
+    (is (= 2 (count inserted)))
+    (is (= #{"separating-1@example.com" "separating-2@example.com"}
+           (set (map :email inserted))))
+    (is (= #{"Separating One" "Separating Two"}
+           (set (map :display-name inserted))))
+    (is (= #{"active" "inactive"}
+           (set (map :status inserted))))))
