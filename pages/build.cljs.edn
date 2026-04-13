@@ -1,7 +1,0 @@
-{:main bisql.pages.playground
- :target :browser
- :output-to "pages/dist/app.js"
- :output-dir "pages/dist/out"
- :optimizations :simple
- :source-map false
- :infer-externs false}

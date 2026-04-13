@@ -140,9 +140,14 @@
     (r/render root (render-app @*state))))
 
 (defn dispatch!
-  [event-data actions]
+  [event-data handler]
   (let [dom-event (:replicant/dom-event event-data)
-        target-value (some-> dom-event .-target .-value)]
+        target-value (some-> dom-event .-target .-value)
+        actions (cond
+                  (and (vector? handler)
+                       (keyword? (first handler))) [handler]
+                  (sequential? handler) handler
+                  :else [handler])]
     (doseq [[action & _args] actions]
       (case action
         :select-example
@@ -192,10 +197,10 @@
     [:label.field
      [:span "Example"]
      [:select {:value selected-example-id
-               :on {:change [[:select-example]]}}
+               :on {:change [:select-example]}}
       (map #(example-option % selected-example-id) examples)]]
     [:button {:type "button"
-              :on {:click [[:render]]}}
+              :on {:click [:render]}}
      "Render"]]
 
    [:section.summary
@@ -207,12 +212,12 @@
      "SQL template"
      [:textarea {:spellcheck false
                  :value sql-template
-                 :on {:input [[:set-sql-template]]}}])
+                 :on {:input [:set-sql-template]}}])
     (panel
      "Params (EDN)"
      [:textarea {:spellcheck false
                  :value params-edn
-                 :on {:input [[:set-params-edn]]}}])]
+                 :on {:input [:set-params-edn]}}])]
 
    [:section.workspace.output-grid
     (panel

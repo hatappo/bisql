@@ -27,20 +27,70 @@
   [s]
   (str/replace s #"^\s+" ""))
 
-#_{:clj-kondo/ignore [:unresolved-var]}
 (defn- regex-matcher
   [pattern s]
-  #?(:clj (re-matcher pattern s)
-     :cljs (cljs.core/re-matcher pattern s)))
+  #?(:clj
+     (re-matcher pattern s)
+     :cljs
+     #js {:regex (js/RegExp. (.-source pattern)
+                             (let [flags (.-flags pattern)]
+                               (if (str/includes? flags "g")
+                                 flags
+                                 (str flags "g"))))
+          :input s
+          :match nil}))
+
+(defn- regex-find
+  ([matcher]
+   (regex-find matcher nil))
+  ([matcher cursor]
+   #?(:clj
+     (if (some? cursor)
+        (.find matcher ^long cursor)
+        (.find matcher))
+      :cljs
+      (let [regex (aget matcher "regex")
+            input (aget matcher "input")]
+        (when (some? cursor)
+          (set! (.-lastIndex regex) cursor))
+        (if-let [match (.exec regex input)]
+          (do
+            (aset matcher "match" match)
+            true)
+          (do
+            (aset matcher "match" nil)
+            false))))))
+
+(defn- regex-group
+  [matcher idx]
+  #?(:clj
+     (.group matcher idx)
+     :cljs
+     (some-> (aget matcher "match") (aget idx))))
+
+(defn- regex-start
+  [matcher]
+  #?(:clj
+     (.start matcher)
+     :cljs
+     (some-> (aget matcher "match") .-index)))
+
+(defn- regex-end
+  [matcher]
+  #?(:clj
+     (.end matcher)
+     :cljs
+     (when-let [match (aget matcher "match")]
+       (+ (.-index match) (count (aget match 0))))))
 
 (defn- parse-declaration-block
   [sql]
   (let [pattern #"(?s)^/\*:([A-Za-z0-9\-]+)\s*\n?(.*?)\*/"
-        matcher (regex-matcher pattern sql)]
-    (when (.find matcher)
-      {:directive (some-> (.group matcher 1) keyword)
-       :body (.group matcher 2)
-       :rest (subs sql (.end matcher))})))
+        matcher (volatile! (regex-matcher pattern sql))]
+    (when (regex-find @matcher)
+      {:directive (some-> (regex-group @matcher 1) keyword)
+       :body (regex-group @matcher 2)
+       :rest (subs sql (regex-end @matcher))})))
 
 #?(:clj
    (def ^:private declaration-eof ::declaration-eof))
@@ -156,10 +206,10 @@
 
 (defn- query-block-start-indexes
   [sql]
-    (let [matcher (regex-matcher query-block-start-pattern sql)]
+    (let [matcher (volatile! (regex-matcher query-block-start-pattern sql))]
     (loop [indexes []]
-      (if (.find matcher)
-        (recur (conj indexes (.start matcher)))
+      (if (regex-find @matcher)
+        (recur (conj indexes (regex-start @matcher)))
         indexes))))
 
 (defn- chunk-sql
@@ -543,13 +593,13 @@
 
 (defn- parse-control-directive
   [matcher]
-  {:directive (.group matcher 1)
-   :arg1 (.group matcher 2)
-   :arg2 (.group matcher 3)
-   :arg3 (.group matcher 4)
-   :arg4 (.group matcher 5)
-   :start (.start matcher)
-   :end (.end matcher)})
+  {:directive (regex-group matcher 1)
+   :arg1 (regex-group matcher 2)
+   :arg2 (regex-group matcher 3)
+   :arg3 (regex-group matcher 4)
+   :arg4 (regex-group matcher 5)
+   :start (regex-start matcher)
+   :end (regex-end matcher)})
 
 (def ^:private control-directive-pattern
   #"/\*%(if|elseif|else|for|end)(?:\s+([A-Za-z0-9\-\.]+)(?:\s+in\s+([A-Za-z0-9\-\.]+)(?:\s+separating\s+(.+?))?)?)?(?:\s*=>\s*(.+?))?\s*\*/")
@@ -579,12 +629,12 @@
          branch-start if-end
          current-inline-body nil
          else-seen? false]
-    (let [matcher (regex-matcher control-directive-pattern sql)]
-      (if-not (.find matcher cursor)
+    (let [matcher (volatile! (regex-matcher control-directive-pattern sql))]
+      (if-not (regex-find @matcher cursor)
         (throw (ex-info "Unterminated conditional block."
                         {:sql sql
                          :start if-start}))
-        (let [{:keys [directive start end arg1 arg4]} (parse-control-directive matcher)]
+        (let [{:keys [directive start end arg1 arg4]} (parse-control-directive @matcher)]
           (cond
             (> depth 1)
             (recur end
@@ -643,12 +693,12 @@
   [sql for-start for-end item-name collection-name]
   (loop [cursor for-end
          depth 1]
-    (let [matcher (regex-matcher control-directive-pattern sql)]
-      (if-not (.find matcher cursor)
+    (let [matcher (volatile! (regex-matcher control-directive-pattern sql))]
+      (if-not (regex-find @matcher cursor)
         (throw (ex-info "Unterminated for block."
                         {:sql sql
                          :start for-start}))
-        (let [{:keys [directive start end]} (parse-control-directive matcher)]
+        (let [{:keys [directive start end]} (parse-control-directive @matcher)]
           (cond
             (= directive "for")
             (if (= depth 1)
@@ -673,17 +723,17 @@
 
 (defn- parse-template-nodes
   [segment]
-  (let [matcher (regex-matcher #"/\*%(if|for)\s+([A-Za-z0-9\-\.]+)(?:\s+in\s+([A-Za-z0-9\-\.]+)(?:\s+separating\s+(.+?))?)?\s*\*/" segment)]
+  (let [matcher (volatile! (regex-matcher #"/\*%(if|for)\s+([A-Za-z0-9\-\.]+)(?:\s+in\s+([A-Za-z0-9\-\.]+)(?:\s+separating\s+(.+?))?)?\s*\*/" segment))]
     (loop [cursor 0
            nodes []]
-      (if-not (.find matcher cursor)
+      (if-not (regex-find @matcher cursor)
         (into nodes (parse-variable-nodes (subs segment cursor)))
-        (let [directive (.group matcher 1)
-              arg1 (.group matcher 2)
-              arg2 (.group matcher 3)
-              arg3 (.group matcher 4)
-              block-start (.start matcher)
-              block-end (.end matcher)
+        (let [directive (regex-group @matcher 1)
+              arg1 (regex-group @matcher 2)
+              arg2 (regex-group @matcher 3)
+              arg3 (regex-group @matcher 4)
+              block-start (regex-start @matcher)
+              block-end (regex-end @matcher)
               nodes (into nodes (parse-variable-nodes (subs segment cursor block-start)))]
           (if (= directive "if")
             (let [{:keys [branches end]}
@@ -765,19 +815,19 @@
 
 (defn- parse-variable-nodes
   [sql]
-  (let [matcher (regex-matcher #"/\*([\$\^\!])([A-Za-z0-9\-\.]+)\*/" sql)
+  (let [matcher (volatile! (regex-matcher #"/\*([\$\^\!])([A-Za-z0-9\-\.]+)\*/" sql))
         length (count sql)]
     (loop [cursor 0
            nodes []]
-      (if-not (.find matcher cursor)
+      (if-not (regex-find @matcher cursor)
         (cond-> nodes
           (< cursor length)
           (conj {:op :text
                  :sql (subs sql cursor)}))
-        (let [start (.start matcher)
-              end (.end matcher)
-              sigil (.group matcher 1)
-              parameter-name (.group matcher 2)
+        (let [start (regex-start @matcher)
+              end (regex-end @matcher)
+              sigil (regex-group @matcher 1)
+              parameter-name (regex-group @matcher 2)
               sample-start end
               nodes (cond-> nodes
                       (< cursor start)
