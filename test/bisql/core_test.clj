@@ -22,6 +22,7 @@
     (is (fn? bisql/load-queries))
     (is (fn? bisql/analyze-template))
     (is (fn? bisql/parse-template))
+    (is (fn? bisql/renderer-plan))
     (is (fn? bisql/emit-ir-form))
     (is (fn? bisql/compile-ir))
     (is (fn? bisql/evaluate-ir))
@@ -217,6 +218,16 @@
     (is (str/includes? emitted-str "StringBuilder"))
     (is (not (str/includes? emitted-str "compiled-nodes#")))
     (is (not (str/includes? emitted-str "loop")))))
+
+(deftest renderer-plan-builds-execution-oriented-steps
+  (let [plan (bisql/renderer-plan
+              (bisql/parse-template "SELECT * FROM users WHERE id = /*$id*/1"))]
+    (is (= :renderer-plan (:op plan)))
+    (is (= :select (:statement-kind plan)))
+    (is (= [:append-text :append-variable]
+           (mapv :op (:steps plan))))
+    (is (= "id"
+           (-> plan :steps second :parameter-name)))))
 
 (deftest parse-template-annotates-variable-contexts
   (let [ir (bisql/parse-template

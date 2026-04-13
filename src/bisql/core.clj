@@ -16,6 +16,9 @@
 (def parse-template
   query/parse-template)
 
+(def renderer-plan
+  query/renderer-plan)
+
 (def emit-ir-form
   query/emit-ir-form)
 
