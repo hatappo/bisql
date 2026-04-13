@@ -23,7 +23,7 @@ SELECT * FROM users WHERE id = ?
 {:params [42]}
 ```
 
-`/*$ */` comments become bind variables. If an adjacent sample value is present, as in `1` here, it is removed from the rendered SQL.
+`/*$ */` comments become bind variables. The sample value must be written immediately after the comment, as in `/*$id*/1`.
 
 ### 1-2: literal values 
 
@@ -57,7 +57,7 @@ SELECT * FROM users WHERE type = 'BOOK'
 
 2. Input SQL:
 ```sql
-SELECT * FROM users ORDER BY /*!order-by*/id
+SELECT * FROM users ORDER BY /*!order-by*/column_name
 ```
 
 3. Output SQL and Params:
@@ -287,7 +287,7 @@ status = 'pending'
 UPDATE users
 SET
 /*%for item in items separating , */
-  /*!item.name*/ = /*$item.value*/'sample'
+  /*!item.name*/column_name = /*$item.value*/'sample'
 /*%end */
 WHERE id = /*$id*/1
 ```
@@ -419,4 +419,4 @@ SELECT * FROM users WHERE id = /*$id*/1
 
 ## Notes
 
-- The sample code assumes `(require '[bisql.query :as bisql])`.
+- The sample code assumes `(require '[bisql.core :as bisql])`.

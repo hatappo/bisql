@@ -260,7 +260,7 @@ WHERE 1 = 1
 UPDATE users
 SET
 /*%for item in items separating , */
-  /*!item.name*/ = /*$item.value*/'sample'
+  /*!item.name*/column_name = /*$item.value*/'sample'
 /*%end */
 WHERE id = /*$id*/1
 ```
@@ -376,7 +376,7 @@ SELECT *
 FROM users
 WHERE
 /*%for item in filters separating AND */
-  /*!item.column*/ = /*$item.value*/'sample'
+  /*!item.column*/column_name = /*$item.value*/'sample'
 /*%end */
 ```
 
@@ -386,7 +386,7 @@ WHERE
 UPDATE users
 SET
 /*%for item in items separating , */
-  /*!item.name*/ = /*$item.value*/'sample'
+  /*!item.name*/column_name = /*$item.value*/'sample'
 /*%end */
 WHERE id = /*$id*/1
 ```
@@ -396,7 +396,7 @@ WHERE id = /*$id*/1
 ```sql
 INSERT INTO users (
 /*%for column in columns separating , */
-  /*!column.name*/
+  /*!column.name*/column_name
 /*%end */
 ) VALUES (
 /*%for column in columns separating , */
@@ -478,11 +478,12 @@ WHERE type = 'BOOK'
 Injects raw SQL fragments as an explicit escape hatch.
 
 ```sql
-ORDER BY /*!order-by*/id DESC
+ORDER BY /*!order-by*/column_name DESC
 ```
 
 ### Policy
 
+- `/*!name*/` also requires an adjacent sample token, just like `/*$name*/` and `/*^name*/`
 - Safety is intentionally delegated to the developer using it
 - `/*!name*/` is not safe by default
 - Prefer `/*$name*/` or `/*^name*/` unless raw SQL injection is truly required
@@ -587,31 +588,84 @@ Renders template SQL into:
 The initial compiler foundation also exposes:
 
 ```clojure
-(parse-template "SELECT * FROM users WHERE id = /*$id*/1")
-(emit-ir-form ir)
-(compile-ir ir)
-(evaluate-ir ir {:id 1})
+(def parsed-template
+  (parse-template "SELECT * FROM users WHERE id = /*$id*/1"))
+(renderer-plan parsed-template)
+(emit-renderer-form parsed-template)
+(compile-renderer parsed-template)
+(evaluate-renderer parsed-template {:id 1})
 ```
 
 `parse-template` converts a declaration-free SQL template string into an
-intermediate representation. `emit-ir-form` emits a reusable renderer function
-form from that IR. `compile-ir` compiles the IR into a reusable renderer
-function at runtime. `evaluate-ir` evaluates the IR directly and returns the
-same rendered SQL shape as the internal renderer step:
+parsed template. `renderer-plan` converts that parsed template into an
+execution-oriented plan. `emit-renderer-form` emits a reusable renderer
+function form from that plan. `compile-renderer` compiles the parsed template
+into a reusable renderer function at runtime. `evaluate-renderer` evaluates the
+parsed template directly and returns the same rendered SQL shape as the
+internal renderer step:
 
 ```clojure
 {:sql "SELECT * FROM users WHERE id = ?"
  :bind-params [1]}
 ```
 
-This IR layer is intended to be the foundation for future compiled renderers.
-The initial IR also annotates nodes with statement kind (`:select`, `:insert`,
-`:update`, `:delete`) and clause-level context such as `:where`, `:having`,
-`:set`, `:values`, `:limit`, and `:offset`.
+The parsed-template layer is the parser output. It annotates nodes with
+statement kind (`:select`, `:insert`, `:update`, `:delete`) and clause-level
+context such as `:where`, `:having`, `:set`, `:values`, `:limit`, and
+`:offset`. The renderer-plan layer is the execution-oriented intermediate form
+used by later code generation and by the interpreter-backed renderer path.
 
-The current primary path is `emit-ir-form`: `defrender` and `defquery` embed
-the emitted renderer form at macro expansion time, while `compile-ir` remains
-as a thin runtime convenience wrapper around `eval`.
+`renderer-plan` currently has this stable shape:
+
+```clojure
+{:op :renderer-plan
+ :statement-kind :select
+ :steps [...]}
+```
+
+The top-level `:steps` vector contains execution-oriented step maps. The
+current step kinds are:
+
+- `:append-text`
+- `:append-variable`
+- `:branch`
+- `:for-each`
+
+`:append-text` carries `:sql`, `:context`, and `:statement-kind`.
+`:append-variable` carries `:sigil`, `:parameter-name`, `:collection?`,
+`:context`, and `:statement-kind`.
+
+`:branch` carries `:branches`, where each branch has:
+
+```clojure
+{:expr "active" ;; or nil for else
+ :steps [...]}
+```
+
+`:for-each` carries the loop contract:
+
+```clojure
+{:op :for-each
+ :item-name "item"
+ :collection-name "items"
+ :separator ","
+ :context :set
+ :statement-kind :update
+ :steps [...]}
+```
+
+The exact emitted Clojure form is an implementation detail, but the
+`parsed-template -> renderer-plan -> renderer-form` layering is now the
+intended compiler boundary.
+
+On CLJ, `compile-renderer` still compiles the emitted renderer form with
+`eval`. On CLJS, `compile-renderer` uses the same `renderer-plan` as the input
+to a small interpreter and returns a reusable renderer function backed by that
+interpreter.
+
+The current primary path is `emit-renderer-form`: `defrender` and `defquery`
+embed the emitted renderer form at macro expansion time, while
+`compile-renderer` remains as a thin runtime convenience wrapper around `eval`.
 
 ## 6.3 Function Definition
 

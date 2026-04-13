@@ -1,1 +1,1 @@
-SELECT * FROM users ORDER BY /*!order-by*/id
+SELECT * FROM users ORDER BY /*!order-by*/column_name

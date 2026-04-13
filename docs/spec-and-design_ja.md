@@ -267,7 +267,7 @@ WHERE 1 = 1
 UPDATE users
 SET
 /*%for item in items separating , */
-  /*!item.name*/ = /*$item.value*/'sample'
+  /*!item.name*/column_name = /*$item.value*/'sample'
 /*%end */
 WHERE id = /*$id*/1
 ```
@@ -383,7 +383,7 @@ SELECT *
 FROM users
 WHERE
 /*%for item in filters separating AND */
-  /*!item.column*/ = /*$item.value*/'sample'
+  /*!item.column*/column_name = /*$item.value*/'sample'
 /*%end */
 ```
 
@@ -393,7 +393,7 @@ WHERE
 UPDATE users
 SET
 /*%for item in items separating , */
-  /*!item.name*/ = /*$item.value*/'sample'
+  /*!item.name*/column_name = /*$item.value*/'sample'
 /*%end */
 WHERE id = /*$id*/1
 ```
@@ -403,7 +403,7 @@ WHERE id = /*$id*/1
 ```sql
 INSERT INTO users (
 /*%for column in columns separating , */
-  /*!column.name*/
+  /*!column.name*/column_name
 /*%end */
 ) VALUES (
 /*%for column in columns separating , */
@@ -486,11 +486,12 @@ WHERE type = 'BOOK'
 明示的なエスケープハッチとして、生の SQL 断片を注入する。
 
 ```sql
-ORDER BY /*!order-by*/id DESC
+ORDER BY /*!order-by*/column_name DESC
 ```
 
 ### 方針
 
+- `/*!name*/` も `/*$name*/` や `/*^name*/` と同様に、直後にサンプルトークンが必要
 - 安全性は意図的に、それを使う開発者に委ねる
 - `/*!name*/` はデフォルトで安全な機能ではない
 - 生 SQL の注入が本当に必要な場合を除き、`/*$name*/` または `/*^name*/` を優先する
@@ -596,30 +597,83 @@ classpath 上の `sql/...` から SQL ファイルを読み込み、パース済
 コンパイラ実装の土台として、次も公開する:
 
 ```clojure
-(parse-template "SELECT * FROM users WHERE id = /*$id*/1")
-(emit-ir-form ir)
-(compile-ir ir)
-(evaluate-ir ir {:id 1})
+(def parsed-template
+  (parse-template "SELECT * FROM users WHERE id = /*$id*/1"))
+(renderer-plan parsed-template)
+(emit-renderer-form parsed-template)
+(compile-renderer parsed-template)
+(evaluate-renderer parsed-template {:id 1})
 ```
 
-`parse-template` は declaration を除いた SQL template 文字列を中間表現へ変換する。
-`emit-ir-form` はその IR から再利用可能な renderer 関数 form を生成する。
-`compile-ir` はその IR を実行時に再利用可能な renderer 関数へコンパイルする。
-`evaluate-ir` はその IR を直接評価し、内部 renderer 段階と同じ形を返す:
+`parse-template` は declaration を除いた SQL template 文字列を parsed-template
+へ変換する。`renderer-plan` はその parsed-template を実行寄りの plan へ変換する。
+`emit-renderer-form` はその plan から再利用可能な renderer 関数 form を生成する。
+`compile-renderer` は parsed-template を実行時に再利用可能な renderer 関数へ
+コンパイルする。`evaluate-renderer` は parsed-template を直接評価し、内部
+renderer 段階と同じ形を返す:
 
 ```clojure
 {:sql "SELECT * FROM users WHERE id = ?"
  :bind-params [1]}
 ```
 
-この IR 層は、将来の compiled renderer の土台として位置づける。
-初期 IR は、statement kind (`:select`, `:insert`, `:update`, `:delete`) と、
-` :where`, `:having`, `:set`, `:values`, `:limit`, `:offset`
-のような clause 単位の文脈も node に注釈する。
+parsed-template 層は parser の出力であり、statement kind (`:select`,
+`:insert`, `:update`, `:delete`) と、`:where`, `:having`, `:set`, `:values`,
+`:limit`, `:offset` のような clause 単位の文脈も node に注釈する。
+renderer-plan 層は、その後段の code generation と interpreter ベースの
+renderer 経路のための実行寄り中間表現である。
 
-現在の主経路は `emit-ir-form` である。`defrender` と `defquery` は、
-マクロ展開時に emitted renderer form をそのまま埋め込み、`compile-ir` は
-`eval` を使う実行時向けの薄い convenience wrapper として残している。
+現在の `renderer-plan` は、次の形を安定契約として持つ:
+
+```clojure
+{:op :renderer-plan
+ :statement-kind :select
+ :steps [...]}
+```
+
+top-level の `:steps` ベクタは、実行寄りの step map を並べたものになる。
+現在の step 種別は次の4つである:
+
+- `:append-text`
+- `:append-variable`
+- `:branch`
+- `:for-each`
+
+`:append-text` は `:sql`, `:context`, `:statement-kind` を持つ。
+`:append-variable` は `:sigil`, `:parameter-name`, `:collection?`, `:context`,
+`:statement-kind` を持つ。
+
+`:branch` は `:branches` を持ち、各 branch は次の形になる:
+
+```clojure
+{:expr "active" ;; else は nil
+ :steps [...]}
+```
+
+`:for-each` は loop 契約として次の形を持つ:
+
+```clojure
+{:op :for-each
+ :item-name "item"
+ :collection-name "items"
+ :separator ","
+ :context :set
+ :statement-kind :update
+ :steps [...]}
+```
+
+emitted Clojure form の正確な形自体は implementation detail だが、
+`parsed-template -> renderer-plan -> renderer-form` という層分離は、
+今後の compiler 境界として固定していく。
+
+CLJ では、`compile-renderer` は引き続き emitted renderer form を `eval` して
+関数化する。CLJS では、同じ `renderer-plan` を小さな interpreter へ入力し、
+その interpreter を背後に持つ再利用可能 renderer 関数を返す。
+
+現在の主経路は `emit-renderer-form` である。`defrender` と `defquery` は、
+マクロ展開時に emitted renderer form をそのまま埋め込み、
+`compile-renderer` は `eval` を使う実行時向けの薄い convenience wrapper
+として残している。
 
 ## 6.3 関数定義
 

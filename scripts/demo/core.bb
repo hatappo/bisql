@@ -19,7 +19,7 @@
 (example
  "1-1: bind values"
  (render "demo-variables-bind.sql" {:id 42})
- "`/*$ */` comments become bind variables. If an adjacent sample value is present, as in `1` here, it is removed from the rendered SQL.")
+ "`/*$ */` comments become bind variables. The sample value must be written immediately after the comment, as in `/*$id*/1`.")
 
 (example
  "1-2: literal values"

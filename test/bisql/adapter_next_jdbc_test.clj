@@ -3,7 +3,10 @@
             [bisql.core :as bisql]
             [clojure.test :refer [deftest is]]
             [next.jdbc :as jdbc]
-            [next.jdbc.result-set :as rs]))
+            [next.jdbc.result-set :as rs])
+  (:import [java.sql Time Timestamp]
+           [java.time Instant LocalDate LocalTime OffsetDateTime]
+           [java.util Date]))
 
 (adapter/defquery "/sql/adapter/postgresql/public/users/crud.sql")
 (bisql/defquery "/sql/adapter/example-declarations-valid.sql")
@@ -97,3 +100,23 @@
       (is (= {:statement ["SELECT * FROM users WHERE id = ?" 42]
               :options {:builder-fn rs/as-unqualified-kebab-maps}}
              @captured)))))
+
+(deftest timestamp-conversion-helper-supports-common-jvm-types
+  (let [legacy-date (Date. 1713052800000)
+        instant (Instant/parse "2026-04-14T00:00:00Z")
+        offset-datetime (OffsetDateTime/parse "2026-04-14T00:00:00Z")]
+    (is (instance? Timestamp (adapter/->timestamp legacy-date)))
+    (is (instance? Timestamp (adapter/->timestamp instant)))
+    (is (instance? Timestamp (adapter/->timestamp offset-datetime)))))
+
+(deftest date-conversion-helper-supports-common-jvm-types
+  (let [legacy-date (Date. 1713052800000)
+        local-date (LocalDate/parse "2026-04-14")]
+    (is (instance? java.sql.Date (adapter/->date legacy-date)))
+    (is (instance? java.sql.Date (adapter/->date local-date)))))
+
+(deftest time-conversion-helper-supports-common-jvm-types
+  (let [legacy-date (Date. 1713052800000)
+        local-time (LocalTime/parse "12:34:56")]
+    (is (instance? Time (adapter/->time legacy-date)))
+    (is (instance? Time (adapter/->time local-time)))))

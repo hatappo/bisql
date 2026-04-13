@@ -16,14 +16,20 @@
 (def parse-template
   query/parse-template)
 
-(def emit-ir-form
-  query/emit-ir-form)
+(def renderer-plan
+  query/renderer-plan)
 
-(def compile-ir
-  query/compile-ir)
+(def evaluate-renderer-plan
+  query/evaluate-renderer-plan)
 
-(def evaluate-ir
-  query/evaluate-ir)
+(def emit-renderer-form
+  query/emit-renderer-form)
+
+(def compile-renderer
+  query/compile-renderer)
+
+(def evaluate-renderer
+  query/evaluate-renderer)
 
 (def render-compiled-query
   query/render-compiled-query)
@@ -59,9 +65,9 @@
    (let [ns-sym (ns-name *ns*)
          entries (define/definition-entries ns-sym nil)]
      (define/ensure-unique-var-names! entries)
-     `(do ~@(mapv (fn [{:keys [template ir target-ns var-name]}]
+     `(do ~@(mapv (fn [{:keys [template parsed-template target-ns var-name]}]
                     (let [template-data (list 'quote template)
-                          renderer-form (query/emit-ir-form ir)
+                          renderer-form (query/emit-renderer-form parsed-template)
                           metadata-data (list 'quote (define/render-function-metadata template))]
                       `(let [renderer# ~renderer-form]
                          (define/define-function-var!
@@ -83,9 +89,9 @@
    (let [ns-sym (ns-name *ns*)
          entries (define/definition-entries ns-sym path)]
      (define/ensure-unique-var-names! entries)
-     `(do ~@(mapv (fn [{:keys [template ir target-ns var-name]}]
+     `(do ~@(mapv (fn [{:keys [template parsed-template target-ns var-name]}]
                     (let [template-data (list 'quote template)
-                          renderer-form (query/emit-ir-form ir)
+                          renderer-form (query/emit-renderer-form parsed-template)
                           metadata-data (list 'quote (define/render-function-metadata template))]
                       `(let [renderer# ~renderer-form]
                          (define/define-function-var!
