@@ -111,4 +111,4 @@
 
 (println "## Notes
 
-- The sample code assumes `(require '[bisql.query :as bisql])`.")
+- The sample code assumes `(require '[bisql.core :as bisql])`.")
