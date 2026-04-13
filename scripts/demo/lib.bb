@@ -56,6 +56,13 @@
   (println "```")
   (println))
 
+(defn output-summary
+  [result]
+  (cond-> {}
+    (contains? result :params) (assoc :params (:params result))
+    (and (contains? result :meta)
+         (seq (:meta result))) (assoc :meta (:meta result))))
+
 (defn print-description
   [description]
   (when (some? description)
@@ -73,8 +80,12 @@
   (println "3. Output SQL and Params:")
   (when-let [lines (seq (rendered-sql-lines result))]
     (print-anonymous-code-block "sql" lines))
-  (when (contains? result :params)
-    (print-anonymous-code-block "clj" [(pr-str (:params result))]))
+  (let [summary (output-summary result)]
+    (when (seq summary)
+      (print-anonymous-code-block "clj"
+                                  (str/split-lines
+                                   (with-out-str
+                                     (pprint/pprint summary))))))
   (print-description description))
 
 (defn error-output-lines

@@ -18,7 +18,7 @@ SELECT * FROM users WHERE id = ?
 ```
 
 ```clj
-[42]
+{:params [42]}
 ```
 
 
@@ -40,7 +40,7 @@ SELECT * FROM users WHERE type = 'BOOK'
 ```
 
 ```clj
-[]
+{:params []}
 ```
 
 
@@ -62,7 +62,7 @@ SELECT * FROM users ORDER BY created_at DESC
 ```
 
 ```clj
-[]
+{:params []}
 ```
 
 
@@ -86,7 +86,7 @@ VALUES (?, DEFAULT)
 ```
 
 ```clj
-["alice@example.com"]
+{:params ["alice@example.com"]}
 ```
 
 
@@ -108,7 +108,7 @@ SELECT ALL * FROM users
 ```
 
 ```clj
-[]
+{:params []}
 ```
 
 
@@ -130,7 +130,7 @@ SELECT * FROM users  WHERE id = ?
 ```
 
 ```clj
-[42]
+{:params [42]}
 ```
 
 
@@ -158,7 +158,7 @@ FROM users
 ```
 
 ```clj
-[]
+{:params []}
 ```
 
 
@@ -189,7 +189,7 @@ status = ?
 ```
 
 ```clj
-["active"]
+{:params ["active"]}
 ```
 
 
@@ -219,7 +219,7 @@ GROUP BY status
 ```
 
 ```clj
-[]
+{:params []}
 ```
 
 
@@ -250,7 +250,7 @@ status = 'inactive'
 ```
 
 ```clj
-[]
+{:params []}
 ```
 
 
@@ -284,7 +284,7 @@ WHERE
 ```
 
 ```clj
-[]
+{:params []}
 ```
 
 
@@ -316,7 +316,7 @@ status = 'pending'
 ```
 
 ```clj
-[]
+{:params []}
 ```
 
 
@@ -347,7 +347,7 @@ WHERE id = ?
 ```
 
 ```clj
-["Alice" "active" 42]
+{:params ["Alice" "active" 42]}
 ```
 
 
@@ -376,7 +376,9 @@ SELECT * FROM users WHERE id = ?
 ```
 
 ```clj
-[42]
+{:params [42],
+ :meta
+ {:doc "Loads a user by id.", :tags [:example :user], :returns :one}}
 ```
 
 
@@ -399,7 +401,7 @@ SELECT * FROM users WHERE id = ?
 ```
 
 ```clj
-[42]
+{:params [42], :meta {:name find-user-by-id}}
 ```
 
 
@@ -422,7 +424,7 @@ SELECT * FROM users WHERE email = ?
 ```
 
 ```clj
-["user@example.com"]
+{:params ["user@example.com"], :meta {:name find-user-by-email}}
 ```
 
 
@@ -444,7 +446,7 @@ SELECT * FROM users WHERE id = ?
 ```
 
 ```clj
-[42]
+{:params [42]}
 ```
 
 
@@ -466,7 +468,7 @@ SELECT * FROM users WHERE id = ?
 ```
 
 ```clj
-[42]
+{:params [42]}
 ```
 
 
