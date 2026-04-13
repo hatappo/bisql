@@ -66,10 +66,8 @@
 (defn print-description
   [description]
   (when (some? description)
-    (println)
     (doseq [line (str/split-lines (str description))]
-      (println line))
-    (println)))
+      (println line))))
 
 (defn show-example
   [title form result description]

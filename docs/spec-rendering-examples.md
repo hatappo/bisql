@@ -1,6 +1,8 @@
 # Rendering Examples
 
-### Variables 1. bind values 
+## 1. Variables
+
+### 1-1: bind values 
 
 1. Input Form:
 ```clj
@@ -21,8 +23,9 @@ SELECT * FROM users WHERE id = ?
 {:params [42]}
 ```
 
+`/*$ */` comments become bind variables. If an adjacent sample value is present, as in `1` here, it is removed from the rendered SQL.
 
-### Variables 2. literal values 
+### 1-2: literal values 
 
 1. Input Form:
 ```clj
@@ -43,8 +46,9 @@ SELECT * FROM users WHERE type = 'BOOK'
 {:params []}
 ```
 
+`^` is rendered as a SQL literal. Strings are quoted with `'`.
 
-### Variables 3. raw values 
+### 1-3: raw values 
 
 1. Input Form:
 ```clj
@@ -65,8 +69,9 @@ SELECT * FROM users ORDER BY created_at DESC
 {:params []}
 ```
 
+`!` is inserted into SQL as-is. It is useful for cases like `ORDER BY`, but it must not be fed directly from user input.
 
-### Variables 4. default bind value 
+### 1-4: default bind value 
 
 1. Input Form:
 ```clj
@@ -89,30 +94,38 @@ VALUES (?, DEFAULT)
 {:params ["alice@example.com"]}
 ```
 
+`bisql/default` is rendered as the SQL keyword `DEFAULT` instead of a bind parameter. This is useful in `VALUES` clauses.
 
-### Variables 5. ALL bind value 
+### 1-5: ALL bind value 
 
 1. Input Form:
 ```clj
-(render "demo-variables-all.sql" {:set-quantifier bisql/ALL})
+(render "demo-variables-all.sql" {:limit bisql/ALL})
 ```
 
 2. Input SQL:
 ```sql
-SELECT /*$set-quantifier*/DISTINCT * FROM users
+SELECT *
+FROM users
+LIMIT /*$limit*/10
 ```
 
 3. Output SQL and Params:
 ```sql
-SELECT ALL * FROM users
+SELECT *
+FROM users
+LIMIT ALL
 ```
 
 ```clj
 {:params []}
 ```
 
+`bisql/ALL` is rendered as the SQL keyword `ALL` instead of a bind parameter. This is useful in clauses such as `LIMIT ALL`.
 
-### Control flow 1. if 
+## 2. Control flow
+
+### 2-1: if 
 
 1. Input Form:
 ```clj
@@ -134,7 +147,7 @@ SELECT * FROM users  WHERE id = ?
 ```
 
 
-### Control flow 2. remove WHERE for falsy if 
+### 2-2: remove WHERE for falsy if 
 
 1. Input Form:
 ```clj
@@ -161,8 +174,9 @@ FROM users
 {:params []}
 ```
 
+When the condition is false, the preceding `WHERE` or `HAVING` keyword is removed automatically.
 
-### Control flow 3. remove following AND for falsy if 
+### 2-3: remove following AND for falsy if 
 
 1. Input Form:
 ```clj
@@ -192,69 +206,9 @@ status = ?
 {:params ["active"]}
 ```
 
+When the condition is false, a following `AND` is removed automatically. In this case, the preceding `WHERE` or `HAVING` remains in place.
 
-### Control flow 4. remove HAVING for falsy if 
-
-1. Input Form:
-```clj
-(render "demo-if-having.sql" {:min-count nil})
-```
-
-2. Input SQL:
-```sql
-SELECT status, count(*)
-FROM users
-GROUP BY status
-HAVING
-/*%if min-count */
-  count(*) >= /*$min-count*/1
-/*%end */
-```
-
-3. Output SQL and Params:
-```sql
-SELECT status, count(*)
-FROM users
-GROUP BY status
-```
-
-```clj
-{:params []}
-```
-
-
-### Control flow 5. inline else 
-
-1. Input Form:
-```clj
-(render "demo-if-inline-else.sql" {:active false})
-```
-
-2. Input SQL:
-```sql
-SELECT *
-FROM users
-WHERE
-/*%if active */
-  active = true
-/*%else => status = 'inactive' */
-/*%end */
-```
-
-3. Output SQL and Params:
-```sql
-SELECT *
-FROM users
-WHERE
-status = 'inactive'
-```
-
-```clj
-{:params []}
-```
-
-
-### Control flow 6. elseif and else 
+### 2-4: elseif and else 
 
 1. Input Form:
 ```clj
@@ -288,7 +242,7 @@ WHERE
 ```
 
 
-### Control flow 7. inline elseif and else 
+### 2-5: inline elseif and else 
 
 1. Input Form:
 ```clj
@@ -319,8 +273,9 @@ status = 'pending'
 {:params []}
 ```
 
+`else` and `elseif` bodies can also be written inline inside the directive comment by using `=>`. This keeps the template closer to executable SQL.
 
-### Control flow 8. for 
+### 2-6: for 
 
 1. Input Form:
 ```clj
@@ -350,8 +305,11 @@ WHERE id = ?
 {:params ["Alice" "active" 42]}
 ```
 
+`for` loops can declare a separator with `separating`. This is useful when joining an arbitrary number of fragments with `,`, `AND`, or `OR`.
 
-### Declarations 
+## 3. Declarations
+
+### 3-1: docstring and metadata 
 
 1. Input Form:
 ```clj
@@ -364,7 +322,7 @@ WHERE id = ?
 Loads a user by id.
 */
 /*:tags [:example :user] */
-/*:returns :one */
+/*:category :lookup */
 /* This is a normal comment */
 SELECT * FROM users WHERE id = /*$id*/1
 ```
@@ -378,15 +336,17 @@ SELECT * FROM users WHERE id = ?
 ```clj
 {:params [42],
  :meta
- {:doc "Loads a user by id.", :tags [:example :user], :returns :one}}
+ {:doc "Loads a user by id.",
+  :tags [:example :user],
+  :category :lookup}}
 ```
 
 
-### Declarations 2. multiple templates 1 
+### 3-2: multiple SQL templates in one file 
 
 1. Input Form:
 ```clj
-(render (get (load-queries "demo-multi-queries.sql") "core.find-user-by-id") {:id 42})
+(render (get (bisql/load-queries "demo-multi-queries.sql") "core.find-user-by-id") {:id 42})
 ```
 
 2. Input SQL:
@@ -404,53 +364,11 @@ SELECT * FROM users WHERE id = ?
 {:params [42], :meta {:name find-user-by-id}}
 ```
 
+A single SQL file can contain multiple templates. Each template starts with a `/*:name */` directive that defines the generated function name.
 
-### Declarations 3. multiple templates 2 
+## 4. Others
 
-1. Input Form:
-```clj
-(render (get (load-queries "demo-multi-queries.sql") "core.find-user-by-email") {:email "user@example.com"})
-```
-
-2. Input SQL:
-```sql
-/*:name find-user-by-email */
-SELECT * FROM users WHERE email = /*$email*/'user@example.com'
-```
-
-3. Output SQL and Params:
-```sql
-SELECT * FROM users WHERE email = ?
-```
-
-```clj
-{:params ["user@example.com"], :meta {:name find-user-by-email}}
-```
-
-
-### Load query from custom path 
-
-1. Input Form:
-```clj
-(render "demo-custom-path.sql" {:base-path "demo"} {:id 42})
-```
-
-2. Input SQL:
-```sql
-SELECT * FROM users WHERE id = /*$id*/1
-```
-
-3. Output SQL and Params:
-```sql
-SELECT * FROM users WHERE id = ?
-```
-
-```clj
-{:params [42]}
-```
-
-
-### Render query by passing SQL template directly 
+### 4-1: render query by passing a SQL template directly 
 
 1. Input Form:
 ```clj
@@ -471,8 +389,9 @@ SELECT * FROM users WHERE id = ?
 {:params [42]}
 ```
 
+You can also pass a SQL template directly from Clojure code. This is useful for debugging or learning, but application queries should generally live in SQL files.
 
-### Errors 1. missing bind parameter 
+### 4-2: Errors: missing bind parameter 
 
 1. Input Form:
 ```clj
@@ -498,3 +417,6 @@ SELECT * FROM users WHERE id = /*$id*/1
   :collection? false}}
 ```
 
+## Notes
+
+- The sample code assumes `(require '[bisql.query :as bisql])`.

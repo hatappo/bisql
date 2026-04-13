@@ -1,1 +1,3 @@
-SELECT /*$set-quantifier*/DISTINCT * FROM users
+SELECT *
+FROM users
+LIMIT /*$limit*/10
