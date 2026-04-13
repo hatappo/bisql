@@ -321,7 +321,7 @@
   [template-params parameter-name]
   (let [value (resolved-parameter-value template-params parameter-name)]
     (when (= value missing)
-      (throw (ex-info "Missing query parameter."
+      (throw (ex-info (str "Missing query parameter: " parameter-name)
                       {:parameter (parameter-key parameter-name)})))
     value))
 

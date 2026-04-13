@@ -386,6 +386,29 @@
     (is (= "SELECT * FROM users ORDER BY /*!order-by*/ column_name" (:sql result)))
     (is (= [] (:params result)))))
 
+(deftest render-query-reports-missing-query-parameter-name
+  (let [error (try
+                (bisql/render-query
+                 {:sql-template "SELECT * FROM users WHERE id = /*$id*/1"}
+                 {})
+                nil
+                (catch clojure.lang.ExceptionInfo ex
+                  ex))]
+    (is (= "Missing query parameter: id" (ex-message error)))
+    (is (= :id (:parameter (ex-data error))))))
+
+(deftest render-query-reports-missing-nested-query-parameter-name
+  (let [error (try
+                (bisql/render-query
+                 {:sql-template "SELECT * FROM users WHERE status = /*$filter.status*/'active'"}
+                 {:filter {}}
+                 )
+                nil
+                (catch clojure.lang.ExceptionInfo ex
+                  ex))]
+    (is (= "Missing query parameter: filter.status" (ex-message error)))
+    (is (= :filter.status (:parameter (ex-data error))))))
+
 (deftest render-query-rejects-literal-strings-with-single-quotes
   (let [error (try
                 (bisql/render-query
