@@ -151,10 +151,10 @@ bind 値:
 
 ### `DEFAULT`
 
-scalar の bind 変数に `bisql/default` を渡した場合、`?` ではなく SQL の `DEFAULT` として出力される。
+scalar の bind 変数に `bisql/DEFAULT` を渡した場合、`?` ではなく SQL の `DEFAULT` として出力される。
 
 ```clojure
-{:status bisql/default}
+{:status bisql/DEFAULT}
 ```
 
 ```sql

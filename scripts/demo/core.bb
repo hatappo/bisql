@@ -35,8 +35,8 @@
  "1-4: default bind value"
  (render "demo-variables-default.sql"
          {:email "alice@example.com"
-          :status bisql/default})
- "`bisql/default` is rendered as the SQL keyword `DEFAULT` instead of a bind parameter. This is useful in `VALUES` clauses.")
+          :status bisql/DEFAULT})
+ "`bisql/DEFAULT` is rendered as the SQL keyword `DEFAULT` instead of a bind parameter. This is useful in `VALUES` clauses.")
 
 (example
  "1-5: ALL bind value"

@@ -145,10 +145,10 @@ binds:
 
 ### `DEFAULT`
 
-When a scalar bind variable receives `bisql/default`, it is rendered as SQL `DEFAULT` instead of `?`.
+When a scalar bind variable receives `bisql/DEFAULT`, it is rendered as SQL `DEFAULT` instead of `?`.
 
 ```clojure
-{:status bisql/default}
+{:status bisql/DEFAULT}
 ```
 
 ```sql

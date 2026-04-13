@@ -12,7 +12,7 @@
 (declare parse-variable-nodes)
 (declare postprocess-sql)
 
-(def default
+(def DEFAULT
   (Object.))
 
 (def ALL
@@ -484,7 +484,7 @@
 
 (defn- default-value?
   [value]
-  (identical? value default))
+  (identical? value DEFAULT))
 
 (defn- all-value?
   [value]
@@ -959,7 +959,7 @@
               "$"
               (if collection?
                 `(let [value# (~(var parameter-value) ~params-sym ~parameter-name)]
-                   (when (identical? value# default)
+                   (when (identical? value# DEFAULT)
                      (throw (ex-info "DEFAULT is not allowed in collection binding."
                                      {:parameter (~(var parameter-key) ~parameter-name)
                                       :value value#})))
@@ -971,7 +971,7 @@
                      (throw (ex-info "Collection binding requires a sequential value."
                                      {:parameter (~(var parameter-key) ~parameter-name)
                                       :value value#})))
-                   (when (some #(identical? % default) value#)
+                   (when (some #(identical? % DEFAULT) value#)
                      (throw (ex-info "DEFAULT is not allowed inside collection binding."
                                      {:parameter (~(var parameter-key) ~parameter-name)
                                       :value value#})))
@@ -989,7 +989,7 @@
                    false)
                 `(let [value# (~(var parameter-value) ~params-sym ~parameter-name)]
                    (cond
-                     (identical? value# default)
+                     (identical? value# DEFAULT)
                      (do
                        (.append ~out-sym "DEFAULT")
                        false)

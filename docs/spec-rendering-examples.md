@@ -75,7 +75,7 @@ SELECT * FROM users ORDER BY created_at DESC
 
 1. Input Form:
 ```clj
-(render "demo-variables-default.sql" {:email "alice@example.com", :status bisql/default})
+(render "demo-variables-default.sql" {:email "alice@example.com", :status bisql/DEFAULT})
 ```
 
 2. Input SQL:
@@ -94,7 +94,7 @@ VALUES (?, DEFAULT)
 {:params ["alice@example.com"]}
 ```
 
-`bisql/default` is rendered as the SQL keyword `DEFAULT` instead of a bind parameter. This is useful in `VALUES` clauses.
+`bisql/DEFAULT` is rendered as the SQL keyword `DEFAULT` instead of a bind parameter. This is useful in `VALUES` clauses.
 
 ### 1-5: ALL bind value 
 

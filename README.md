@@ -236,5 +236,5 @@ For local setup, tasks, and dev workflow, see:
 - Compile analyzed SQL templates into reusable renderer functions for lower runtime overhead.
   - Simplify emitted renderer forms further, especially around branch and loop body handling.
   - Reduce helper calls in emitted code where fragment normalization is still delegated.
-  - Restrict `bisql/default` to valid SQL value contexts if context-aware rendering becomes necessary.
+  - Restrict `bisql/DEFAULT` to valid SQL value contexts if context-aware rendering becomes necessary.
   - Detect dangerous `nil` comparisons consistently in `WHERE` / `HAVING` clauses instead of letting expressions such as `= NULL`, `LIKE NULL`, or `IN (NULL)` silently behave unexpectedly. This likely needs stricter SQL context parsing, because `= NULL` is dangerous in `WHERE` / `HAVING` but can still be valid assignment syntax in `SET`.

@@ -29,7 +29,7 @@
     (is (fn? bisql/render-query))
     (is (:macro (meta #'bisql/defrender)))
     (is (:macro (meta #'bisql/defquery)))
-    (is (some? bisql/default))
+    (is (some? bisql/DEFAULT))
     (is (some? bisql/ALL))
     (is (fn? bisql/generate-crud))
     (is (fn? bisql/render-crud-files))
@@ -284,7 +284,7 @@
   (let [result (bisql/render-query
                 {:sql-template "INSERT INTO users (email, status) VALUES (/*$email*/'a', /*$status*/'active')"}
                 {:email "alice@example.com"
-                 :status bisql/default})]
+                 :status bisql/DEFAULT})]
     (is (= "INSERT INTO users (email, status) VALUES (?, DEFAULT)" (:sql result)))
     (is (= ["alice@example.com"] (:params result)))))
 
@@ -362,7 +362,7 @@
   (let [error (try
                 (bisql/render-query
                  {:sql-template "SELECT * FROM users WHERE id IN /*$ids*/(1,2,3)"}
-                 {:ids [1 bisql/default 3]})
+                 {:ids [1 bisql/DEFAULT 3]})
                 nil
                 (catch clojure.lang.ExceptionInfo ex
                   ex))]
