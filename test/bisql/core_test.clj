@@ -23,6 +23,7 @@
     (is (fn? bisql/analyze-template))
     (is (fn? bisql/parse-template))
     (is (fn? bisql/renderer-plan))
+    (is (fn? bisql/evaluate-renderer-plan))
     (is (fn? bisql/emit-renderer-form))
     (is (fn? bisql/compile-renderer))
     (is (fn? bisql/evaluate-renderer))
@@ -187,6 +188,14 @@
         rendered (bisql/evaluate-renderer parsed-template {:id 42})
         result (bisql/render-query {:sql-template sql-template} {:id 42})]
     (is (= :template (:op parsed-template)))
+    (is (= (:sql result) (str/trim (:sql rendered))))
+    (is (= (:params result) (:bind-params rendered)))))
+
+(deftest evaluate-renderer-plan-matches-render-query-for-scalar-bind
+  (let [sql-template "SELECT * FROM users WHERE id = /*$id*/1"
+        plan (bisql/renderer-plan (bisql/parse-template sql-template))
+        rendered (bisql/evaluate-renderer-plan plan {:id 42})
+        result (bisql/render-query {:sql-template sql-template} {:id 42})]
     (is (= (:sql result) (str/trim (:sql rendered))))
     (is (= (:params result) (:bind-params rendered)))))
 
@@ -656,6 +665,20 @@
     (is (= (:sql result) (str/trim (:sql rendered))))
     (is (= (:params result) (:bind-params rendered)))))
 
+(deftest evaluate-renderer-plan-matches-render-query-for-if-blocks
+  (let [sql-template (str/join "\n"
+                               ["SELECT *"
+                                "FROM users"
+                                "WHERE 1 = 1"
+                                "/*%if name */"
+                                "  AND name = /*$name*/'foo'"
+                                "/*%end */"])
+        plan (bisql/renderer-plan (bisql/parse-template sql-template))
+        rendered (bisql/evaluate-renderer-plan plan {:name "Alice"})
+        result (bisql/render-query {:sql-template sql-template} {:name "Alice"})]
+    (is (= (:sql result) (str/trim (:sql rendered))))
+    (is (= (:params result) (:bind-params rendered)))))
+
 (deftest compile-renderer-matches-render-query-for-if-blocks
   (let [sql-template (str/join "\n"
                                ["SELECT *"
@@ -1084,6 +1107,25 @@
         rendered (bisql/evaluate-renderer parsed-template {:id 42
                                         :items [{:name "display_name" :value "Alice"}
                                                 {:name "status" :value "active"}]})
+        result (bisql/render-query {:sql-template sql-template}
+                                   {:id 42
+                                    :items [{:name "display_name" :value "Alice"}
+                                            {:name "status" :value "active"}]})]
+    (is (= (:sql result) (str/trim (:sql rendered))))
+    (is (= (:params result) (:bind-params rendered)))))
+
+(deftest evaluate-renderer-plan-matches-render-query-for-for-blocks
+  (let [sql-template (str/join "\n"
+                               ["UPDATE users"
+                                "SET"
+                                "/*%for item in items separating , */"
+                                "  /*!item.name*/ = /*$item.value*/'sample'"
+                                "/*%end */"
+                                "WHERE id = /*$id*/1"])
+        plan (bisql/renderer-plan (bisql/parse-template sql-template))
+        rendered (bisql/evaluate-renderer-plan plan {:id 42
+                                                     :items [{:name "display_name" :value "Alice"}
+                                                             {:name "status" :value "active"}]})
         result (bisql/render-query {:sql-template sql-template}
                                    {:id 42
                                     :items [{:name "display_name" :value "Alice"}

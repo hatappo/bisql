@@ -7,6 +7,7 @@
 (declare parse-template)
 (declare renderer-plan)
 (declare emit-renderer-form)
+(declare evaluate-renderer-plan)
 (declare parse-template-nodes)
 (declare parse-variable-nodes)
 (declare postprocess-sql)
@@ -433,31 +434,50 @@
     (subs s 1)
     s))
 
+(defn- remove-trailing-clause-keyword-from-sql
+  [sql]
+  (or (some->> sql
+               (re-matches #"(?s)(.*(?:^|\n))[ \t]*(WHERE|HAVING)[ \t\r\n]*$")
+               second)
+      (some->> sql
+               (re-matches #"(?s)(.*?)(?:WHERE|HAVING)[ \t\r\n]*$")
+               second)
+      sql))
+
+(defn- normalize-sql-for-context
+  [current-sql fragment-sql]
+  (if (and (seq current-sql)
+           (str/ends-with? current-sql "\n"))
+    (trim-leading-newline fragment-sql)
+    fragment-sql))
+
 (defn remove-trailing-clause-keyword
   [out]
   (let [current (str out)
-        updated (or (some->> current
-                             (re-matches #"(?s)(.*(?:^|\n))[ \t]*(WHERE|HAVING)[ \t\r\n]*$")
-                             second)
-                    (some->> current
-                             (re-matches #"(?s)(.*?)(?:WHERE|HAVING)[ \t\r\n]*$")
-                             second)
-                    current)]
+        updated (remove-trailing-clause-keyword-from-sql current)]
     (when-not (= current updated)
       (.setLength out 0)
       (.append out ^String updated))))
 
+(defn- trailing-set-clause-sql?
+  [sql]
+  (boolean
+   (or (re-matches #"(?s).*(?:^|\n)[ \t]*SET[ \t\r\n]*$" sql)
+       (re-matches #"(?s).*SET[ \t\r\n]*$" sql))))
+
 (defn trailing-set-clause?
   [out]
+  (trailing-set-clause-sql? (str out)))
+
+(defn- trailing-values-clause-sql?
+  [sql]
   (boolean
-   (or (re-matches #"(?s).*(?:^|\n)[ \t]*SET[ \t\r\n]*$" (str out))
-       (re-matches #"(?s).*SET[ \t\r\n]*$" (str out)))))
+   (or (re-matches #"(?s).*(?:^|\n)[ \t]*VALUES[ \t\r\n]*$" sql)
+       (re-matches #"(?s).*VALUES[ \t\r\n]*$" sql))))
 
 (defn trailing-values-clause?
   [out]
-  (boolean
-   (or (re-matches #"(?s).*(?:^|\n)[ \t]*VALUES[ \t\r\n]*$" (str out))
-       (re-matches #"(?s).*VALUES[ \t\r\n]*$" (str out)))))
+  (trailing-values-clause-sql? (str out)))
 
 (def ^:private clause-context-pattern
   #"(?is)\b(WHERE|HAVING|SET|VALUES|LIMIT|OFFSET)\b")
@@ -807,12 +827,164 @@
     (let [[matched _ _ _] match]
       (subs sql (count matched)))))
 
+(defn- empty-render-state
+  []
+  {:sql ""
+   :bind-params []})
+
+(defn- append-render-fragment
+  [state {:keys [sql bind-params]}]
+  (-> state
+      (update :sql str sql)
+      (update :bind-params into bind-params)))
+
+(defn- render-plan-result
+  [state]
+  {:sql (:sql state)
+   :bind-params (:bind-params state)})
+
+(defn- bind-fragment
+  [{:keys [sql params]}]
+  {:sql sql
+   :bind-params params})
+
+(declare evaluate-render-plan-steps)
+
+(defn- evaluate-append-text-step
+  [step state skip-leading-operator?]
+  (let [sql (:sql step)
+        [state sql] (if skip-leading-operator?
+                      (if-let [trimmed (consume-leading-conditional-operator-from-text sql)]
+                        [state trimmed]
+                        [(update state :sql remove-trailing-clause-keyword-from-sql) sql])
+                      [state sql])]
+    [(update state :sql str sql) false]))
+
+(defn- evaluate-append-variable-step
+  [step state template-params skip-leading-operator?]
+  (let [parameter-name (:parameter-name step)
+        sigil (:sigil step)
+        collection? (:collection? step)
+        context (variable-context parameter-name sigil collection?)
+        state (if skip-leading-operator?
+                (update state :sql remove-trailing-clause-keyword-from-sql)
+                state)]
+    (try
+      [(append-render-fragment state
+                               (bind-fragment
+                                (render-variable template-params sigil parameter-name collection?)))
+       false]
+      (catch #?(:clj clojure.lang.ExceptionInfo :cljs :default) ex
+        (throw (ex-info (ex-message ex)
+                        (merge context (ex-data ex))
+                        ex))))))
+
+(defn- evaluate-branch-step
+  [step state template-params skip-leading-operator?]
+  (let [state (if skip-leading-operator?
+                (update state :sql remove-trailing-clause-keyword-from-sql)
+                state)]
+    (if-let [selected-branch (selected-conditional-branch (:branches step) template-params)]
+      (let [body-result (evaluate-render-plan-steps (:steps selected-branch)
+                                                    template-params
+                                                    (empty-render-state))
+            normalized-fragment {:sql (normalize-sql-for-context (:sql state)
+                                                                 (:sql body-result))
+                                 :bind-params (:bind-params body-result)}]
+        [(append-render-fragment state normalized-fragment) false])
+      [state true])))
+
+(defn- evaluate-for-each-step
+  [step state template-params skip-leading-operator?]
+  (let [collection-name (:collection-name step)
+        item-name (:item-name step)
+        separator (:separator step)
+        items (parameter-value template-params collection-name)]
+    (when-not (sequential? items)
+      (throw (ex-info "For block requires a sequential value."
+                      {:parameter (parameter-key collection-name)
+                       :value items})))
+    (if (seq items)
+      [(reduce (fn [current-state [idx item]]
+                 (let [body-params (assoc template-params (keyword item-name) item)
+                       body-result (evaluate-render-plan-steps (:steps step)
+                                                              body-params
+                                                              (empty-render-state))
+                       fragment-sql (cond-> (:sql body-result)
+                                      separator
+                                      (str/replace #"\r?\n$" ""))
+                       fragment-sql (normalize-sql-for-context (:sql current-state) fragment-sql)
+                       current-state (cond-> current-state
+                                       (and separator (pos? idx))
+                                       (update :sql str separator))]
+                   (append-render-fragment current-state
+                                           {:sql fragment-sql
+                                            :bind-params (:bind-params body-result)})))
+               state
+               (map-indexed vector items))
+       false]
+      (do
+        (when (and (not skip-leading-operator?)
+                   (trailing-set-clause-sql? (:sql state)))
+          (throw (ex-info "Empty for block is not allowed in SET clause."
+                          {:parameter (parameter-key collection-name)
+                           :item (keyword item-name)})))
+        (when (and (not skip-leading-operator?)
+                   (trailing-values-clause-sql? (:sql state)))
+          (throw (ex-info "Empty for block is not allowed in VALUES clause."
+                          {:parameter (parameter-key collection-name)
+                           :item (keyword item-name)})))
+        [state true]))))
+
+(defn- evaluate-render-plan-step
+  [step state template-params skip-leading-operator?]
+  (case (:op step)
+    :append-text
+    (evaluate-append-text-step step state skip-leading-operator?)
+
+    :append-variable
+    (evaluate-append-variable-step step state template-params skip-leading-operator?)
+
+    :branch
+    (evaluate-branch-step step state template-params skip-leading-operator?)
+
+    :for-each
+    (evaluate-for-each-step step state template-params skip-leading-operator?)))
+
+(defn- evaluate-render-plan-steps
+  [steps template-params initial-state]
+  (loop [remaining steps
+         state initial-state
+         skip-leading-operator? false]
+    (if-let [step (first remaining)]
+      (let [[next-state next-skip-leading-operator?]
+            (evaluate-render-plan-step step state template-params skip-leading-operator?)]
+        (recur (rest remaining) next-state next-skip-leading-operator?))
+      (cond-> state
+        skip-leading-operator?
+        (update :sql remove-trailing-clause-keyword-from-sql)))))
+
+(defn evaluate-renderer-plan
+  "Evaluates a renderer plan and returns rendered SQL plus bind parameters."
+  [plan template-params]
+  {:pre [(map? plan) (map? template-params)]}
+  (-> (evaluate-render-plan-steps (:steps plan) template-params (empty-render-state))
+      render-plan-result))
+
 #?(:clj
    (defn compile-renderer
      "Compiles a parsed template into a reusable renderer function."
      [parsed-template]
      {:pre [(map? parsed-template)]}
-     (eval (emit-renderer-form parsed-template))))
+     (eval (emit-renderer-form parsed-template)))
+   :cljs
+   (defn compile-renderer
+     "Builds a reusable renderer function from a parsed template via the renderer-plan interpreter."
+     [parsed-template]
+     {:pre [(map? parsed-template)]}
+     (let [plan (renderer-plan parsed-template)]
+       (fn [template-params]
+         (evaluate-renderer-plan plan template-params)))))
 
 (declare emit-sequential-render-body-form)
 (declare emit-render-plan-form)
@@ -1088,12 +1260,11 @@
   {:pre [(map? parsed-template)]}
   (emit-render-plan-form (renderer-plan parsed-template)))
 
-#?(:clj
-   (defn evaluate-renderer
-     "Evaluates a parsed template and returns rendered SQL plus bind parameters."
-     [parsed-template template-params]
-     {:pre [(map? parsed-template) (map? template-params)]}
-     ((compile-renderer parsed-template) template-params)))
+(defn evaluate-renderer
+  "Evaluates a parsed template and returns rendered SQL plus bind parameters."
+  [parsed-template template-params]
+  {:pre [(map? parsed-template) (map? template-params)]}
+  ((compile-renderer parsed-template) template-params))
 
 (defn render-compiled-query
   "Renders an already analyzed template with a precompiled renderer."
@@ -1118,22 +1289,16 @@
   [sql]
   (str/trim sql))
 
-#?(:clj
-   (defn render-query
-     "Renders a loaded template into executable SQL plus parameters."
-     [template template-params]
-     {:pre [(map? template) (map? template-params)]}
-     (let [context (template-context template)]
-       (try
-         (let [analyzed-template (analyze-template template)
-               renderer (compile-renderer (parse-template (:sql-template analyzed-template)))]
-           (render-compiled-query analyzed-template renderer template-params))
-         (catch #?(:clj clojure.lang.ExceptionInfo :cljs :default) ex
-           (throw (ex-info (ex-message ex)
-                           (merge context (ex-data ex))
-                           ex))))))
-   :cljs
-   (defn render-query
-     [template _template-params]
-     (throw (ex-info "bisql.engine/render-query is not available on cljs yet."
-                     {:template template}))))
+(defn render-query
+  "Renders a loaded template into executable SQL plus parameters."
+  [template template-params]
+  {:pre [(map? template) (map? template-params)]}
+  (let [context (template-context template)]
+    (try
+      (let [analyzed-template (analyze-template template)
+            renderer (compile-renderer (parse-template (:sql-template analyzed-template)))]
+        (render-compiled-query analyzed-template renderer template-params))
+      (catch #?(:clj clojure.lang.ExceptionInfo :cljs :default) ex
+        (throw (ex-info (ex-message ex)
+                        (merge context (ex-data ex))
+                        ex))))))

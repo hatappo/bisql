@@ -21,6 +21,9 @@
 (def renderer-plan
   engine/renderer-plan)
 
+(def evaluate-renderer-plan
+  engine/evaluate-renderer-plan)
+
 (def emit-renderer-form
   engine/emit-renderer-form)
 

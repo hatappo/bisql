@@ -19,6 +19,9 @@
 (def renderer-plan
   query/renderer-plan)
 
+(def evaluate-renderer-plan
+  query/evaluate-renderer-plan)
+
 (def emit-renderer-form
   query/emit-renderer-form)
 

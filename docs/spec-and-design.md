@@ -612,7 +612,7 @@ The parsed-template layer is the parser output. It annotates nodes with
 statement kind (`:select`, `:insert`, `:update`, `:delete`) and clause-level
 context such as `:where`, `:having`, `:set`, `:values`, `:limit`, and
 `:offset`. The renderer-plan layer is the execution-oriented intermediate form
-used by later code generation and future interpreter work.
+used by later code generation and by the interpreter-backed renderer path.
 
 `renderer-plan` currently has this stable shape:
 
@@ -656,6 +656,11 @@ current step kinds are:
 The exact emitted Clojure form is an implementation detail, but the
 `parsed-template -> renderer-plan -> renderer-form` layering is now the
 intended compiler boundary.
+
+On CLJ, `compile-renderer` still compiles the emitted renderer form with
+`eval`. On CLJS, `compile-renderer` uses the same `renderer-plan` as the input
+to a small interpreter and returns a reusable renderer function backed by that
+interpreter.
 
 The current primary path is `emit-renderer-form`: `defrender` and `defquery`
 embed the emitted renderer form at macro expansion time, while
