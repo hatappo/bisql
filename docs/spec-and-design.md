@@ -230,7 +230,8 @@ WHERE 1 = 1
 ### Supported Form
 
 - `x`
-- `if / else / end`
+- `if / elseif / else / end`
+- Optional inline elseif fragment: `/*%elseif condition => <fragment> */`
 - Optional inline else fragment: `/*%else => <fragment> */`
 
 ### Evaluation Rules
@@ -239,14 +240,17 @@ WHERE 1 = 1
 - Only `nil` and `false` are treated as false
 - Missing parameters are treated as `nil`
 - Empty strings and empty collections are treated as true
+- `elseif` uses the first truthy branch after the initial `if`
+- If `elseif` uses `=> <fragment>`, that inline fragment becomes the elseif body
 - If `else` uses `=> <fragment>`, that inline fragment becomes the else body
-- If an inline `else => <fragment>` also has block body content before `/*%end */`, the template is rejected as invalid
+- If an inline `elseif => <fragment>` or `else => <fragment>` also has block body content before the next directive, the template is rejected as invalid
+- `elseif` is not allowed after `else`
 - If a falsy conditional block is immediately followed by `AND` or `OR`, that trailing operator is also removed
 - If a falsy conditional block is not followed by `AND` or `OR` and is immediately preceded by `WHERE` or `HAVING`, that clause keyword is also removed
 
 ### Initial Implementation Constraint
 
-- Only a single variable name is supported in `if`
+- Only a single variable name is supported in `if` and `elseif`
 - Expression syntax is intentionally not supported in the initial implementation
 - `else` does not take an expression
 
@@ -318,6 +322,34 @@ FROM users
 WHERE
 /*%if active */
   active = true
+/*%else => status = 'inactive' */
+/*%end */
+```
+
+#### `elseif` Branch
+
+```sql
+SELECT *
+FROM users
+WHERE
+/*%if active */
+  active = true
+/*%elseif pending */
+  status = 'pending'
+/*%else */
+  status = 'inactive'
+/*%end */
+```
+
+#### Inline `elseif` Fragment
+
+```sql
+SELECT *
+FROM users
+WHERE
+/*%if active */
+  active = true
+/*%elseif pending => status = 'pending' */
 /*%else => status = 'inactive' */
 /*%end */
 ```

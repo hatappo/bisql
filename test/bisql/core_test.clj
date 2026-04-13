@@ -868,7 +868,7 @@
            (:sql result)))
     (is (= ["active"] (:params result)))))
 
-(deftest render-query-rejects-elseif
+(deftest render-query-rejects-elseif-after-else
   (let [error (try
                 (bisql/render-query
                  {:sql-template (str/join "\n"
@@ -876,6 +876,8 @@
                                            "FROM users"
                                            "/*%if active */"
                                            "  active = true"
+                                           "/*%else */"
+                                           "  active = false"
                                            "/*%elseif pending */"
                                            "  pending = true"
                                            "/*%end */"])}
@@ -884,7 +886,7 @@
                 nil
                 (catch clojure.lang.ExceptionInfo ex
                   ex))]
-    (is (= "Elseif is not supported. Use nested if blocks, raw variables, or collection parameters instead."
+    (is (= "Conditional block cannot contain elseif after else."
            (ex-message error)))))
 
 (deftest render-query-rejects-multiple-else-blocks
@@ -919,11 +921,31 @@
                                            "/*%else => status = 'inactive' */"
                                            "  status = 'pending'"
                                            "/*%end */"])}
-                 {:active false})
+                {:active false})
                 nil
                 (catch clojure.lang.ExceptionInfo ex
                   ex))]
-    (is (= "Conditional branch cannot mix inline else fragments with block body content."
+    (is (= "Conditional branch cannot mix inline fragments with block body content."
+           (ex-message error)))))
+
+(deftest render-query-rejects-mixed-inline-and-block-elseif
+  (let [error (try
+                (bisql/render-query
+                 {:sql-template (str/join "\n"
+                                          ["SELECT *"
+                                           "FROM users"
+                                           "WHERE"
+                                           "/*%if active */"
+                                           "  active = true"
+                                           "/*%elseif pending => status = 'pending' */"
+                                           "  status = 'inactive'"
+                                           "/*%end */"])}
+                 {:active false
+                  :pending true})
+                nil
+                (catch clojure.lang.ExceptionInfo ex
+                  ex))]
+    (is (= "Conditional branch cannot mix inline fragments with block body content."
            (ex-message error)))))
 
 (deftest render-query-supports-dot-path-bind-lookup
@@ -1130,3 +1152,46 @@
            (ex-message error)))
     (is (= :rows (:parameter (ex-data error))))
     (is (= :row (:item (ex-data error))))))
+(deftest render-query-supports-elseif-branch
+  (let [result (bisql/render-query
+                {:sql-template (str/join "\n"
+                                         ["SELECT *"
+                                          "FROM users"
+                                          "WHERE"
+                                          "/*%if active */"
+                                          "  active = true"
+                                          "/*%elseif pending */"
+                                          "  status = 'pending'"
+                                          "/*%else */"
+                                          "  status = 'inactive'"
+                                          "/*%end */"])}
+                {:active false
+                 :pending true})]
+    (is (= (str/join "\n"
+                     ["SELECT *"
+                      "FROM users"
+                      "WHERE"
+                      "  status = 'pending'"])
+           (:sql result)))
+    (is (= [] (:params result)))))
+
+(deftest render-query-supports-inline-elseif-fragment
+  (let [result (bisql/render-query
+                {:sql-template (str/join "\n"
+                                         ["SELECT *"
+                                          "FROM users"
+                                          "WHERE"
+                                          "/*%if active */"
+                                          "  active = true"
+                                          "/*%elseif pending => status = 'pending' */"
+                                          "/*%else => status = 'inactive' */"
+                                          "/*%end */"])}
+                {:active false
+                 :pending true})]
+    (is (= (str/join "\n"
+                     ["SELECT *"
+                      "FROM users"
+                      "WHERE"
+                      "status = 'pending'"])
+           (:sql result)))
+    (is (= [] (:params result)))))

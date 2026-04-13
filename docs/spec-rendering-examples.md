@@ -322,6 +322,82 @@ status = 'inactive'
  :meta {}}
 ```
 
+### Control flow 5c. elseif
+
+1. Input Form:
+```clj
+(render-query (load-query "demo-if-elseif-else.sql") {:active false, :pending true})
+```
+
+2. Input SQL:
+```sql
+SELECT *
+FROM users
+WHERE
+/*%if active */
+  active = true
+/*%elseif pending */
+  status = 'pending'
+/*%else */
+  status = 'inactive'
+/*%end */
+```
+
+3. Output SQL:
+```sql
+SELECT *
+FROM users
+WHERE
+  status = 'pending'
+```
+
+4. Output Data:
+```clj
+{:query-name "demo-if-elseif-else",
+ :base-path "sql",
+ :resource-path "sql/demo-if-elseif-else.sql",
+ :sql "SELECT *\nFROM users\nWHERE\n  status = 'pending'",
+ :params [],
+ :meta {}}
+```
+
+### Control flow 5d. inline elseif
+
+1. Input Form:
+```clj
+(render-query (load-query "demo-if-inline-elseif-else.sql") {:active false, :pending true})
+```
+
+2. Input SQL:
+```sql
+SELECT *
+FROM users
+WHERE
+/*%if active */
+  active = true
+/*%elseif pending => status = 'pending' */
+/*%else => status = 'inactive' */
+/*%end */
+```
+
+3. Output SQL:
+```sql
+SELECT *
+FROM users
+WHERE
+status = 'pending'
+```
+
+4. Output Data:
+```clj
+{:query-name "demo-if-inline-elseif-else",
+ :base-path "sql",
+ :resource-path "sql/demo-if-inline-elseif-else.sql",
+ :sql "SELECT *\nFROM users\nWHERE\nstatus = 'pending'",
+ :params [],
+ :meta {}}
+```
+
 
 ### Control flow 6. for 
 
