@@ -815,208 +815,228 @@
      (eval (emit-ir-form ir))))
 
 (declare emit-sequential-render-body-form)
+(declare emit-render-plan-form)
+
+(defn- emit-append-text-step-form
+  [step out-sym skip-leading-operator-sym]
+  (let [sql (:sql step)]
+    `(let [sql# ~sql
+           sql# (if ~skip-leading-operator-sym
+                  (if-let [trimmed# (~(var consume-leading-conditional-operator-from-text) sql#)]
+                    trimmed#
+                    (do
+                      (~(var remove-trailing-clause-keyword) ~out-sym)
+                      sql#))
+                  sql#)]
+       (.append ~out-sym ^String sql#)
+       false)))
+
+(defn- emit-bind-variable-step-form
+  [parameter-name collection? out-sym bind-params-sym params-sym]
+  (if collection?
+    `(let [value# (~(var parameter-value) ~params-sym ~parameter-name)]
+       (when (identical? value# DEFAULT)
+         (throw (ex-info "DEFAULT is not allowed in collection binding."
+                         {:parameter (~(var parameter-key) ~parameter-name)
+                          :value value#})))
+       (when (identical? value# ALL)
+         (throw (ex-info "ALL is not allowed in collection binding."
+                         {:parameter (~(var parameter-key) ~parameter-name)
+                          :value value#})))
+       (when-not (sequential? value#)
+         (throw (ex-info "Collection binding requires a sequential value."
+                         {:parameter (~(var parameter-key) ~parameter-name)
+                          :value value#})))
+       (when (some #(identical? % DEFAULT) value#)
+         (throw (ex-info "DEFAULT is not allowed inside collection binding."
+                         {:parameter (~(var parameter-key) ~parameter-name)
+                          :value value#})))
+       (when (some #(identical? % ALL) value#)
+         (throw (ex-info "ALL is not allowed inside collection binding."
+                         {:parameter (~(var parameter-key) ~parameter-name)
+                          :value value#})))
+       (when (empty? value#)
+         (throw (ex-info "Collection binding does not allow empty values."
+                         {:parameter (~(var parameter-key) ~parameter-name)})))
+       (.append ~out-sym "(")
+       (.append ~out-sym ^String (str/join ", " (repeat (count value#) "?")))
+       (.append ~out-sym ")")
+       (reduce conj! ~bind-params-sym value#)
+       false)
+    `(let [value# (~(var parameter-value) ~params-sym ~parameter-name)]
+       (cond
+         (identical? value# DEFAULT)
+         (do
+           (.append ~out-sym "DEFAULT")
+           false)
+
+         (identical? value# ALL)
+         (do
+           (.append ~out-sym "ALL")
+           false)
+
+         :else
+         (do
+           (.append ~out-sym "?")
+           (conj! ~bind-params-sym value#)
+           false)))))
+
+(defn- emit-literal-variable-step-form
+  [parameter-name out-sym params-sym]
+  `(let [value# (~(var parameter-value) ~params-sym ~parameter-name)]
+     (cond
+       (string? value#)
+       (do
+         (when (str/includes? value# "'")
+           (throw (ex-info "Literal string values must not contain single quotes."
+                           {:parameter (~(var parameter-key) ~parameter-name)
+                            :value value#})))
+         (.append ~out-sym ^String (str "'" value# "'"))
+         false)
+
+       (number? value#)
+       (do
+         (.append ~out-sym ^String (str value#))
+         false)
+
+       :else
+       (throw (ex-info "Unsupported literal value type."
+                       {:parameter (~(var parameter-key) ~parameter-name)
+                        :value value#
+                        :type (type value#)})))))
+
+(defn- emit-raw-variable-step-form
+  [parameter-name out-sym params-sym]
+  `(do
+     (.append ~out-sym ^String (str (~(var parameter-value) ~params-sym ~parameter-name)))
+     false))
+
+(defn- emit-append-variable-step-form
+  [step out-sym bind-params-sym params-sym skip-leading-operator-sym]
+  (let [parameter-name (:parameter-name step)
+        sigil (:sigil step)
+        collection? (:collection? step)
+        context (variable-context parameter-name sigil collection?)]
+    `(do
+       (when ~skip-leading-operator-sym
+         (~(var remove-trailing-clause-keyword) ~out-sym))
+       (try
+         ~(case sigil
+            "$" (emit-bind-variable-step-form parameter-name collection? out-sym bind-params-sym params-sym)
+            "^" (emit-literal-variable-step-form parameter-name out-sym params-sym)
+            "!" (emit-raw-variable-step-form parameter-name out-sym params-sym))
+         (catch #?(:clj clojure.lang.ExceptionInfo :cljs :default) ex#
+           (throw (ex-info (ex-message ex#)
+                           (merge ~context (ex-data ex#))
+                           ex#)))))))
+
+(defn- emit-branch-body-fn-form
+  [steps params-sym]
+  (let [body-out-sym (gensym "if_body_out__")
+        body-bind-params-sym (gensym "if_body_bind_params__")
+        body-params-sym (gensym "if_body_params__")
+        body-form (emit-sequential-render-body-form steps
+                                                    body-out-sym
+                                                    body-bind-params-sym
+                                                    body-params-sym)]
+    `(fn []
+       (let [~body-out-sym (StringBuilder.)
+             ~body-bind-params-sym (transient [])
+             ~body-params-sym ~params-sym]
+         ~body-form
+         {:sql (str ~body-out-sym)
+          :bind-params (persistent! ~body-bind-params-sym)}))))
+
+(defn- emit-branch-step-form
+  [step out-sym bind-params-sym params-sym skip-leading-operator-sym]
+  (let [compiled-branches
+        (mapv (fn [{:keys [expr steps]}]
+                `{:expr ~expr
+                  :body ~(emit-branch-body-fn-form steps params-sym)})
+              (:branches step))]
+    `(do
+       (when ~skip-leading-operator-sym
+         (~(var remove-trailing-clause-keyword) ~out-sym))
+       (if-let [selected-branch# (~(var selected-conditional-branch) ~(vec compiled-branches) ~params-sym)]
+         (let [body-fn# (:body selected-branch#)]
+           (~(var append-fragment!)
+            ~out-sym
+            ~bind-params-sym
+            (~(var normalize-fragment-for-context)
+             ~out-sym
+             (body-fn#)))
+           false)
+         true))))
+
+(defn- emit-for-each-step-form
+  [step out-sym bind-params-sym params-sym skip-leading-operator-sym]
+  (let [collection-name (:collection-name step)
+        item-name (:item-name step)
+        separator (:separator step)
+        items-sym (gensym "items__")
+        idx-sym (gensym "idx__")
+        item-sym (gensym "item__")
+        body-out-sym (gensym "body_out__")
+        body-bind-params-sym (gensym "body_bind_params__")
+        body-params-sym (gensym "body_params__")
+        fragment-sql-sym (gensym "fragment_sql__")
+        body-form (emit-sequential-render-body-form (:steps step)
+                                                    body-out-sym
+                                                    body-bind-params-sym
+                                                    body-params-sym)]
+    `(let [~items-sym (~(var parameter-value) ~params-sym ~collection-name)]
+       (when-not (sequential? ~items-sym)
+         (throw (ex-info "For block requires a sequential value."
+                         {:parameter (~(var parameter-key) ~collection-name)
+                          :value ~items-sym})))
+       (if (seq ~items-sym)
+         (do
+           (doseq [[~idx-sym ~item-sym] (map-indexed vector ~items-sym)]
+             (let [~body-out-sym (StringBuilder.)
+                   ~body-bind-params-sym (transient [])
+                   ~body-params-sym (assoc ~params-sym (keyword ~item-name) ~item-sym)]
+               ~body-form
+               (let [~fragment-sql-sym (str ~body-out-sym)
+                     ~fragment-sql-sym ~(if separator
+                                          `(str/replace ~fragment-sql-sym #"\r?\n$" "")
+                                          fragment-sql-sym)
+                     ~fragment-sql-sym (:sql (~(var normalize-fragment-for-context)
+                                          ~out-sym
+                                          {:sql ~fragment-sql-sym
+                                           :bind-params []}))]
+                 ~@(when separator
+                     [`(when (pos? ~idx-sym)
+                         (.append ~out-sym ^String ~separator))])
+                 (.append ~out-sym ^String ~fragment-sql-sym)
+                 (reduce conj! ~bind-params-sym (persistent! ~body-bind-params-sym)))))
+           false)
+         (do
+           (when (and (not ~skip-leading-operator-sym)
+                      (~(var trailing-set-clause?) ~out-sym))
+             (throw (ex-info "Empty for block is not allowed in SET clause."
+                             {:parameter (~(var parameter-key) ~collection-name)
+                              :item (keyword ~item-name)})))
+           (when (and (not ~skip-leading-operator-sym)
+                      (~(var trailing-values-clause?) ~out-sym))
+             (throw (ex-info "Empty for block is not allowed in VALUES clause."
+                             {:parameter (~(var parameter-key) ~collection-name)
+                              :item (keyword ~item-name)})))
+           true)))))
 
 (defn- emit-render-plan-step-form
   [step out-sym bind-params-sym params-sym skip-leading-operator-sym]
   (case (:op step)
     :append-text
-    (let [sql (:sql step)]
-      `(let [sql# ~sql
-             sql# (if ~skip-leading-operator-sym
-                    (if-let [trimmed# (~(var consume-leading-conditional-operator-from-text) sql#)]
-                      trimmed#
-                      (do
-                        (~(var remove-trailing-clause-keyword) ~out-sym)
-                        sql#))
-                    sql#)]
-         (.append ~out-sym ^String sql#)
-         false))
+    (emit-append-text-step-form step out-sym skip-leading-operator-sym)
 
     :append-variable
-    (let [parameter-name (:parameter-name step)
-          sigil (:sigil step)
-          collection? (:collection? step)
-          context (variable-context parameter-name sigil collection?)]
-      `(do
-         (when ~skip-leading-operator-sym
-           (~(var remove-trailing-clause-keyword) ~out-sym))
-         (try
-           ~(case sigil
-              "$"
-              (if collection?
-                `(let [value# (~(var parameter-value) ~params-sym ~parameter-name)]
-                   (when (identical? value# DEFAULT)
-                     (throw (ex-info "DEFAULT is not allowed in collection binding."
-                                     {:parameter (~(var parameter-key) ~parameter-name)
-                                      :value value#})))
-                   (when (identical? value# ALL)
-                     (throw (ex-info "ALL is not allowed in collection binding."
-                                     {:parameter (~(var parameter-key) ~parameter-name)
-                                      :value value#})))
-                   (when-not (sequential? value#)
-                     (throw (ex-info "Collection binding requires a sequential value."
-                                     {:parameter (~(var parameter-key) ~parameter-name)
-                                      :value value#})))
-                   (when (some #(identical? % DEFAULT) value#)
-                     (throw (ex-info "DEFAULT is not allowed inside collection binding."
-                                     {:parameter (~(var parameter-key) ~parameter-name)
-                                      :value value#})))
-                   (when (some #(identical? % ALL) value#)
-                     (throw (ex-info "ALL is not allowed inside collection binding."
-                                     {:parameter (~(var parameter-key) ~parameter-name)
-                                      :value value#})))
-                   (when (empty? value#)
-                     (throw (ex-info "Collection binding does not allow empty values."
-                                     {:parameter (~(var parameter-key) ~parameter-name)})))
-                   (.append ~out-sym "(")
-                   (.append ~out-sym ^String (str/join ", " (repeat (count value#) "?")))
-                   (.append ~out-sym ")")
-                   (reduce conj! ~bind-params-sym value#)
-                   false)
-                `(let [value# (~(var parameter-value) ~params-sym ~parameter-name)]
-                   (cond
-                     (identical? value# DEFAULT)
-                     (do
-                       (.append ~out-sym "DEFAULT")
-                       false)
-
-                     (identical? value# ALL)
-                     (do
-                       (.append ~out-sym "ALL")
-                       false)
-
-                     :else
-                     (do
-                       (.append ~out-sym "?")
-                       (conj! ~bind-params-sym value#)
-                       false))))
-
-              "^"
-              `(let [value# (~(var parameter-value) ~params-sym ~parameter-name)]
-                 (cond
-                   (string? value#)
-                   (do
-                     (when (str/includes? value# "'")
-                       (throw (ex-info "Literal string values must not contain single quotes."
-                                       {:parameter (~(var parameter-key) ~parameter-name)
-                                        :value value#})))
-                     (.append ~out-sym ^String (str "'" value# "'"))
-                     false)
-
-                   (number? value#)
-                   (do
-                     (.append ~out-sym ^String (str value#))
-                     false)
-
-                   :else
-                   (throw (ex-info "Unsupported literal value type."
-                                   {:parameter (~(var parameter-key) ~parameter-name)
-                                    :value value#
-                                    :type (type value#)}))))
-
-              "!"
-              `(do
-                 (.append ~out-sym ^String (str (~(var parameter-value) ~params-sym ~parameter-name)))
-                 false))
-           (catch #?(:clj clojure.lang.ExceptionInfo :cljs :default) ex#
-             (throw (ex-info (ex-message ex#)
-                             (merge ~context (ex-data ex#))
-                             ex#))))))
+    (emit-append-variable-step-form step out-sym bind-params-sym params-sym skip-leading-operator-sym)
 
     :branch
-    (let [compiled-branches
-          (mapv (fn [{:keys [expr steps]}]
-                  (let [body-out-sym (gensym "if_body_out__")
-                        body-bind-params-sym (gensym "if_body_bind_params__")
-                        body-params-sym (gensym "if_body_params__")
-                        body-form (emit-sequential-render-body-form steps
-                                                                    body-out-sym
-                                                                    body-bind-params-sym
-                                                                    body-params-sym)]
-                    {:expr expr
-                     :body-out-sym body-out-sym
-                     :body-bind-params-sym body-bind-params-sym
-                     :body-params-sym body-params-sym
-                     :body-form body-form}))
-                (:branches step))]
-      `(let [compiled-branches#
-             ~(vec (map (fn [{:keys [expr body-out-sym body-bind-params-sym body-params-sym body-form]}]
-                          `{:expr ~expr
-                            :body (fn []
-                                    (let [~body-out-sym (StringBuilder.)
-                                          ~body-bind-params-sym (transient [])
-                                          ~body-params-sym ~params-sym]
-                                      ~body-form
-                                      {:sql (str ~body-out-sym)
-                                       :bind-params (persistent! ~body-bind-params-sym)}))})
-                        compiled-branches))]
-         (do
-           (when ~skip-leading-operator-sym
-             (~(var remove-trailing-clause-keyword) ~out-sym))
-           (if-let [selected-branch# (~(var selected-conditional-branch) compiled-branches# ~params-sym)]
-             (let [body-fn# (:body selected-branch#)]
-               (~(var append-fragment!)
-                ~out-sym
-                ~bind-params-sym
-                (~(var normalize-fragment-for-context)
-                 ~out-sym
-                 (body-fn#)))
-               false)
-             true))))
+    (emit-branch-step-form step out-sym bind-params-sym params-sym skip-leading-operator-sym)
 
     :for-each
-    (let [collection-name (:collection-name step)
-          item-name (:item-name step)
-          separator (:separator step)
-          items-sym (gensym "items__")
-          idx-sym (gensym "idx__")
-          item-sym (gensym "item__")
-          body-out-sym (gensym "body_out__")
-          body-bind-params-sym (gensym "body_bind_params__")
-          body-params-sym (gensym "body_params__")
-          fragment-sql-sym (gensym "fragment_sql__")
-          body-form (emit-sequential-render-body-form (:steps step)
-                                                      body-out-sym
-                                                      body-bind-params-sym
-                                                      body-params-sym)]
-      `(let [~items-sym (~(var parameter-value) ~params-sym ~collection-name)]
-         (when-not (sequential? ~items-sym)
-           (throw (ex-info "For block requires a sequential value."
-                           {:parameter (~(var parameter-key) ~collection-name)
-                            :value ~items-sym})))
-         (if (seq ~items-sym)
-           (do
-             (doseq [[~idx-sym ~item-sym] (map-indexed vector ~items-sym)]
-               (let [~body-out-sym (StringBuilder.)
-                     ~body-bind-params-sym (transient [])
-                     ~body-params-sym (assoc ~params-sym (keyword ~item-name) ~item-sym)]
-                 ~body-form
-                 (let [~fragment-sql-sym (str ~body-out-sym)
-                       ~fragment-sql-sym ~(if separator
-                                            `(str/replace ~fragment-sql-sym #"\r?\n$" "")
-                                            fragment-sql-sym)
-                       ~fragment-sql-sym (:sql (~(var normalize-fragment-for-context)
-                                            ~out-sym
-                                            {:sql ~fragment-sql-sym
-                                             :bind-params []}))]
-                   ~@(when separator
-                       [`(when (pos? ~idx-sym)
-                           (.append ~out-sym ^String ~separator))])
-                   (.append ~out-sym ^String ~fragment-sql-sym)
-                   (reduce conj! ~bind-params-sym (persistent! ~body-bind-params-sym)))))
-             false)
-           (do
-             (when (and (not ~skip-leading-operator-sym)
-                        (~(var trailing-set-clause?) ~out-sym))
-               (throw (ex-info "Empty for block is not allowed in SET clause."
-                               {:parameter (~(var parameter-key) ~collection-name)
-                                :item (keyword ~item-name)})))
-             (when (and (not ~skip-leading-operator-sym)
-                        (~(var trailing-values-clause?) ~out-sym))
-               (throw (ex-info "Empty for block is not allowed in VALUES clause."
-                               {:parameter (~(var parameter-key) ~collection-name)
-                                :item (keyword ~item-name)})))
-             true))))))
+    (emit-for-each-step-form step out-sym bind-params-sym params-sym skip-leading-operator-sym)))
 
 (defn- emit-sequential-render-form
   [steps out-sym bind-params-sym params-sym]
@@ -1045,12 +1065,9 @@
        (when ~final-skip-sym
          (~(var remove-trailing-clause-keyword) ~out-sym)))))
 
-(defn emit-ir-form
-  "Emits a reusable renderer function form from parsed template IR."
-  [parsed-template]
-  {:pre [(map? parsed-template)]}
-  (let [plan (renderer-plan parsed-template)
-        steps (:steps plan)
+(defn- emit-render-plan-form
+  [plan]
+  (let [steps (:steps plan)
         out-sym (gensym "out__")
         bind-params-sym (gensym "bind_params__")
         params-sym (gensym "params__")
@@ -1064,6 +1081,12 @@
            (~(var remove-trailing-clause-keyword) ~out-sym))
          {:sql (str ~out-sym)
           :bind-params (persistent! ~bind-params-sym)}))))
+
+(defn emit-ir-form
+  "Emits a reusable renderer function form from parsed template IR."
+  [parsed-template]
+  {:pre [(map? parsed-template)]}
+  (emit-render-plan-form (renderer-plan parsed-template)))
 
 #?(:clj
    (defn evaluate-ir
