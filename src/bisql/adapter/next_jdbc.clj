@@ -58,9 +58,9 @@
    (let [ns-sym (ns-name *ns*)
          entries (define/definition-entries ns-sym nil)]
      (define/ensure-unique-var-names! entries)
-     `(do ~@(mapv (fn [{:keys [template ir target-ns var-name]}]
+     `(do ~@(mapv (fn [{:keys [template parsed-template target-ns var-name]}]
                     (let [template-data (list 'quote template)
-                          renderer-form (query/emit-ir-form ir)
+                          renderer-form (query/emit-renderer-form parsed-template)
                           metadata-data (list 'quote (define/executable-query-function-metadata template))]
                       `(let [renderer# ~renderer-form
                              compiled-template# (with-meta
@@ -96,9 +96,9 @@
    (let [ns-sym (ns-name *ns*)
          entries (define/definition-entries ns-sym path)]
      (define/ensure-unique-var-names! entries)
-     `(do ~@(mapv (fn [{:keys [template ir target-ns var-name]}]
+     `(do ~@(mapv (fn [{:keys [template parsed-template target-ns var-name]}]
                     (let [template-data (list 'quote template)
-                          renderer-form (query/emit-ir-form ir)
+                          renderer-form (query/emit-renderer-form parsed-template)
                           metadata-data (list 'quote (define/executable-query-function-metadata template))]
                       `(let [renderer# ~renderer-form
                              compiled-template# (with-meta

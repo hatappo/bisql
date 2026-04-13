@@ -218,13 +218,13 @@
   (->> (templates-for-definition ns-sym path)
        (mapv (fn [template]
                (let [analyzed-template (query/analyze-template template)
-                     ir (query/parse-template (:sql-template analyzed-template))
+                     parsed-template (query/parse-template (:sql-template analyzed-template))
                      target-ns (target-namespace-symbol (:resource-path analyzed-template)
                                                         (:namespace-suffix analyzed-template))
                      var-name (var-symbol-from-function-name (:function-name analyzed-template))
                      metadata (query-function-metadata analyzed-template)]
                  {:template analyzed-template
-                  :ir ir
+                  :parsed-template parsed-template
                   :target-ns target-ns
                   :var-name var-name
                   :metadata metadata

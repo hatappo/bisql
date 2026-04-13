@@ -587,31 +587,36 @@ Renders template SQL into:
 The initial compiler foundation also exposes:
 
 ```clojure
-(parse-template "SELECT * FROM users WHERE id = /*$id*/1")
-(emit-ir-form ir)
-(compile-ir ir)
-(evaluate-ir ir {:id 1})
+(def parsed-template
+  (parse-template "SELECT * FROM users WHERE id = /*$id*/1"))
+(renderer-plan parsed-template)
+(emit-renderer-form parsed-template)
+(compile-renderer parsed-template)
+(evaluate-renderer parsed-template {:id 1})
 ```
 
 `parse-template` converts a declaration-free SQL template string into an
-intermediate representation. `emit-ir-form` emits a reusable renderer function
-form from that IR. `compile-ir` compiles the IR into a reusable renderer
-function at runtime. `evaluate-ir` evaluates the IR directly and returns the
-same rendered SQL shape as the internal renderer step:
+parsed template. `renderer-plan` converts that parsed template into an
+execution-oriented plan. `emit-renderer-form` emits a reusable renderer
+function form from that plan. `compile-renderer` compiles the parsed template
+into a reusable renderer function at runtime. `evaluate-renderer` evaluates the
+parsed template directly and returns the same rendered SQL shape as the
+internal renderer step:
 
 ```clojure
 {:sql "SELECT * FROM users WHERE id = ?"
  :bind-params [1]}
 ```
 
-This IR layer is intended to be the foundation for future compiled renderers.
-The initial IR also annotates nodes with statement kind (`:select`, `:insert`,
-`:update`, `:delete`) and clause-level context such as `:where`, `:having`,
-`:set`, `:values`, `:limit`, and `:offset`.
+The parsed-template layer is the parser output. It annotates nodes with
+statement kind (`:select`, `:insert`, `:update`, `:delete`) and clause-level
+context such as `:where`, `:having`, `:set`, `:values`, `:limit`, and
+`:offset`. The renderer-plan layer is the execution-oriented intermediate form
+used by later code generation and future interpreter work.
 
-The current primary path is `emit-ir-form`: `defrender` and `defquery` embed
-the emitted renderer form at macro expansion time, while `compile-ir` remains
-as a thin runtime convenience wrapper around `eval`.
+The current primary path is `emit-renderer-form`: `defrender` and `defquery`
+embed the emitted renderer form at macro expansion time, while
+`compile-renderer` remains as a thin runtime convenience wrapper around `eval`.
 
 ## 6.3 Function Definition
 

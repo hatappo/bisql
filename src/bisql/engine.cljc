@@ -6,7 +6,7 @@
 
 (declare parse-template)
 (declare renderer-plan)
-(declare emit-ir-form)
+(declare emit-renderer-form)
 (declare parse-template-nodes)
 (declare parse-variable-nodes)
 (declare postprocess-sql)
@@ -808,11 +808,11 @@
       (subs sql (count matched)))))
 
 #?(:clj
-   (defn compile-ir
-     "Compiles parsed template IR into a reusable renderer function."
-     [ir]
-     {:pre [(map? ir)]}
-     (eval (emit-ir-form ir))))
+   (defn compile-renderer
+     "Compiles a parsed template into a reusable renderer function."
+     [parsed-template]
+     {:pre [(map? parsed-template)]}
+     (eval (emit-renderer-form parsed-template))))
 
 (declare emit-sequential-render-body-form)
 (declare emit-render-plan-form)
@@ -1082,18 +1082,18 @@
          {:sql (str ~out-sym)
           :bind-params (persistent! ~bind-params-sym)}))))
 
-(defn emit-ir-form
-  "Emits a reusable renderer function form from parsed template IR."
+(defn emit-renderer-form
+  "Emits a reusable renderer function form from a parsed template."
   [parsed-template]
   {:pre [(map? parsed-template)]}
   (emit-render-plan-form (renderer-plan parsed-template)))
 
 #?(:clj
-   (defn evaluate-ir
-     "Evaluates parsed template IR and returns rendered SQL plus bind parameters."
-     [ir template-params]
-     {:pre [(map? ir) (map? template-params)]}
-     ((compile-ir ir) template-params)))
+   (defn evaluate-renderer
+     "Evaluates a parsed template and returns rendered SQL plus bind parameters."
+     [parsed-template template-params]
+     {:pre [(map? parsed-template) (map? template-params)]}
+     ((compile-renderer parsed-template) template-params)))
 
 (defn render-compiled-query
   "Renders an already analyzed template with a precompiled renderer."
@@ -1126,7 +1126,7 @@
      (let [context (template-context template)]
        (try
          (let [analyzed-template (analyze-template template)
-               renderer (compile-ir (parse-template (:sql-template analyzed-template)))]
+               renderer (compile-renderer (parse-template (:sql-template analyzed-template)))]
            (render-compiled-query analyzed-template renderer template-params))
          (catch #?(:clj clojure.lang.ExceptionInfo :cljs :default) ex
            (throw (ex-info (ex-message ex)

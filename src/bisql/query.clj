@@ -21,14 +21,14 @@
 (def renderer-plan
   engine/renderer-plan)
 
-(def emit-ir-form
-  engine/emit-ir-form)
+(def emit-renderer-form
+  engine/emit-renderer-form)
 
-(def compile-ir
-  engine/compile-ir)
+(def compile-renderer
+  engine/compile-renderer)
 
-(def evaluate-ir
-  engine/evaluate-ir)
+(def evaluate-renderer
+  engine/evaluate-renderer)
 
 (def render-compiled-query
   engine/render-compiled-query)
