@@ -3,6 +3,13 @@ name: pages
 on:
   push:
     branches: ["main"]
+    paths:
+      - ".github/workflows/pages.yml"
+      - "bb.edn"
+      - "deps.edn"
+      - "shadow-cljs.edn"
+      - "pages/**"
+      - "src/**"
   workflow_dispatch:
 
 permissions:
@@ -27,8 +34,8 @@ jobs:
         with:
           cli: latest
 
-      - name: Build playground
-        run: bb build-playground
+      - name: Build pages app
+        run: bb pages-build
 
       - name: Configure Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0

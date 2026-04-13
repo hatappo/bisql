@@ -1,0 +1,10 @@
+{:deps true
+ :builds
+ {:playground
+  {:target :browser
+   :output-dir "pages/dist/js"
+   :asset-path "./js"
+   :modules {:main {:init-fn bisql.pages.playground/main}}
+   :devtools {:autoload true
+              :http-root "pages/dist"
+              :http-port 8000}}}}

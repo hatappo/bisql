@@ -74,9 +74,17 @@
                         (shell "sh" "-lc" "bb scripts/demo/core.bb > docs/spec-rendering-examples.md")
                         (shell "open" "docs/spec-rendering-examples.md"))}
 
-  build-playground {:doc "Build the static playground into pages/dist/"
-                    :task (do
-                            (shell "mkdir" "-p" "pages/dist")
-                            (shell "cp" "pages/static/index.html" "pages/dist/index.html")
-                            (shell "cp" "pages/static/playground.css" "pages/dist/playground.css")
-                            (clojure "-M:pages" "-m" "cljs.main" "-co" "pages/build.cljs.edn" "-c" "bisql.pages.playground"))}}}
+  pages-build {:doc "Build the static pages app into pages/dist/"
+               :task (do
+                       (shell "rm" "-rf" "pages/dist")
+                       (shell "mkdir" "-p" "pages/dist")
+                       (shell "cp" "pages/static/index.html" "pages/dist/index.html")
+                       (shell "cp" "pages/static/playground.css" "pages/dist/playground.css")
+                       (clojure "-M:pages" "-m" "shadow.cljs.devtools.cli" "release" "playground"))}
+
+  pages-watch {:doc "Start the shadow-cljs pages dev server on http://localhost:8000"
+               :task (do
+                       (shell "mkdir" "-p" "pages/dist")
+                       (shell "cp" "pages/static/index.html" "pages/dist/index.html")
+                       (shell "cp" "pages/static/playground.css" "pages/dist/playground.css")
+                       (clojure "-M:pages" "-m" "shadow.cljs.devtools.cli" "watch" "playground"))}}}
