@@ -2,10 +2,102 @@
   (:require [bisql.define :as define]
             [bisql.query :as query]
             [next.jdbc :as jdbc]
-            [next.jdbc.result-set :as rs]))
+            [next.jdbc.result-set :as rs])
+  (:import [java.sql Time Timestamp]
+           [java.time Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZonedDateTime]))
 
 (def ^:private result-set-options
   {:builder-fn rs/as-unqualified-kebab-maps})
+
+(defn ->timestamp
+  "Converts common JVM date/time values into java.sql.Timestamp.
+   This is an explicit helper for next.jdbc callers and is not applied automatically."
+  [value]
+  (cond
+    (instance? Timestamp value)
+    value
+
+    (instance? java.util.Date value)
+    (Timestamp. (.getTime ^java.util.Date value))
+
+    (instance? Instant value)
+    (Timestamp/from value)
+
+    (instance? LocalDateTime value)
+    (Timestamp/valueOf value)
+
+    (instance? OffsetDateTime value)
+    (Timestamp/from (.toInstant ^OffsetDateTime value))
+
+    (instance? ZonedDateTime value)
+    (Timestamp/from (.toInstant ^ZonedDateTime value))
+
+    :else
+    (throw (ex-info "Unsupported timestamp value type."
+                    {:value value
+                     :type (type value)}))))
+
+(defn ->date
+  "Converts common JVM date/time values into java.sql.Date.
+   This is an explicit helper for next.jdbc callers and is not applied automatically."
+  [value]
+  (cond
+    (instance? java.sql.Date value)
+    value
+
+    (instance? LocalDate value)
+    (java.sql.Date/valueOf value)
+
+    (instance? java.util.Date value)
+    (java.sql.Date. (.getTime ^java.util.Date value))
+
+    (instance? Instant value)
+    (java.sql.Date. (.toEpochMilli ^Instant value))
+
+    (instance? LocalDateTime value)
+    (java.sql.Date/valueOf (.toLocalDate ^LocalDateTime value))
+
+    (instance? OffsetDateTime value)
+    (java.sql.Date/valueOf (.toLocalDate ^OffsetDateTime value))
+
+    (instance? ZonedDateTime value)
+    (java.sql.Date/valueOf (.toLocalDate ^ZonedDateTime value))
+
+    :else
+    (throw (ex-info "Unsupported date value type."
+                    {:value value
+                     :type (type value)}))))
+
+(defn ->time
+  "Converts common JVM date/time values into java.sql.Time.
+   This is an explicit helper for next.jdbc callers and is not applied automatically."
+  [value]
+  (cond
+    (instance? Time value)
+    value
+
+    (instance? LocalTime value)
+    (Time/valueOf value)
+
+    (instance? java.util.Date value)
+    (Time. (.getTime ^java.util.Date value))
+
+    (instance? Instant value)
+    (Time. (.toEpochMilli ^Instant value))
+
+    (instance? LocalDateTime value)
+    (Time/valueOf (.toLocalTime ^LocalDateTime value))
+
+    (instance? OffsetDateTime value)
+    (Time/valueOf (.toLocalTime ^OffsetDateTime value))
+
+    (instance? ZonedDateTime value)
+    (Time/valueOf (.toLocalTime ^ZonedDateTime value))
+
+    :else
+    (throw (ex-info "Unsupported time value type."
+                    {:value value
+                     :type (type value)}))))
 
 (defn- rendered-query
   [queryish template-params]
