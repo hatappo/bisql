@@ -31,8 +31,8 @@
 (def render-query
   query/render-query)
 
-(def default
-  query/default)
+(def DEFAULT
+  query/DEFAULT)
 
 (def ALL
   query/ALL)

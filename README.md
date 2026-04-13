@@ -15,7 +15,7 @@ No boilerplate SQL
 [![Clojars Project](https://img.shields.io/clojars/v/io.github.hatappo/bisql.svg)](https://clojars.org/io.github.hatappo/bisql)
 
 > [!NOTE]
-> This project is still early and should be treated as alpha software.
+> This project is still early and the API may change.
 > Support for databases beyond PostgreSQL and Malli integration are both planned.
 
 ## Installation
@@ -174,6 +174,8 @@ For the sample tables above, this typically includes:
 - `orders.crud/insert-many`
 - `orders.crud/upsert-by-id`
 - `orders.crud/count`
+- `orders.crud/count-by-state`
+- `orders.crud/count-by-state-and-created-at`
 - `orders.crud/list`
 - `orders.crud/get-by-id`
 - `orders.crud/update-by-id`
@@ -236,5 +238,5 @@ For local setup, tasks, and dev workflow, see:
 - Compile analyzed SQL templates into reusable renderer functions for lower runtime overhead.
   - Simplify emitted renderer forms further, especially around branch and loop body handling.
   - Reduce helper calls in emitted code where fragment normalization is still delegated.
-  - Restrict `bisql/default` to valid SQL value contexts if context-aware rendering becomes necessary.
+  - Restrict `bisql/DEFAULT` to valid SQL value contexts if context-aware rendering becomes necessary.
   - Detect dangerous `nil` comparisons consistently in `WHERE` / `HAVING` clauses instead of letting expressions such as `= NULL`, `LIKE NULL`, or `IN (NULL)` silently behave unexpectedly. This likely needs stricter SQL context parsing, because `= NULL` is dangerous in `WHERE` / `HAVING` but can still be valid assignment syntax in `SET`.

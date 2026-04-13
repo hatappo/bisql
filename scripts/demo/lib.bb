@@ -1,16 +1,29 @@
 (ns demo.lib
-  (:require [clojure.pprint :as pprint]
+  (:require [bisql.query :as bisql]
+            [clojure.pprint :as pprint]
             [clojure.string :as str]))
 
-(defn render-query-form?
+(defn render-form?
   [form]
   (and (seq? form)
-       (= 'render-query (first form))))
+       (#{'render-query 'render} (first form))))
 
 (defn input-template
   [form]
-  (when (render-query-form? form)
-    (eval (second form))))
+  (when (render-form? form)
+    (case (first form)
+      render-query
+      (eval (second form))
+
+      render
+      (let [[template-or-resource maybe-load-options _params] (rest form)]
+        (if _params
+          (bisql/load-query (eval template-or-resource)
+                            (eval maybe-load-options))
+          (let [template (eval template-or-resource)]
+            (if (string? template)
+              (bisql/load-query template)
+              template)))))))
 
 (defn call-form-lines
   [form]
@@ -35,16 +48,43 @@
   (println "```")
   (println))
 
+(defn print-anonymous-code-block
+  [language lines]
+  (println (str "```" language))
+  (doseq [line lines]
+    (println line))
+  (println "```")
+  (println))
+
+(defn output-summary
+  [result]
+  (cond-> {}
+    (contains? result :params) (assoc :params (:params result))
+    (and (contains? result :meta)
+         (seq (:meta result))) (assoc :meta (:meta result))))
+
+(defn print-description
+  [description]
+  (when (some? description)
+    (doseq [line (str/split-lines (str description))]
+      (println line))))
+
 (defn show-example
-  [title form result]
+  [title form result description]
   (println (str "\n### " title) "\n")
   (print-code-block "1. Input Form" "clj" (call-form-lines form))
   (when-let [lines (seq (input-sql-lines form))]
     (print-code-block "2. Input SQL" "sql" lines))
+  (println "3. Output SQL and Params:")
   (when-let [lines (seq (rendered-sql-lines result))]
-    (print-code-block "3. Output SQL" "sql" lines))
-  (print-code-block "4. Output Data" "clj"
-                    (str/split-lines (with-out-str (pprint/pprint result)))))
+    (print-anonymous-code-block "sql" lines))
+  (let [summary (output-summary result)]
+    (when (seq summary)
+      (print-anonymous-code-block "clj"
+                                  (str/split-lines
+                                   (with-out-str
+                                     (pprint/pprint summary))))))
+  (print-description description))
 
 (defn error-output-lines
   [error]
@@ -62,8 +102,10 @@
   (print-code-block "3. Output Error" "clj" (error-output-lines error)))
 
 (defmacro example
-  [title form]
-  `(show-example ~title '~form ~form))
+  ([title form]
+   `(show-example ~title '~form ~form nil))
+  ([title form description]
+   `(show-example ~title '~form ~form ~description)))
 
 (defmacro error-example
   [title form]

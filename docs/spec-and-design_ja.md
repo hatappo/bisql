@@ -151,10 +151,10 @@ bind 値:
 
 ### `DEFAULT`
 
-scalar の bind 変数に `bisql/default` を渡した場合、`?` ではなく SQL の `DEFAULT` として出力される。
+scalar の bind 変数に `bisql/DEFAULT` を渡した場合、`?` ではなく SQL の `DEFAULT` として出力される。
 
 ```clojure
-{:status bisql/default}
+{:status bisql/DEFAULT}
 ```
 
 ```sql
@@ -237,7 +237,8 @@ WHERE 1 = 1
 ### サポートする形式
 
 - `x`
-- `if / else / end`
+- `if / elseif / else / end`
+- inline `elseif` 断片: `/*%elseif condition => <fragment> */`
 - inline `else` 断片: `/*%else => <fragment> */`
 
 ### 評価ルール
@@ -246,14 +247,17 @@ WHERE 1 = 1
 - `nil` と `false` だけを偽として扱う
 - 未指定のパラメータは `nil` として扱う
 - 空文字列や空コレクションは真として扱う
+- `elseif` は、最初の `if` に続く truthy な branch のうち最初に一致したものを使う
+- `elseif` が `=> <fragment>` を持つ場合、その inline fragment を elseif body として使う
 - `else` が `=> <fragment>` を持つ場合、その inline fragment を else body として使う
-- `inline else => <fragment>` と comment 外 body を同時に持つ場合、そのテンプレートは不正として拒否する
+- `inline elseif => <fragment>` または `inline else => <fragment>` と comment 外 body を同時に持つ場合、そのテンプレートは不正として拒否する
+- `else` の後ろに `elseif` は置けない
 - falsy と評価された条件ブロックの直後に `AND` または `OR` がある場合、その後続の演算子も取り除く
 - falsy と評価された条件ブロックの直後に `AND` または `OR` がなく、直前に `WHERE` または `HAVING` がある場合、その節キーワードも取り除く
 
 ### 初期実装での制約
 
-- `if` でサポートするのは単一の変数名だけ
+- `if` と `elseif` でサポートするのは単一の変数名だけ
 - 式構文は初期実装では意図的にサポートしない
 - `else` は式を取らない
 
@@ -325,6 +329,34 @@ FROM users
 WHERE
 /*%if active */
   active = true
+/*%else => status = 'inactive' */
+/*%end */
+```
+
+#### `elseif` 分岐
+
+```sql
+SELECT *
+FROM users
+WHERE
+/*%if active */
+  active = true
+/*%elseif pending */
+  status = 'pending'
+/*%else */
+  status = 'inactive'
+/*%end */
+```
+
+#### inline `elseif` 断片
+
+```sql
+SELECT *
+FROM users
+WHERE
+/*%if active */
+  active = true
+/*%elseif pending => status = 'pending' */
 /*%else => status = 'inactive' */
 /*%end */
 ```

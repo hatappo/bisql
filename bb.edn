@@ -71,5 +71,5 @@
   demo-preview {:doc "Write demo output to docs/spec-rendering-examples.md and open it"
                 :task (do
                         (shell "mkdir" "-p" "docs")
-                        (shell "sh" "-lc" "printf '# Rendering Examples\n' > docs/spec-rendering-examples.md && bb scripts/demo/core.bb >> docs/spec-rendering-examples.md")
+                        (shell "sh" "-lc" "bb scripts/demo/core.bb > docs/spec-rendering-examples.md")
                         (shell "open" "docs/spec-rendering-examples.md"))}}}
