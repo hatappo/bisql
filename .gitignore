@@ -13,3 +13,6 @@ src/sql/**/*.clj
 bisql.edn
 
 tmp/
+
+# Playground build outputs
+pages/dist/

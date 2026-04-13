@@ -71,6 +71,7 @@ deploy       Deploy to Clojars via build.clj; accepts `bb deploy 0.1.0` or raw b
 token        Open ~/.m2/settings.xml for editing the temporary Clojars token
 demo         Run example scripts for manual verification
 demo-preview Write demo output to docs/spec-rendering-examples.md and open it
+build-playground Build the static playground into pages/dist/
 ```
 
 `bb gen-declarations` に CLI フラグ相当を渡したい場合は、

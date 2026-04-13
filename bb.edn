@@ -3,7 +3,7 @@
  :deps {dev.weavejester/cljfmt {:mvn/version "0.16.3"}}
  :tasks
  {:init (do
-          (def source-paths ["src" "test" "scripts"])
+         (def source-paths ["src" "test" "scripts" "pages/src"])
           (defn normalize-build-args [args]
             (let [args (vec args)]
               (if (and (seq args)
@@ -72,4 +72,11 @@
                 :task (do
                         (shell "mkdir" "-p" "docs")
                         (shell "sh" "-lc" "bb scripts/demo/core.bb > docs/spec-rendering-examples.md")
-                        (shell "open" "docs/spec-rendering-examples.md"))}}}
+                        (shell "open" "docs/spec-rendering-examples.md"))}
+
+  build-playground {:doc "Build the static playground into pages/dist/"
+                    :task (do
+                            (shell "mkdir" "-p" "pages/dist")
+                            (shell "cp" "pages/static/index.html" "pages/dist/index.html")
+                            (shell "cp" "pages/static/playground.css" "pages/dist/playground.css")
+                            (clojure "-M:pages" "-m" "cljs.main" "-co" "pages/build.cljs.edn" "-c" "bisql.pages.playground"))}}}
