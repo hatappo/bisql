@@ -15,7 +15,7 @@ No boilerplate SQL
 [![Clojars Project](https://img.shields.io/clojars/v/io.github.hatappo/bisql.svg)](https://clojars.org/io.github.hatappo/bisql)
 
 > [!NOTE]
-> This project is still early and should be treated as alpha software.
+> This project is still early and the API may change.
 > Support for databases beyond PostgreSQL and Malli integration are both planned.
 
 ## Installation
@@ -174,6 +174,8 @@ For the sample tables above, this typically includes:
 - `orders.crud/insert-many`
 - `orders.crud/upsert-by-id`
 - `orders.crud/count`
+- `orders.crud/count-by-state`
+- `orders.crud/count-by-state-and-created-at`
 - `orders.crud/list`
 - `orders.crud/get-by-id`
 - `orders.crud/update-by-id`
