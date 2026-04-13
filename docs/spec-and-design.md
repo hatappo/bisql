@@ -260,7 +260,7 @@ WHERE 1 = 1
 UPDATE users
 SET
 /*%for item in items separating , */
-  /*!item.name*/ = /*$item.value*/'sample'
+  /*!item.name*/column_name = /*$item.value*/'sample'
 /*%end */
 WHERE id = /*$id*/1
 ```
@@ -376,7 +376,7 @@ SELECT *
 FROM users
 WHERE
 /*%for item in filters separating AND */
-  /*!item.column*/ = /*$item.value*/'sample'
+  /*!item.column*/column_name = /*$item.value*/'sample'
 /*%end */
 ```
 
@@ -386,7 +386,7 @@ WHERE
 UPDATE users
 SET
 /*%for item in items separating , */
-  /*!item.name*/ = /*$item.value*/'sample'
+  /*!item.name*/column_name = /*$item.value*/'sample'
 /*%end */
 WHERE id = /*$id*/1
 ```
@@ -396,7 +396,7 @@ WHERE id = /*$id*/1
 ```sql
 INSERT INTO users (
 /*%for column in columns separating , */
-  /*!column.name*/
+  /*!column.name*/column_name
 /*%end */
 ) VALUES (
 /*%for column in columns separating , */
@@ -478,11 +478,12 @@ WHERE type = 'BOOK'
 Injects raw SQL fragments as an explicit escape hatch.
 
 ```sql
-ORDER BY /*!order-by*/id DESC
+ORDER BY /*!order-by*/column_name DESC
 ```
 
 ### Policy
 
+- `/*!name*/` also requires an adjacent sample token, just like `/*$name*/` and `/*^name*/`
 - Safety is intentionally delegated to the developer using it
 - `/*!name*/` is not safe by default
 - Prefer `/*$name*/` or `/*^name*/` unless raw SQL injection is truly required

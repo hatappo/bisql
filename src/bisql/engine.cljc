@@ -783,9 +783,8 @@
                       (< cursor start)
                       (conj {:op :text
                              :sql (subs sql cursor start)}))]
-          (if (and (not= sigil "!")
-                   (or (>= sample-start length)
-                       (whitespace? (.charAt sql sample-start))))
+          (if (or (>= sample-start length)
+                  (whitespace? (.charAt sql sample-start)))
             (recur end
                    (conj nodes
                          {:op :text
@@ -794,10 +793,7 @@
                                    (= (.charAt sql sample-start) \())
                   sample-end (cond
                                (= sigil "!")
-                               (if (or (>= sample-start length)
-                                       (whitespace? (.charAt sql sample-start)))
-                                 end
-                                 (consume-sample-token sql sample-start))
+                               (consume-sample-token sql sample-start)
                                collection? (consume-sample-collection sql sample-start)
                                :else (consume-sample-token sql sample-start))]
               (recur sample-end

@@ -267,7 +267,7 @@ WHERE 1 = 1
 UPDATE users
 SET
 /*%for item in items separating , */
-  /*!item.name*/ = /*$item.value*/'sample'
+  /*!item.name*/column_name = /*$item.value*/'sample'
 /*%end */
 WHERE id = /*$id*/1
 ```
@@ -383,7 +383,7 @@ SELECT *
 FROM users
 WHERE
 /*%for item in filters separating AND */
-  /*!item.column*/ = /*$item.value*/'sample'
+  /*!item.column*/column_name = /*$item.value*/'sample'
 /*%end */
 ```
 
@@ -393,7 +393,7 @@ WHERE
 UPDATE users
 SET
 /*%for item in items separating , */
-  /*!item.name*/ = /*$item.value*/'sample'
+  /*!item.name*/column_name = /*$item.value*/'sample'
 /*%end */
 WHERE id = /*$id*/1
 ```
@@ -403,7 +403,7 @@ WHERE id = /*$id*/1
 ```sql
 INSERT INTO users (
 /*%for column in columns separating , */
-  /*!column.name*/
+  /*!column.name*/column_name
 /*%end */
 ) VALUES (
 /*%for column in columns separating , */
@@ -486,11 +486,12 @@ WHERE type = 'BOOK'
 明示的なエスケープハッチとして、生の SQL 断片を注入する。
 
 ```sql
-ORDER BY /*!order-by*/id DESC
+ORDER BY /*!order-by*/column_name DESC
 ```
 
 ### 方針
 
+- `/*!name*/` も `/*$name*/` や `/*^name*/` と同様に、直後にサンプルトークンが必要
 - 安全性は意図的に、それを使う開発者に委ねる
 - `/*!name*/` はデフォルトで安全な機能ではない
 - 生 SQL の注入が本当に必要な場合を除き、`/*$name*/` または `/*^name*/` を優先する

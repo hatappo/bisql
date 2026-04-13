@@ -269,7 +269,7 @@
                          ["UPDATE users"
                           "SET"
                           "/*%for item in items separating , */"
-                          "  /*!item.name*/ = /*$item.value*/'sample'"
+                          "  /*!item.name*/column_name = /*$item.value*/'sample'"
                           "/*%end */"
                           "WHERE id = /*$id*/1"])))
         for-step (second (:steps plan))]
@@ -374,9 +374,16 @@
 
 (deftest render-query-supports-raw-binding
   (let [result (bisql/render-query
-                {:sql-template "SELECT * FROM users ORDER BY /*!order-by*/id"}
+                {:sql-template "SELECT * FROM users ORDER BY /*!order-by*/column_name"}
                 {:order-by "created_at DESC"})]
     (is (= "SELECT * FROM users ORDER BY created_at DESC" (:sql result)))
+    (is (= [] (:params result)))))
+
+(deftest render-query-does-not-recognize-raw-binding-without-adjacent-sample
+  (let [result (bisql/render-query
+                {:sql-template "SELECT * FROM users ORDER BY /*!order-by*/ column_name"}
+                {:order-by "created_at DESC"})]
+    (is (= "SELECT * FROM users ORDER BY /*!order-by*/ column_name" (:sql result)))
     (is (= [] (:params result)))))
 
 (deftest render-query-rejects-literal-strings-with-single-quotes
@@ -1038,7 +1045,7 @@
                                          ["UPDATE users"
                                           "SET"
                                           "/*%for item in items separating , */"
-                                          "  /*!item.name*/ = /*$item.value*/'sample'"
+                                          "  /*!item.name*/column_name = /*$item.value*/'sample'"
                                           "/*%end */"
                                           "WHERE id = /*$id*/1"])}
                 {:id 42
@@ -1059,7 +1066,7 @@
                                          ["UPDATE users"
                                           "SET"
                                           "/*%for item in items */"
-                                          "  /*!item.name*/ = /*$item.value*/'sample',"
+                                          "  /*!item.name*/column_name = /*$item.value*/'sample',"
                                           "/*%end */"
                                           "WHERE id = /*$id*/1"])}
                 {:id 42
@@ -1080,7 +1087,7 @@
                                           "FROM users"
                                           "WHERE"
                                           "/*%for item in items */"
-                                          "  /*!item.name*/ = /*$item.value*/'sample' AND"
+                                          "  /*!item.name*/column_name = /*$item.value*/'sample' AND"
                                           "/*%end */"
                                           "status = /*$status*/'active'"])}
                 {:items [{:name "display_name" :value "Alice"}]
@@ -1100,7 +1107,7 @@
                                ["UPDATE users"
                                 "SET"
                                 "/*%for item in items separating , */"
-                                "  /*!item.name*/ = /*$item.value*/'sample'"
+                                "  /*!item.name*/column_name = /*$item.value*/'sample'"
                                 "/*%end */"
                                 "WHERE id = /*$id*/1"])
         parsed-template (bisql/parse-template sql-template)
@@ -1119,7 +1126,7 @@
                                ["UPDATE users"
                                 "SET"
                                 "/*%for item in items separating , */"
-                                "  /*!item.name*/ = /*$item.value*/'sample'"
+                                "  /*!item.name*/column_name = /*$item.value*/'sample'"
                                 "/*%end */"
                                 "WHERE id = /*$id*/1"])
         plan (bisql/renderer-plan (bisql/parse-template sql-template))
@@ -1138,7 +1145,7 @@
                                ["UPDATE users"
                                 "SET"
                                 "/*%for item in items separating , */"
-                                "  /*!item.name*/ = /*$item.value*/'sample'"
+                                "  /*!item.name*/column_name = /*$item.value*/'sample'"
                                 "/*%end */"
                                 "WHERE id = /*$id*/1"])
         parsed-template (bisql/parse-template sql-template)
@@ -1160,7 +1167,7 @@
                                           "FROM users"
                                           "WHERE"
                                           "/*%for item in items */"
-                                          "  /*!item.name*/ = /*$item.value*/'sample'"
+                                          "  /*!item.name*/column_name = /*$item.value*/'sample'"
                                           "/*%end */"])}
                 {:items []})]
     (is (= (str/join "\n"
@@ -1176,7 +1183,7 @@
                                           "FROM users"
                                           "WHERE"
                                           "/*%for item in items */"
-                                          "  /*!item.name*/ = /*$item.value*/'sample'"
+                                          "  /*!item.name*/column_name = /*$item.value*/'sample'"
                                           "/*%end */"
                                           "AND status = /*$status*/'active'"])}
                 {:items []
@@ -1197,7 +1204,7 @@
                                            "SET"
                                            "/*%for item in items */"
                                            "  /*%for sub in item.values */"
-                                           "    /*!sub.name*/ = /*$sub.value*/'sample',"
+                                           "    /*!sub.name*/column_name = /*$sub.value*/'sample',"
                                            "  /*%end */"
                                            "/*%end */"])}
                  {:items [{:values [{:name "status" :value "active"}]}]})
@@ -1214,7 +1221,7 @@
                                          ["UPDATE users"
                                           "SET"
                                           "/*%for item in items */"
-                                           "  /*!item.name*/ = /*$item.value*/'sample'"
+                                           "  /*!item.name*/column_name = /*$item.value*/'sample'"
                                            "/*%end */"
                                            "WHERE id = /*$id*/1"])}
                  {:id 42
