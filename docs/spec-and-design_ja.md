@@ -622,6 +622,49 @@ parsed-template 層は parser の出力であり、statement kind (`:select`,
 renderer-plan 層は、その後段の code generation と将来の interpreter のための
 実行寄り中間表現である。
 
+現在の `renderer-plan` は、次の形を安定契約として持つ:
+
+```clojure
+{:op :renderer-plan
+ :statement-kind :select
+ :steps [...]}
+```
+
+top-level の `:steps` ベクタは、実行寄りの step map を並べたものになる。
+現在の step 種別は次の4つである:
+
+- `:append-text`
+- `:append-variable`
+- `:branch`
+- `:for-each`
+
+`:append-text` は `:sql`, `:context`, `:statement-kind` を持つ。
+`:append-variable` は `:sigil`, `:parameter-name`, `:collection?`, `:context`,
+`:statement-kind` を持つ。
+
+`:branch` は `:branches` を持ち、各 branch は次の形になる:
+
+```clojure
+{:expr "active" ;; else は nil
+ :steps [...]}
+```
+
+`:for-each` は loop 契約として次の形を持つ:
+
+```clojure
+{:op :for-each
+ :item-name "item"
+ :collection-name "items"
+ :separator ","
+ :context :set
+ :statement-kind :update
+ :steps [...]}
+```
+
+emitted Clojure form の正確な形自体は implementation detail だが、
+`parsed-template -> renderer-plan -> renderer-form` という層分離は、
+今後の compiler 境界として固定していく。
+
 現在の主経路は `emit-renderer-form` である。`defrender` と `defquery` は、
 マクロ展開時に emitted renderer form をそのまま埋め込み、
 `compile-renderer` は `eval` を使う実行時向けの薄い convenience wrapper

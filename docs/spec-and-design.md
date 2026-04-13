@@ -614,6 +614,49 @@ context such as `:where`, `:having`, `:set`, `:values`, `:limit`, and
 `:offset`. The renderer-plan layer is the execution-oriented intermediate form
 used by later code generation and future interpreter work.
 
+`renderer-plan` currently has this stable shape:
+
+```clojure
+{:op :renderer-plan
+ :statement-kind :select
+ :steps [...]}
+```
+
+The top-level `:steps` vector contains execution-oriented step maps. The
+current step kinds are:
+
+- `:append-text`
+- `:append-variable`
+- `:branch`
+- `:for-each`
+
+`:append-text` carries `:sql`, `:context`, and `:statement-kind`.
+`:append-variable` carries `:sigil`, `:parameter-name`, `:collection?`,
+`:context`, and `:statement-kind`.
+
+`:branch` carries `:branches`, where each branch has:
+
+```clojure
+{:expr "active" ;; or nil for else
+ :steps [...]}
+```
+
+`:for-each` carries the loop contract:
+
+```clojure
+{:op :for-each
+ :item-name "item"
+ :collection-name "items"
+ :separator ","
+ :context :set
+ :statement-kind :update
+ :steps [...]}
+```
+
+The exact emitted Clojure form is an implementation detail, but the
+`parsed-template -> renderer-plan -> renderer-form` layering is now the
+intended compiler boundary.
+
 The current primary path is `emit-renderer-form`: `defrender` and `defquery`
 embed the emitted renderer form at macro expansion time, while
 `compile-renderer` remains as a thin runtime convenience wrapper around `eval`.

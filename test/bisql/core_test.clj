@@ -229,6 +229,49 @@
     (is (= "id"
            (-> plan :steps second :parameter-name)))))
 
+(deftest renderer-plan-represents-conditional-branches
+  (let [plan (bisql/renderer-plan
+              (bisql/parse-template
+               (str/join "\n"
+                         ["SELECT *"
+                          "FROM users"
+                          "WHERE 1 = 1"
+                          "/*%if active */"
+                          "  AND status = /*$status*/'active'"
+                          "/*%elseif archived => AND archived_at IS NOT NULL */"
+                          "/*%else => AND archived_at IS NULL */"
+                          "/*%end */"])))
+        branch-step (second (:steps plan))]
+    (is (= :branch (:op branch-step)))
+    (is (= :where (:context branch-step)))
+    (is (= ["active" "archived" nil]
+           (mapv :expr (:branches branch-step))))
+    (is (= [:append-text :append-variable :append-text]
+           (mapv :op (get-in branch-step [:branches 0 :steps]))))
+    (is (= [:append-text]
+           (mapv :op (get-in branch-step [:branches 1 :steps]))))
+    (is (= [:append-text]
+           (mapv :op (get-in branch-step [:branches 2 :steps]))))))
+
+(deftest renderer-plan-represents-for-each-steps
+  (let [plan (bisql/renderer-plan
+              (bisql/parse-template
+               (str/join "\n"
+                         ["UPDATE users"
+                          "SET"
+                          "/*%for item in items separating , */"
+                          "  /*!item.name*/ = /*$item.value*/'sample'"
+                          "/*%end */"
+                          "WHERE id = /*$id*/1"])))
+        for-step (second (:steps plan))]
+    (is (= :for-each (:op for-step)))
+    (is (= "item" (:item-name for-step)))
+    (is (= "items" (:collection-name for-step)))
+    (is (= "," (:separator for-step)))
+    (is (= :set (:context for-step)))
+    (is (= [:append-text :append-variable :append-text :append-variable :append-text]
+           (mapv :op (:steps for-step))))))
+
 (deftest parse-template-annotates-variable-contexts
   (let [parsed-template (bisql/parse-template
             (str/join "\n"
