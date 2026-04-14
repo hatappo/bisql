@@ -9,6 +9,8 @@ on:
       - "deps.edn"
       - "pages/**"
       - "docs/data/**"
+      - "docs/spec-*.md"
+      - "docs/img/bicycle.svg"
       - "pages/scripts/**"
       - "scripts/sql/**"
       - "src/**"
@@ -35,6 +37,7 @@ jobs:
         uses: DeLaGuardo/setup-clojure@e6e77cdf6873b7af18609cf29f24bee054c5be72 # 13.5.3
         with:
           cli: latest
+          bb: latest
 
       - name: Build pages app
         run: bb pages-build
