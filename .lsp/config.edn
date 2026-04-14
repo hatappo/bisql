@@ -1,1 +1,2 @@
-{:source-paths-ignore-regex [".*/pages/dist/.*"]}
+{:source-paths-ignore-regex [".*/pages/dist/.*"
+                             ".*/pages/generated/.*"]}

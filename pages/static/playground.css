@@ -76,6 +76,28 @@ body {
   padding: 1rem;
 }
 
+.sidebar-group {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.sidebar-group-title {
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+
+.sidebar-group-links {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.sidebar-loading {
+  padding: 1rem;
+  opacity: 0.72;
+}
+
 .doc-nav-sidebar {
   padding: 0 1rem 1rem;
 }
@@ -97,7 +119,6 @@ body {
   outline-offset: 2px;
 }
 
-.sidebar-section,
 .doc-nav-label,
 .toolbar-label {
   font-size: 0.72rem;
@@ -156,11 +177,24 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0 1rem 0;
+  padding: 0.5rem 1rem 0;
 }
 
-.summary-body p {
+.summary-description {
   flex: 1;
+}
+
+.summary-description p + p {
+  margin-top: 0.75rem;
+}
+
+.summary-description .inline-code {
+  display: inline-block;
+  padding: 0.08rem 0.32rem;
+  border: 1px solid rgba(46, 39, 30, 0.18);
+  background: rgba(255, 248, 232, 0.42);
+  font-family: var(--code-font, ui-monospace, monospace);
+  font-size: 0.92em;
 }
 
 .workspace {
@@ -170,7 +204,49 @@ body {
 }
 
 .output-grid {
+  --output-column-height: 21rem;
+  display: flex;
+  gap: 1.25rem;
   margin-top: 0.25rem;
+  align-items: stretch;
+}
+
+.output-sql-column,
+.output-side-column {
+  flex: 1 1 0;
+  min-width: 0;
+  width: 100%;
+}
+
+.output-sql-column {
+  display: flex;
+}
+
+.output-side-column {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  height: var(--output-column-height);
+}
+
+.output-sql-column > .panel,
+.output-side-column > .panel,
+.output-side-column > .error-panel {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100%;
+  width: 100%;
+  padding-bottom: 0;
+}
+
+.output-sql-column > .panel {
+  height: var(--output-column-height);
+}
+
+.output-grid .cm-host {
+  display: flex;
+  min-height: 0;
+  width: 100%;
 }
 
 .cm-host {
@@ -179,7 +255,8 @@ body {
 }
 
 .CodeMirror {
-  min-height: 20rem;
+  height: 17rem;
+  width: 100%;
   border: 1px solid rgba(46, 39, 30, 0.24);
   background: #d7cdb8;
   color: #221d17;
@@ -188,12 +265,21 @@ body {
   box-shadow: inset 0 0 0 1px rgba(255, 248, 232, 0.45);
 }
 
+.CodeMirror.cm-input {
+  height: 17rem;
+}
+
 .CodeMirror.cm-output {
-  min-height: 16rem;
+  height: 100%;
+}
+
+.CodeMirror.cm-error-output {
+  height: 100%;
 }
 
 .CodeMirror-scroll {
-  min-height: inherit;
+  height: 100%;
+  min-height: 100%;
 }
 
 .CodeMirror-gutters {
@@ -213,10 +299,8 @@ body {
   background: rgba(168, 113, 64, 0.24);
 }
 
-.error-panel pre {
-  margin: 0;
-  padding: 0 1rem 1rem;
-  white-space: pre-wrap;
+.error-panel .cm-host {
+  padding-bottom: 1rem;
 }
 
 .doc-nav {

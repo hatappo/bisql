@@ -1,0 +1,110 @@
+{:title "Rendering Examples"
+ :groups
+ [{:id "variables"
+   :title "1. Variables"
+   :examples
+   [{:id "bind-values"
+     :title "1-1: bind values"
+     :description "`/*$ */` comments become bind variables. The sample value must be written immediately after the comment, as in `/*$id*/1`."
+     :input {:kind :resource
+             :resource "demo-variables-bind.sql"
+             :params {:id 42}}}
+    {:id "literal-values"
+     :title "1-2: literal values"
+     :description "`^` is rendered as a SQL literal. Strings are quoted with `'`."
+     :input {:kind :resource
+             :resource "demo-variables-literal.sql"
+             :params {:type "BOOK"}}}
+    {:id "raw-values"
+     :title "1-3: raw values"
+     :description "`!` is inserted into SQL as-is. It is useful for cases like `ORDER BY`, but it must not be fed directly from user input."
+     :input {:kind :resource
+             :resource "demo-variables-raw.sql"
+             :params {:order-by "created_at DESC"}}}
+    {:id "default-value"
+     :title "1-4: DEFAULT bind value"
+     :description "`bisql/DEFAULT` is rendered as the SQL keyword `DEFAULT` instead of a bind parameter. This is useful in `VALUES` clauses."
+     :input {:kind :resource
+             :resource "demo-variables-default.sql"
+             :params {:email "alice@example.com"
+                      :status bisql/DEFAULT}}}
+    {:id "all-value"
+     :title "1-5: ALL bind value"
+     :description "`bisql/ALL` is rendered as the SQL keyword `ALL` instead of a bind parameter. This is useful in clauses such as `LIMIT ALL`."
+     :input {:kind :resource
+             :resource "demo-variables-all.sql"
+             :params {:limit bisql/ALL}}}]}
+  {:id "control-flow"
+   :title "2. Control flow"
+   :examples
+   [{:id "if"
+     :title "2-1: if"
+     :input {:kind :resource
+             :resource "demo-if.sql"
+             :params {:id 42}}}
+    {:id "remove-where-for-falsy-if"
+     :title "2-2: remove WHERE for falsy if"
+     :description "When the condition is false, the preceding `WHERE` or `HAVING` keyword is removed automatically."
+     :input {:kind :resource
+             :resource "demo-if-where.sql"
+             :params {:active false}}}
+    {:id "remove-following-and-for-falsy-if"
+     :title "2-3: remove following AND for falsy if"
+     :description "When the condition is false, a following `AND` is removed automatically. In this case, the preceding `WHERE` or `HAVING` remains in place."
+     :input {:kind :resource
+             :resource "demo-if-and.sql"
+             :params {:active false
+                      :status "active"}}}
+    {:id "elseif-and-else"
+     :title "2-4: elseif and else"
+     :input {:kind :resource
+             :resource "demo-if-elseif-else.sql"
+             :params {:active false
+                      :pending true}}}
+    {:id "inline-elseif-and-else"
+     :title "2-5: inline elseif and else"
+     :description "`else` and `elseif` bodies can also be written inline inside the directive comment by using `=>`. This keeps the template closer to executable SQL."
+     :input {:kind :resource
+             :resource "demo-if-inline-elseif-else.sql"
+             :params {:active false
+                      :pending true}}}
+    {:id "for"
+     :title "2-6: for"
+     :description "`for` loops can declare a separator with `separating`. This is useful when joining an arbitrary number of fragments with `,`, `AND`, or `OR`."
+     :input {:kind :resource
+             :resource "demo-for.sql"
+             :params {:id 42
+                      :items [{:name "display_name" :value "Alice"}
+                              {:name "status" :value "active"}]}}}]}
+  {:id "declarations"
+   :title "3. Declarations"
+   :examples
+   [{:id "docstring-and-metadata"
+     :title "3-1: docstring and metadata"
+     :input {:kind :resource
+             :resource "demo-declarations.sql"
+             :params {:id 42}}}
+    {:id "multiple-sql-templates-in-one-file"
+     :title "3-2: multiple SQL templates in one file"
+     :description "A single SQL file can contain multiple templates. Each template starts with a `/*:name */` directive that defines the generated function name."
+     :input {:kind :resource-query
+             :resource "demo-multi-queries.sql"
+             :query-name "core.find-user-by-id"
+             :params {:id 42}}}]}
+  {:id "others"
+   :title "4. Others"
+   :examples
+   [{:id "render-query-by-passing-a-sql-template-directly"
+     :title "4-1: render query by passing a SQL template directly"
+     :description "You can also pass a SQL template directly from Clojure code. This is useful for debugging or learning, but application queries should generally live in SQL files."
+     :input {:kind :direct-template
+             :sql-template "SELECT * FROM users WHERE id = /*$id*/1"
+             :params {:id 42}}}
+    {:id "errors-missing-bind-parameter"
+     :title "4-2: Errors: missing bind parameter"
+     :error? true
+     :input {:kind :resource
+             :resource "demo-variables-bind.sql"
+             :params {:ic 42}}}]}]
+ :notes
+ ["The sample code assumes `(require '[bisql.core :as bisql])`."]}

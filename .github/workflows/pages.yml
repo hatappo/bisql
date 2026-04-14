@@ -8,6 +8,9 @@ on:
       - "bb.edn"
       - "deps.edn"
       - "pages/**"
+      - "docs/data/**"
+      - "pages/scripts/**"
+      - "scripts/sql/**"
       - "src/**"
   workflow_dispatch:
 

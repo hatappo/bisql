@@ -15,6 +15,7 @@ bisql.edn
 tmp/
 
 # Playground build outputs
+pages/generated/
 pages/dist/
 .shadow-cljs/
 node_modules/

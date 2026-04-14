@@ -114,11 +114,19 @@
 
 (defn- read-declaration-value
   [directive body]
-  (try
-    (read-edn-body body)
-    (catch #?(:clj Exception :cljs :default) ex
-      (if (= directive :doc)
-        (str/trim body)
+  (if (= directive :doc)
+    (let [trimmed-body (str/trim body)]
+      (try
+        (let [value (read-edn-body body)]
+          (cond
+            (string? value) value
+            (re-find #"\s" trimmed-body) trimmed-body
+            :else (str value)))
+        (catch #?(:clj Exception :cljs :default) _
+          trimmed-body)))
+    (try
+      (read-edn-body body)
+      (catch #?(:clj Exception :cljs :default) ex
         (throw (ex-info "Invalid declaration value."
                         {:directive directive
                          :body body}
@@ -506,8 +514,14 @@
   (let [current (str out)
         updated (remove-trailing-clause-keyword-from-sql current)]
     (when-not (= current updated)
-      (.setLength out 0)
-      (.append out ^String updated))))
+      #?(:clj
+         (.setLength ^StringBuilder out 0)
+         :cljs
+         (.setLength ^js out 0))
+      #?(:clj
+         (.append ^StringBuilder out ^String updated)
+         :cljs
+         (.append ^js out updated)))))
 
 (defn- trailing-set-clause-sql?
   [sql]

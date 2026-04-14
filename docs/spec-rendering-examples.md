@@ -71,7 +71,7 @@ SELECT * FROM users ORDER BY created_at DESC
 
 `!` is inserted into SQL as-is. It is useful for cases like `ORDER BY`, but it must not be fed directly from user input.
 
-### 1-4: default bind value 
+### 1-4: DEFAULT bind value 
 
 1. Input Form:
 ```clj
@@ -405,7 +405,7 @@ SELECT * FROM users WHERE id = /*$id*/1
 
 3. Output Error:
 ```clj
-{:message "Missing query parameter.",
+{:message "Missing query parameter: id",
  :data
  {:query-name "core.demo-variables-bind",
   :base-path "sql",
