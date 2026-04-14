@@ -1,0 +1,32 @@
+# Introduction
+
+Bisql is a SQL-first data access library for Clojure.
+
+Its design goal is simple:
+
+- keep SQL as the source of truth
+- keep templates readable and close to executable SQL
+- generate repetitive CRUD queries from the database schema
+- keep runtime behavior explicit and predictable
+
+Bisql does not try to replace SQL with a DSL or query builder.
+Instead, it gives you:
+
+- comment-based 2-way SQL templating
+- rendering into SQL + bind params
+- declaration metadata inside `.sql` files
+- generated CRUD SQL and Clojure entrypoints
+- adapter-based execution, currently centered on `next.jdbc`
+
+The intended workflow is:
+
+1. write or generate SQL templates
+2. load them from the classpath
+3. render them with params
+4. execute them through an adapter
+
+See also:
+
+- [Installation](installation.md)
+- [Getting Started](getting-started.md)
+- [What is 2-way-SQL](what-is-2-way-sql.md)

@@ -9,7 +9,7 @@ on:
       - "deps.edn"
       - "pages/**"
       - "docs/data/**"
-      - "docs/spec-*.md"
+      - "docs/*.md"
       - "docs/img/bicycle.svg"
       - "pages/scripts/**"
       - "scripts/sql/**"

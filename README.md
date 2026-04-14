@@ -227,7 +227,7 @@ body included.
 
 For more detail on the 2-way SQL syntax and rendering behavior, see:
 
-- [docs/spec-rendering-examples.md](docs/spec-rendering-examples.md)
+- [docs/rendering-examples.md](docs/rendering-examples.md)
 
 ## Development
 

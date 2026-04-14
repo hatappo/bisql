@@ -54,25 +54,25 @@ SELECT * FROM orders;
 $ bb tasks
 The following tasks are available:
 
-lint         Run clj-kondo on project sources
-format       Fix Clojure formatting with cljfmt
-format-check Check Clojure formatting with cljfmt
-test         Run tests
-test-db      Reset sample schema and run integration tests against local PostgreSQL
-verify       Run format check, lint, and tests
-fix          Run format, lint, and tests
-db-reset     Reset local PostgreSQL sample schema and seed data
-gen-config   Generate a bisql.edn config template
-gen-crud     Generate CRUD SQL files from local PostgreSQL
+lint             Run clj-kondo on project sources
+format           Fix Clojure formatting with cljfmt
+format-check     Check Clojure formatting with cljfmt
+test             Run tests
+test-db          Reset sample schema and run integration tests against local PostgreSQL
+verify           Run format check, lint, and tests
+fix              Run format, lint, and tests
+db-reset         Reset local PostgreSQL sample schema and seed data
+gen-config       Generate a bisql.edn config template
+gen-crud         Generate CRUD SQL files from local PostgreSQL
 gen-declarations Generate declaration namespace files from local SQL templates
-jar          Build the jar via build.clj; accepts `bb jar 0.1.0` or raw build args
-install      Install to local Maven cache via build.clj; accepts `bb install 0.1.0` or raw build args
-deploy       Deploy to Clojars via build.clj; accepts `bb deploy 0.1.0` or raw build args
-token        Open ~/.m2/settings.xml for editing the temporary Clojars token
-demo         Run example scripts for manual verification
-demo-preview Write demo output to docs/spec-rendering-examples.md and open it
-pages-build    Build the static pages app into pages/dist/
-pages-watch    Start the pages dev server on http://localhost:8000
+jar              Build the jar via build.clj; accepts `bb jar 0.1.0` or raw build args
+install          Install to local Maven cache via build.clj; accepts `bb install 0.1.0` or raw build args
+deploy           Deploy to Clojars via build.clj; accepts `bb deploy 0.1.0` or raw build args
+token            Open ~/.m2/settings.xml for editing the temporary Clojars token
+demo             Run example scripts for manual verification
+demo-preview     Write demo output to docs/rendering-examples.md and open it
+pages-build      Build the static pages app into pages/dist/
+pages-dev        Start the shadow-cljs pages dev server on http://localhost:8000
 ```
 
 `bb gen-declarations` に CLI フラグ相当を渡したい場合は、
@@ -80,7 +80,7 @@ pages-watch    Start the pages dev server on http://localhost:8000
 のように `--` 区切りで渡す。`bb` の `--flag` は Babashka 自身が先に解釈するため、
 この書き方に統一する。
 
-`pages-build` / `pages-watch` は内部的に `pages/` 配下の `deps.edn` と
+`pages-build` / `pages-dev` は内部的に `pages/` 配下の `deps.edn` と
 `shadow-cljs.edn` を使う。`pages/` は独立したサブアプリとして扱っている。
 
 ## REPL Check
@@ -149,4 +149,4 @@ Notes:
 ## Related Docs
 
 - [dev-releasing.md](dev-releasing.md)
-- [spec-rendering-examples.md](spec-rendering-examples.md)
+- [../rendering-examples.md](../rendering-examples.md)
