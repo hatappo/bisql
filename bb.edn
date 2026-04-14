@@ -3,7 +3,7 @@
  :deps {dev.weavejester/cljfmt {:mvn/version "0.16.3"}}
  :tasks
  {:init (do
-          (def source-paths ["src" "test" "scripts"])
+         (def source-paths ["src" "test" "scripts" "pages/src"])
           (defn normalize-build-args [args]
             (let [args (vec args)]
               (if (and (seq args)
@@ -72,4 +72,21 @@
                 :task (do
                         (shell "mkdir" "-p" "docs")
                         (shell "sh" "-lc" "bb scripts/demo/core.bb > docs/spec-rendering-examples.md")
-                        (shell "open" "docs/spec-rendering-examples.md"))}}}
+                        (shell "open" "docs/spec-rendering-examples.md"))}
+
+  pages-build {:doc "Build the static pages app into pages/dist/"
+               :task (do
+                       (shell "rm" "-rf" "pages/dist")
+                       (shell "mkdir" "-p" "pages/dist")
+                       (shell "bb" "pages/scripts/generate_examples_catalog.bb")
+                       (shell "cp" "pages/static/index.html" "pages/dist/index.html")
+                       (shell "cp" "pages/static/playground.css" "pages/dist/playground.css")
+                       (shell "sh" "-lc" "cd pages && clojure -J--enable-native-access=ALL-UNNAMED -J--sun-misc-unsafe-memory-access=allow -M -m shadow.cljs.devtools.cli release playground"))}
+
+  pages-watch {:doc "Start the shadow-cljs pages dev server on http://localhost:8000"
+               :task (do
+                       (shell "mkdir" "-p" "pages/dist")
+                       (shell "bb" "pages/scripts/generate_examples_catalog.bb")
+                       (shell "cp" "pages/static/index.html" "pages/dist/index.html")
+                       (shell "cp" "pages/static/playground.css" "pages/dist/playground.css")
+                       (shell "sh" "-lc" "cd pages && clojure -J--enable-native-access=ALL-UNNAMED -J--sun-misc-unsafe-memory-access=allow -M -m shadow.cljs.devtools.cli watch playground"))}}}

@@ -71,12 +71,17 @@ deploy       Deploy to Clojars via build.clj; accepts `bb deploy 0.1.0` or raw b
 token        Open ~/.m2/settings.xml for editing the temporary Clojars token
 demo         Run example scripts for manual verification
 demo-preview Write demo output to docs/spec-rendering-examples.md and open it
+pages-build    Build the static pages app into pages/dist/
+pages-watch    Start the pages dev server on http://localhost:8000
 ```
 
 `bb gen-declarations` に CLI フラグ相当を渡したい場合は、
 `bb gen-declarations -- --include-sql-template --suppress-unused-public-var`
 のように `--` 区切りで渡す。`bb` の `--flag` は Babashka 自身が先に解釈するため、
 この書き方に統一する。
+
+`pages-build` / `pages-watch` は内部的に `pages/` 配下の `deps.edn` と
+`shadow-cljs.edn` を使う。`pages/` は独立したサブアプリとして扱っている。
 
 ## REPL Check
 
