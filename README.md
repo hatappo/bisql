@@ -1,5 +1,9 @@
 # Bisql
 
+<p align="center">
+  <img src="docs/img/bicycle.svg" alt="Bisql bicycle logo" width="96" height="96" />
+</p>
+
 Bisql (pronounced `báisikl` 🚲) is a SQL-first, SQL-only, SQL-obsessed data access toolkit for Clojure.
 
 Write real SQL. Keep it executable. Generate the boring parts.
