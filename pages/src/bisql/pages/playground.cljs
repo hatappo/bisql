@@ -9,6 +9,7 @@
 (defonce *state
   (atom {:catalog nil
          :selected-example-id nil
+         :sidebar-open? false
          :example-title ""
          :example-description ""
          :sql-template ""
@@ -145,6 +146,7 @@
                            :input-kind (:kind input)})))
       (swap! *state assoc
              :selected-example-id example-id
+             :sidebar-open? false
              :example-title title
              :example-description description
              :sql-template sql-template
@@ -238,6 +240,7 @@
 (defn render-app
   [{:keys [catalog
            selected-example-id
+           sidebar-open?
            example-title
            example-description
            page-error]}]
@@ -249,38 +252,41 @@
       [:p.eyebrow "bisql"]
       [:h1 "Playground"]
       [:p.lede
-       "Edit a SQL template and EDN params, then render the final SQL and bind params in the browser."]]
+       "Let's ride 🚲️ and run."]]
 
      [:div.docs-layout
       [:aside.sidebar.panel
        [:div.panel-header "Examples"]
-       (if catalog
-         [:div.sidebar-list
-          (map #(example-group % selected-example-id) (:groups catalog))]
-         [:div.sidebar-loading "Loading examples..."])
-       [:nav.doc-nav.doc-nav-sidebar
-        (if previous
-          [:button.doc-nav-link
-           {:type "button"
-            :value (:id previous)
-            :on {:click [:select-example]}}
-           [:span.doc-nav-label "Previous"]
-           [:span.doc-nav-title (:title previous)]]
-          [:div.doc-nav-spacer])
-        (if next
-          [:button.doc-nav-link
-           {:type "button"
-            :value (:id next)
-            :on {:click [:select-example]}}
-           [:span.doc-nav-label "Next"]
-           [:span.doc-nav-title (:title next)]]
-          [:div.doc-nav-spacer])]]
+       [:button.sidebar-toggle
+        {:type "button"
+         :data-open sidebar-open?
+         :on {:click [:toggle-sidebar]}}
+        (if sidebar-open? "Hide examples" "Show examples")]
+       [:div.sidebar-body
+        {:data-open sidebar-open?}
+        (if catalog
+          [:div.sidebar-list
+           (map #(example-group % selected-example-id) (:groups catalog))]
+          [:div.sidebar-loading "Loading examples..."])]]
 
       [:div.content-column
        [:section.toolbar
-        [:div.toolbar-copy
-         [:span.toolbar-label "Selected example"]
-         [:strong.toolbar-title example-title]]]
+        [:div.toolbar-row
+         [:div.toolbar-copy
+          [:span.toolbar-label "Selected example"]]
+         [:nav.toolbar-nav
+          (when previous
+            [:button.toolbar-nav-link
+             {:type "button"
+              :value (:id previous)
+              :on {:click [:select-example]}}
+             "Prev"])
+          (when next
+            [:button.toolbar-nav-link
+             {:type "button"
+              :value (:id next)
+              :on {:click [:select-example]}}
+             "Next"])]]]
 
        [:section.summary
         [:h2 example-title]
@@ -372,6 +378,11 @@
       (case action
         :select-example
         (load-example! target-value)
+
+        :toggle-sidebar
+        (do
+          (swap! *state update :sidebar-open? not)
+          (rerender!))
 
         :render
         (do
