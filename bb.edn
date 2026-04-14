@@ -80,11 +80,11 @@
                        (shell "mkdir" "-p" "pages/dist")
                        (shell "cp" "pages/static/index.html" "pages/dist/index.html")
                        (shell "cp" "pages/static/playground.css" "pages/dist/playground.css")
-                       (clojure "-M:pages" "-m" "shadow.cljs.devtools.cli" "release" "playground"))}
+                       (shell "sh" "-lc" "cd pages && clojure -M -m shadow.cljs.devtools.cli release playground"))}
 
   pages-watch {:doc "Start the shadow-cljs pages dev server on http://localhost:8000"
                :task (do
                        (shell "mkdir" "-p" "pages/dist")
                        (shell "cp" "pages/static/index.html" "pages/dist/index.html")
                        (shell "cp" "pages/static/playground.css" "pages/dist/playground.css")
-                       (clojure "-M:pages" "-m" "shadow.cljs.devtools.cli" "watch" "playground"))}}}
+                       (shell "sh" "-lc" "cd pages && clojure -M -m shadow.cljs.devtools.cli watch playground"))}}}

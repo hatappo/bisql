@@ -72,6 +72,7 @@
          :output-error ""}))
 
 (defonce *root (atom nil))
+(defonce *editors (atom {}))
 
 (defn pprint-str
   [x]
@@ -81,6 +82,23 @@
 (defn example-by-id
   [example-id]
   (some #(when (= example-id (:id %)) %) examples))
+
+(defn example-index
+  [example-id]
+  (first
+   (keep-indexed
+    (fn [idx example]
+      (when (= example-id (:id example))
+        idx))
+    examples)))
+
+(defn neighboring-examples
+  [example-id]
+  (let [idx (or (example-index example-id) 0)]
+    {:previous (when (pos? idx)
+                 (nth examples (dec idx)))
+     :next (when (< idx (dec (count examples)))
+             (nth examples (inc idx)))}))
 
 (defn normalize-edn-value
   [x]
@@ -134,10 +152,81 @@
 
 (declare render-app)
 
+(defn destroy-editor!
+  [editor-key]
+  (when-let [{:keys [view]} (get @*editors editor-key)]
+    (.toTextArea view)
+    (swap! *editors dissoc editor-key)))
+
+(defn replace-editor-doc!
+  [view text]
+  (let [current (.getValue view)]
+    (when-not (= current text)
+      (.setValue view text))))
+
+(defn ensure-editor!
+  [{:keys [editor-key host-id text editable? on-change language class-name]}]
+  (if-let [host (.getElementById js/document host-id)]
+    (let [{:keys [view host-node]} (get @*editors editor-key)]
+      (if (or (nil? view) (not= host-node host))
+        (do
+          (destroy-editor! editor-key)
+          (let [textarea (.createElement js/document "textarea")
+                _ (.appendChild host textarea)
+                view (.fromTextArea js/CodeMirror
+                                    textarea
+                                    #js {:value text
+                                         :mode (case language
+                                                 :sql "text/x-sql"
+                                                 :clojure "clojure"
+                                                 nil)
+                                         :lineNumbers true
+                                         :lineWrapping true
+                                         :readOnly (if editable? false "nocursor")})]
+            (.setValue view text)
+            (when on-change
+              (.on view "change"
+                   (fn [cm _change]
+                     (on-change (.getValue cm)))))
+            (when class-name
+              (.add (.-classList (.getWrapperElement view)) class-name))
+            (swap! *editors assoc editor-key {:view view
+                                              :host-node host})))
+        (replace-editor-doc! view text)))
+    (destroy-editor! editor-key)))
+
 (defn rerender!
   []
   (when-let [root @*root]
-    (r/render root (render-app @*state))))
+    (r/render root (render-app @*state))
+    (let [{:keys [sql-template
+                  params-edn
+                  output-sql
+                  output-data]} @*state]
+      (ensure-editor! {:editor-key :sql-input
+                       :host-id "sql-editor"
+                       :text sql-template
+                       :editable? true
+                       :language :sql
+                       :on-change #(swap! *state assoc :sql-template %)})
+      (ensure-editor! {:editor-key :params-input
+                       :host-id "params-editor"
+                       :text params-edn
+                       :editable? true
+                       :language :clojure
+                       :on-change #(swap! *state assoc :params-edn %)})
+      (ensure-editor! {:editor-key :sql-output
+                       :host-id "sql-output"
+                       :text output-sql
+                       :editable? false
+                       :language :sql
+                       :class-name "cm-output"})
+      (ensure-editor! {:editor-key :data-output
+                       :host-id "data-output"
+                       :text output-data
+                       :editable? false
+                       :language :clojure
+                       :class-name "cm-output"}))))
 
 (defn dispatch!
   [event-data handler]
@@ -153,23 +242,21 @@
         :select-example
         (load-example! target-value)
 
-        :set-sql-template
-        (swap! *state assoc :sql-template target-value)
-
-        :set-params-edn
-        (swap! *state assoc :params-edn target-value)
-
         :render
         (render-current!)
 
         nil))
     (rerender!)))
 
-(defn example-option
+(defn example-link
   [{:keys [id section title]} selected-id]
-  [:option {:value id
-            :selected (= id selected-id)}
-   (str section " / " title)])
+  [:button.sidebar-link
+   {:type "button"
+    :value id
+    :data-active (= id selected-id)
+    :on {:click [:select-example]}}
+   [:span.sidebar-section section]
+   [:span.sidebar-title title]])
 
 (defn panel
   [title & body]
@@ -181,55 +268,71 @@
   [{:keys [selected-example-id
            example-title
            example-description
-           sql-template
-           params-edn
-           output-sql
-           output-data
            output-error]}]
-  [:main.page
-   [:header.hero
-    [:p.eyebrow "bisql"]
-    [:h1 "Playground"]
-    [:p.lede
-     "Edit a SQL template and EDN params, then render the final SQL and bind params in the browser."]]
+  (let [{:keys [previous next]} (neighboring-examples selected-example-id)]
+    [:main.page
+     [:header.hero
+      [:p.eyebrow "bisql"]
+      [:h1 "Playground"]
+      [:p.lede
+       "Edit a SQL template and EDN params, then render the final SQL and bind params in the browser."]]
 
-   [:section.toolbar
-    [:label.field
-     [:span "Example"]
-     [:select {:value selected-example-id
-               :on {:change [:select-example]}}
-      (map #(example-option % selected-example-id) examples)]]
-    [:button {:type "button"
-              :on {:click [:render]}}
-     "Render"]]
+     [:div.docs-layout
+     [:aside.sidebar.panel
+       [:div.panel-header "Examples"]
+       [:div.sidebar-list
+        (map #(example-link % selected-example-id) examples)]
+       [:nav.doc-nav.doc-nav-sidebar
+        (if previous
+          [:button.doc-nav-link
+           {:type "button"
+            :value (:id previous)
+            :on {:click [:select-example]}}
+           [:span.doc-nav-label "Previous"]
+           [:span.doc-nav-title (:title previous)]]
+          [:div.doc-nav-spacer])
+        (if next
+          [:button.doc-nav-link
+           {:type "button"
+            :value (:id next)
+            :on {:click [:select-example]}}
+           [:span.doc-nav-label "Next"]
+           [:span.doc-nav-title (:title next)]]
+          [:div.doc-nav-spacer])]]
 
-   [:section.summary
-    [:h2 example-title]
-    [:p example-description]]
+      [:div.content-column
+       [:section.toolbar
+        [:div.toolbar-copy
+         [:span.toolbar-label "Selected example"]
+         [:strong.toolbar-title example-title]]]
 
-   [:section.workspace
-    (panel
-     "SQL template"
-     [:textarea {:spellcheck false
-                 :value sql-template
-                 :on {:input [:set-sql-template]}}])
-    (panel
-     "Params (EDN)"
-     [:textarea {:spellcheck false
-                 :value params-edn
-                 :on {:input [:set-params-edn]}}])]
+       [:section.summary
+        [:h2 example-title]
+        [:div.summary-body
+         [:p example-description]
+         [:button {:type "button"
+                   :on {:click [:render]}}
+          "Render"]]]
 
-   [:section.workspace.output-grid
-    (panel
-     "Output SQL"
-     [:pre output-sql])
-    (panel
-     "Output data"
-     [:pre output-data])]
+       [:section.workspace
+        (panel
+         "SQL template"
+         [:div.cm-host {:id "sql-editor"}])
+        (panel
+         "Params (EDN)"
+         [:div.cm-host {:id "params-editor"}])]
 
-   [:section.panel.error-panel
-    [:div.panel-header "Errors"]
-    [:pre output-error]]])
+       [:section.workspace.output-grid
+        (panel
+         "Output SQL"
+         [:div.cm-host {:id "sql-output"}])
+        (panel
+         "Output data"
+         [:div.cm-host {:id "data-output"}])]
+
+       [:section.panel.error-panel
+        [:div.panel-header "Errors"]
+        [:pre output-error]]]]]))
 
 (defn ^:export main
   []

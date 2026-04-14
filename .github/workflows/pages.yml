@@ -7,7 +7,6 @@ on:
       - ".github/workflows/pages.yml"
       - "bb.edn"
       - "deps.edn"
-      - "shadow-cljs.edn"
       - "pages/**"
       - "src/**"
   workflow_dispatch:

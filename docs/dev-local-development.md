@@ -80,6 +80,9 @@ pages-watch    Start the pages dev server on http://localhost:8000
 のように `--` 区切りで渡す。`bb` の `--flag` は Babashka 自身が先に解釈するため、
 この書き方に統一する。
 
+`pages-build` / `pages-watch` は内部的に `pages/` 配下の `deps.edn` と
+`shadow-cljs.edn` を使う。`pages/` は独立したサブアプリとして扱っている。
+
 ## REPL Check
 
 Start a REPL with the test classpath:
