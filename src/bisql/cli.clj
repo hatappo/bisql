@@ -39,9 +39,12 @@
     "  clojure -M -m bisql.cli gen-config [options]"
     "  clojure -M -m bisql.cli gen-crud [options]"
     "  clojure -M -m bisql.cli gen-declarations [options]"
+    "  clojure -M -m bisql.cli list-functions --path PATH [--namespace NS]"
     ""
     "Options:"
     "  --config PATH"
+    "  --path PATH"
+    "  --namespace NS"
     "  --dbtype DBTYPE"
     "  --host HOST"
     "  --port PORT"
@@ -50,6 +53,7 @@
     "  --password PASSWORD"
     "  --schema SCHEMA"
     "  --base-dir PATH"
+    "  --skip-invalid"
     "  --include-sql-template"
     "  --suppress-unused-public-var"
     "  --help"
@@ -95,6 +99,10 @@
           (= option "--include-sql-template")
           (recur more
                  (assoc options :include-sql-template? true))
+
+          (= option "--skip-invalid")
+          (recur more
+                 (assoc options :skip-invalid? true))
 
           (not (str/starts-with? option "--"))
           (throw (ex-info "Unknown command line argument."
@@ -242,6 +250,23 @@
      base-dir
      (:files file-result))))
 
+(defn- run-list-functions!
+  [options]
+  (let [path (or (:path options)
+                 (throw (ex-info "list-functions requires --path."
+                                 {:example "clojure -M -m bisql.cli list-functions --path /sql/postgresql/public/users/crud.sql"})))
+        ns-sym (some-> (:namespace options) symbol)
+        {:keys [definitions warnings]} (bisql/query-function-definition-report
+                                        (or ns-sym 'user)
+                                        path
+                                        {:skip-invalid? (true? (:skip-invalid? options))})]
+    (println (str "Resolved " (count definitions) " query function(s) from " path))
+    (doseq [{:keys [function-symbol]} definitions]
+      (println function-symbol))
+    (doseq [{:keys [path message]} warnings]
+      (binding [*out* *err*]
+        (println (str "WARNING: skipped " path " (" message ")"))))))
+
 (defn -main
   [& args]
   (let [[command & option-args] args
@@ -263,6 +288,9 @@
 
           (= command "gen-declarations")
           (run-gen-declarations! options)
+
+          (= command "list-functions")
+          (run-list-functions! options)
 
           :else
           (throw (ex-info "Unknown command."

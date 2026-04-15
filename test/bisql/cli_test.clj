@@ -108,6 +108,52 @@
             :include-sql-template? true}
            @write-args*))))
 
+(deftest cli-list-functions-prints-resolved-function-symbols
+  (let [definitions [{:function-symbol 'sql.postgresql.public.users.crud/count}
+                     {:function-symbol 'sql.postgresql.public.users.crud/get-by-id}]
+        output (with-out-str
+                 (with-redefs [bisql/query-function-definition-report (fn [ns-sym path options]
+                                                                        (is (= 'user ns-sym))
+                                                                        (is (= "/sql/postgresql/public/users/crud.sql" path))
+                                                                        (is (= {:skip-invalid? false} options))
+                                                                        {:definitions definitions
+                                                                         :warnings []})]
+                   (cli/-main "list-functions"
+                              "--path" "/sql/postgresql/public/users/crud.sql")))]
+    (is (str/includes? output "Resolved 2 query function(s) from /sql/postgresql/public/users/crud.sql"))
+    (is (str/includes? output "sql.postgresql.public.users.crud/count"))
+    (is (str/includes? output "sql.postgresql.public.users.crud/get-by-id"))))
+
+(deftest cli-list-functions-supports-sql-prefixed-path-and-namespace
+  (with-redefs [bisql/query-function-definition-report (fn [ns-sym path options]
+                                                         (is (= 'app.db ns-sym))
+                                                         (is (= "sql/postgresql/public/users/crud.sql" path))
+                                                         (is (= {:skip-invalid? false} options))
+                                                         {:definitions []
+                                                          :warnings []})]
+    (cli/-main "list-functions"
+               "--path" "sql/postgresql/public/users/crud.sql"
+               "--namespace" "app.db")))
+
+(deftest cli-list-functions-supports-skipping-invalid-files
+  (let [stdout (java.io.StringWriter.)
+        stderr (java.io.StringWriter.)]
+    (binding [*out* stdout
+              *err* stderr]
+      (with-redefs [bisql/query-function-definition-report (fn [ns-sym path options]
+                                                             (is (= 'user ns-sym))
+                                                             (is (= "test/sql" path))
+                                                             (is (= {:skip-invalid? true} options))
+                                                             {:definitions [{:function-symbol 'sql.core/find-user}]
+                                                              :warnings [{:path "test/sql/broken.sql"
+                                                                          :message "Duplicate declaration block."}]})]
+        (cli/-main "list-functions"
+                   "--path" "test/sql"
+                   "--skip-invalid")))
+    (is (str/includes? (str stdout) "Resolved 1 query function(s) from test/sql"))
+    (is (str/includes? (str stdout) "sql.core/find-user"))
+    (is (str/includes? (str stderr) "WARNING: skipped test/sql/broken.sql (Duplicate declaration block.)"))))
+
 (deftest cli-options-fall-back-to-environment-variables
   (let [datasource-spec* (atom nil)
         crud-args* (atom nil)

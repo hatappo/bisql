@@ -57,6 +57,9 @@
   gen-declarations {:doc "Generate declaration namespace files from local SQL templates"
                     :task (apply clojure "-M" "-m" "bisql.cli" "gen-declarations" *command-line-args*)}
 
+  list-functions {:doc "List the Clojure functions resolved from a SQL file or directory"
+                  :task (apply clojure "-M" "-m" "bisql.cli" "list-functions" *command-line-args*)}
+
   jar {:doc "Build the jar via build.clj; accepts `bb jar x.x.x` or raw build args"
        :task (build-task "jar")}
 

@@ -177,6 +177,12 @@
   [resource-path]
   (some-> (io/resource resource-path) io/file))
 
+(defn- filesystem-file
+  [path]
+  (let [file (some-> path io/file)]
+    (when (and file (.exists file))
+      file)))
+
 (defn- relative-resource-path
   [root-dir file]
   (-> (.toPath root-dir)
@@ -200,36 +206,113 @@
          sort
          (mapv #(str resource-path "/" %)))))
 
+(defn- template-sources-for-definition
+  [ns-sym path]
+  (if-let [file (filesystem-file path)]
+    (if (.isFile file)
+      [{:kind :file
+        :display-path (normalize-path path)
+        :relative-path (or (path-from-sql-segment (normalize-path path))
+                           (normalize-path path))
+        :file-path (.getPath file)}]
+      (let [root-dir (.getCanonicalFile file)
+            root-relative-path (or (path-from-sql-segment (normalize-path (.getPath root-dir)))
+                                   (normalize-path (.getPath root-dir)))]
+        (->> (file-seq root-dir)
+             (filter #(.isFile %))
+             (map (fn [child]
+                    (-> (.toPath root-dir)
+                        (.relativize (.toPath child))
+                        str
+                        (str/replace #"\\+" "/"))))
+             (filter sql-filename?)
+             sort
+             (mapv (fn [relative-path]
+                     {:kind :file
+                      :display-path (str (normalize-path path) "/" relative-path)
+                      :relative-path (str root-relative-path "/" relative-path)
+                      :file-path (.getPath (io/file root-dir relative-path))})))))
+    (let [resource-path (resolve-target-path ns-sym path)]
+      (if (sql-filename? resource-path)
+        [{:kind :resource
+          :display-path resource-path
+          :resource-path resource-path}]
+        (->> (sql-filenames-under resource-path)
+             (mapv (fn [sql-file]
+                     {:kind :resource
+                      :display-path sql-file
+                      :resource-path sql-file})))))))
+
+(defn- load-templates-from-source
+  [{:keys [kind relative-path file-path resource-path]}]
+  (case kind
+    :file (->> (query/load-queries-from-file relative-path file-path {:base-path ""})
+               vals)
+    :resource (->> (query/load-queries resource-path {:base-path ""})
+                   vals)))
+
 (defn templates-for-definition
   [ns-sym path]
-  (let [resource-path (resolve-target-path ns-sym path)]
-    (if (sql-filename? resource-path)
-      (->> (query/load-queries resource-path {:base-path ""})
-           vals
-           (sort-by :query-name))
-      (->> (sql-filenames-under resource-path)
-           (mapcat #(->> (query/load-queries % {:base-path ""})
-                         vals))
-           (sort-by (juxt :resource-path :query-name))
-           vec))))
+  (->> (template-sources-for-definition ns-sym path)
+       (mapcat load-templates-from-source)
+       (sort-by (juxt :resource-path :query-name))
+       vec))
+
+(defn- definition-entry
+  [template]
+  (let [analyzed-template (query/analyze-template template)
+        parsed-template (query/parse-template (:sql-template analyzed-template))
+        target-ns (target-namespace-symbol (:resource-path analyzed-template)
+                                           (:namespace-suffix analyzed-template))
+        var-name (var-symbol-from-function-name (:function-name analyzed-template))
+        metadata (query-function-metadata analyzed-template)]
+    {:template analyzed-template
+     :parsed-template parsed-template
+     :target-ns target-ns
+     :var-name var-name
+     :metadata metadata
+     :resource-path (:resource-path analyzed-template)
+     :query-name (:query-name analyzed-template)}))
 
 (defn definition-entries
   [ns-sym path]
   (->> (templates-for-definition ns-sym path)
-       (mapv (fn [template]
-               (let [analyzed-template (query/analyze-template template)
-                     parsed-template (query/parse-template (:sql-template analyzed-template))
-                     target-ns (target-namespace-symbol (:resource-path analyzed-template)
-                                                        (:namespace-suffix analyzed-template))
-                     var-name (var-symbol-from-function-name (:function-name analyzed-template))
-                     metadata (query-function-metadata analyzed-template)]
-                 {:template analyzed-template
-                  :parsed-template parsed-template
-                  :target-ns target-ns
-                  :var-name var-name
-                  :metadata metadata
-                  :resource-path (:resource-path analyzed-template)
-                  :query-name (:query-name analyzed-template)})))))
+       (mapv definition-entry)))
+
+(defn query-function-definition-report
+  ([ns-sym path]
+   (query-function-definition-report ns-sym path {}))
+  ([ns-sym path {:keys [skip-invalid?]
+                 :or {skip-invalid? false}}]
+   (reduce
+    (fn [{:keys [definitions warnings]} source]
+      (try
+        (let [loaded-definitions (->> (load-templates-from-source source)
+                                      (map definition-entry)
+                                      (mapv (fn [{:keys [template target-ns var-name metadata resource-path query-name]}]
+                                              {:function-symbol (symbol (str target-ns) (str var-name))
+                                               :target-ns target-ns
+                                               :var-name var-name
+                                               :resource-path resource-path
+                                               :project-relative-path (:project-relative-path template)
+                                               :query-name query-name
+                                               :metadata metadata})))]
+          {:definitions (into definitions loaded-definitions)
+           :warnings warnings})
+        (catch Exception ex
+          (if skip-invalid?
+            {:definitions definitions
+             :warnings (conj warnings
+                             {:path (:display-path source)
+                              :message (.getMessage ex)})}
+            (throw ex)))))
+    {:definitions []
+     :warnings []}
+    (template-sources-for-definition ns-sym path))))
+
+(defn query-function-definitions
+  [ns-sym path]
+  (:definitions (query-function-definition-report ns-sym path)))
 
 (defn declaration-entries
   [templates]

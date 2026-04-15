@@ -37,7 +37,37 @@
     (is (fn? bisql/render-crud-files))
     (is (fn? bisql/write-crud-files!))
     (is (fn? bisql/render-declaration-files))
-    (is (fn? bisql/write-declaration-files!))))
+    (is (fn? bisql/write-declaration-files!))
+    (is (fn? bisql/query-function-definitions))))
+
+(deftest query-function-definitions-returns-resolved-function-symbols
+  (let [definitions (bisql/query-function-definitions 'user "/sql/postgresql/public/users/get-by-id.sql")
+        definition (first definitions)]
+    (is (= 1 (count definitions)))
+    (is (= 'sql.postgresql.public.users.core/get-by-id
+           (:function-symbol definition)))
+    (is (= 'sql.postgresql.public.users.core
+           (:target-ns definition)))
+    (is (= 'get-by-id
+           (:var-name definition)))
+    (is (= "sql/postgresql/public/users/get-by-id.sql"
+           (:resource-path definition)))
+    (is (= "core.get-by-id"
+           (:query-name definition)))))
+
+(deftest query-function-definitions-accepts-filesystem-paths-containing-sql-segment
+  (let [definitions (bisql/query-function-definitions 'user "test/sql/postgresql/public/users/get-by-id.sql")]
+    (is (= ['sql.postgresql.public.users.core/get-by-id]
+           (mapv :function-symbol definitions)))))
+
+(deftest query-function-definition-report-can-skip-invalid-files
+  (let [{:keys [definitions warnings]} (bisql/query-function-definition-report 'user "test/sql"
+                                                                               {:skip-invalid? true})]
+    (is (some #(= 'sql.postgresql.public.users.core/get-by-id
+                  (:function-symbol %))
+              definitions))
+    (is (some #(str/includes? (:path %) "example-declarations-duplicate.sql")
+              warnings))))
 
 (deftest analyze-template-extracts-metadata
   (let [result (bisql/analyze-template

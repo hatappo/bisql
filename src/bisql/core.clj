@@ -58,6 +58,12 @@
 (def write-declaration-files!
   define/write-declaration-files!)
 
+(def query-function-definition-report
+  define/query-function-definition-report)
+
+(def query-function-definitions
+  define/query-function-definitions)
+
 (defmacro defrender
   "Defines one rendering function per query found under the current query namespace path,
    or under a relative/absolute path when one is provided."
