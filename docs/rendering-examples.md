@@ -123,6 +123,33 @@ LIMIT ALL
 
 `bisql/ALL` is rendered as the SQL keyword `ALL` instead of a bind parameter. This is useful in clauses such as `LIMIT ALL`.
 
+### 1-6: LIKE contains helper 
+
+1. Input Form:
+```clj
+(render "demo-variables-like.sql" {:search (bisql/LIKE_CONTAINS "100%")})
+```
+
+2. Input SQL:
+```sql
+SELECT *
+FROM products
+WHERE name LIKE /*$search*/'100%' ESCAPE '\'
+```
+
+3. Output SQL and Params:
+```sql
+SELECT *
+FROM products
+WHERE name LIKE ? ESCAPE '\'
+```
+
+```clj
+{:params ["%100\\%%"]}
+```
+
+`bisql/LIKE_CONTAINS` adds surrounding `%` characters and escapes `%`, `_`, and `\`. Write `ESCAPE '\'` in SQL when you want the behavior to be explicit.
+
 ## 2. Control flow
 
 ### 2-1: if 

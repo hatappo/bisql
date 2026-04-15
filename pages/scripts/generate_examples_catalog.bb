@@ -53,6 +53,13 @@
          (#{"bisql/DEFAULT" "bisql/ALL"} (str x)))
     (list 'quote x)
 
+    (and (list? x)
+         (symbol? (first x))
+         (#{"bisql/LIKE_STARTS_WITH"
+            "bisql/LIKE_ENDS_WITH"
+            "bisql/LIKE_CONTAINS"} (str (first x))))
+    (list 'quote x)
+
     (map? x)
     (into (empty x) (map (fn [[k v]] [k (quoted-special-symbols v)])) x)
 

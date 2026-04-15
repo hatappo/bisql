@@ -9,6 +9,15 @@
 (def ALL
   engine/ALL)
 
+(def LIKE_STARTS_WITH
+  engine/LIKE_STARTS_WITH)
+
+(def LIKE_ENDS_WITH
+  engine/LIKE_ENDS_WITH)
+
+(def LIKE_CONTAINS
+  engine/LIKE_CONTAINS)
+
 (def query-location
   engine/query-location)
 

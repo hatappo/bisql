@@ -33,6 +33,9 @@
     (is (:macro (meta #'bisql/defquery)))
     (is (some? bisql/DEFAULT))
     (is (some? bisql/ALL))
+    (is (fn? bisql/LIKE_STARTS_WITH))
+    (is (fn? bisql/LIKE_ENDS_WITH))
+    (is (fn? bisql/LIKE_CONTAINS))
     (is (fn? bisql/generate-crud))
     (is (fn? bisql/render-crud-files))
     (is (fn? bisql/write-crud-files!))
@@ -388,6 +391,19 @@
     (is (= "SELECT * FROM users LIMIT ALL" (:sql result)))
     (is (= [] (:params result)))))
 
+(deftest render-query-supports-like-contains-helper
+  (let [result (bisql/render-query
+                {:sql-template "SELECT * FROM users WHERE name LIKE /*$search*/'foo%' ESCAPE '\\\\'"}
+                {:search (bisql/LIKE_CONTAINS "foo")})]
+    (is (= "SELECT * FROM users WHERE name LIKE ? ESCAPE '\\\\'" (:sql result)))
+    (is (= ["%foo%"] (:params result)))))
+
+(deftest render-query-escapes-like-special-characters
+  (let [result (bisql/render-query
+                {:sql-template "SELECT * FROM users WHERE name LIKE /*$search*/'foo%' ESCAPE '\\\\'"}
+                {:search (bisql/LIKE_CONTAINS "foo%_\\bar")})]
+    (is (= ["%foo\\%\\_\\\\bar%"] (:params result)))))
+
 (deftest render-query-supports-literal-string-binding
   (let [result (bisql/render-query
                 {:sql-template "SELECT * FROM users WHERE type = /*^type*/'A'"}
@@ -504,6 +520,20 @@
                 (catch clojure.lang.ExceptionInfo ex
                   ex))]
     (is (= "ALL is not allowed inside collection binding."
+           (ex-message error)))
+    (is (= :ids (:parameter (ex-data error))))
+    (is (= "$" (:sigil (ex-data error))))
+    (is (= true (:collection? (ex-data error))))))
+
+(deftest render-query-rejects-like-helper-in-collection-binding
+  (let [error (try
+                (bisql/render-query
+                 {:sql-template "SELECT * FROM users WHERE id IN /*$ids*/(1,2,3)"}
+                 {:ids [1 (bisql/LIKE_CONTAINS "foo") 3]})
+                nil
+                (catch clojure.lang.ExceptionInfo ex
+                  ex))]
+    (is (= "LIKE helpers are not allowed inside collection binding."
            (ex-message error)))
     (is (= :ids (:parameter (ex-data error))))
     (is (= "$" (:sigil (ex-data error))))

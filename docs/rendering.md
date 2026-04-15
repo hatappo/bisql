@@ -78,6 +78,40 @@ The rendered SQL depends on the truthiness of `active`.
  :limit bisql/ALL}
 ```
 
+## `LIKE_*` Helpers
+
+Bisql also provides small helpers for `LIKE` bindings:
+
+- `bisql/LIKE_STARTS_WITH`
+- `bisql/LIKE_ENDS_WITH`
+- `bisql/LIKE_CONTAINS`
+
+For example:
+
+```sql
+WHERE name LIKE /*$search*/'foo%' ESCAPE '\'
+```
+
+```clojure
+{:search (bisql/LIKE_CONTAINS "foo%_bar")}
+```
+
+→
+
+```clojure
+{:sql "WHERE name LIKE ? ESCAPE '\\'"
+ :params ["%foo\\%\\_bar%"]}
+```
+
+These helpers:
+
+- add `%` in the expected position
+- escape `%`
+- escape `_`
+- escape `\`
+
+They are intended for scalar `$` bindings.
+
 ## Runtime APIs
 
 Typical user-facing APIs are:

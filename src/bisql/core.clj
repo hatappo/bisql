@@ -43,6 +43,15 @@
 (def ALL
   query/ALL)
 
+(def LIKE_STARTS_WITH
+  query/LIKE_STARTS_WITH)
+
+(def LIKE_ENDS_WITH
+  query/LIKE_ENDS_WITH)
+
+(def LIKE_CONTAINS
+  query/LIKE_CONTAINS)
+
 (def generate-crud
   crud/generate-crud)
 

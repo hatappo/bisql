@@ -20,6 +20,20 @@
   #?(:clj (Object.)
      :cljs (js-obj)))
 
+(defrecord LikePattern [mode value])
+
+(defn LIKE_STARTS_WITH
+  [value]
+  (->LikePattern :starts-with value))
+
+(defn LIKE_ENDS_WITH
+  [value]
+  (->LikePattern :ends-with value))
+
+(defn LIKE_CONTAINS
+  [value]
+  (->LikePattern :contains value))
+
 (def ^:private missing ::missing)
 (def ^:private default-namespace-suffix "core")
 
@@ -391,6 +405,33 @@
   [value]
   (identical? value ALL))
 
+(defn like-pattern?
+  [value]
+  (instance? LikePattern value))
+
+(defn- escape-like-pattern
+  [s]
+  (-> s
+      (str/replace "\\" "\\\\")
+      (str/replace "%" "\\%")
+      (str/replace "_" "\\_")))
+
+(defn render-like-pattern-value
+  [value parameter-name]
+  (when-not (string? (:value value))
+    (throw (ex-info "LIKE helpers require a string value."
+                    {:parameter (parameter-key parameter-name)
+                     :value (:value value)
+                     :type (type (:value value))})))
+  (let [escaped (escape-like-pattern (:value value))]
+    (case (:mode value)
+      :starts-with (str escaped "%")
+      :ends-with (str "%" escaped)
+      :contains (str "%" escaped "%")
+      (throw (ex-info "Unsupported LIKE helper mode."
+                      {:parameter (parameter-key parameter-name)
+                       :mode (:mode value)})))))
+
 (defn- render-bind-variable
   [template-params parameter-name collection?]
   (let [value (parameter-value template-params parameter-name)]
@@ -416,6 +457,10 @@
           (throw (ex-info "ALL is not allowed inside collection binding."
                           {:parameter (parameter-key parameter-name)
                            :value value})))
+        (when (some like-pattern? value)
+          (throw (ex-info "LIKE helpers are not allowed inside collection binding."
+                          {:parameter (parameter-key parameter-name)
+                           :value value})))
         (when (empty? value)
           (throw (ex-info "Collection binding does not allow empty values."
                           {:parameter (parameter-key parameter-name)})))
@@ -430,6 +475,9 @@
         (all-value? value)
         {:sql "ALL"
          :params []}
+        (like-pattern? value)
+        {:sql "?"
+         :params [(render-like-pattern-value value parameter-name)]}
         :else
         {:sql "?"
          :params [value]}))))
@@ -1087,6 +1135,10 @@
          (throw (ex-info "ALL is not allowed inside collection binding."
                          {:parameter (~(var parameter-key) ~parameter-name)
                           :value value#})))
+       (when (some #(~(var like-pattern?) %) value#)
+         (throw (ex-info "LIKE helpers are not allowed inside collection binding."
+                         {:parameter (~(var parameter-key) ~parameter-name)
+                          :value value#})))
        (when (empty? value#)
          (throw (ex-info "Collection binding does not allow empty values."
                          {:parameter (~(var parameter-key) ~parameter-name)})))
@@ -1105,6 +1157,12 @@
          (identical? value# ALL)
          (do
            (.append ~out-sym "ALL")
+           false)
+
+         (~(var like-pattern?) value#)
+         (do
+           (.append ~out-sym "?")
+           (conj! ~bind-params-sym (~(var render-like-pattern-value) value# ~parameter-name))
            false)
 
          :else

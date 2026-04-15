@@ -17,6 +17,18 @@
   (cond
     (and (symbol? x) (= "bisql/DEFAULT" (str x))) bisql/DEFAULT
     (and (symbol? x) (= "bisql/ALL" (str x))) bisql/ALL
+    (and (list? x)
+         (symbol? (first x))
+         (= "bisql/LIKE_STARTS_WITH" (str (first x))))
+    (bisql/LIKE_STARTS_WITH (normalize-edn-value (second x)))
+    (and (list? x)
+         (symbol? (first x))
+         (= "bisql/LIKE_ENDS_WITH" (str (first x))))
+    (bisql/LIKE_ENDS_WITH (normalize-edn-value (second x)))
+    (and (list? x)
+         (symbol? (first x))
+         (= "bisql/LIKE_CONTAINS" (str (first x))))
+    (bisql/LIKE_CONTAINS (normalize-edn-value (second x)))
     (map? x) (into (empty x) (map (fn [[k v]] [k (normalize-edn-value v)])) x)
     (vector? x) (mapv normalize-edn-value x)
     (list? x) (apply list (map normalize-edn-value x))

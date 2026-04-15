@@ -433,7 +433,7 @@ WHERE name LIKE /*$name*/'foo%'
 ```
 
 ```clojure
-{:name (sql/like-prefix "smith")}
+{:name (bisql/LIKE_STARTS_WITH "smith")}
 ```
 
 →
@@ -446,6 +446,19 @@ bind 値:
 
 ```clojure
 ["smith%"]
+
+最初の公開ヘルパーは次の 3 つ:
+
+- `bisql/LIKE_STARTS_WITH`
+- `bisql/LIKE_ENDS_WITH`
+- `bisql/LIKE_CONTAINS`
+
+escape 文字は `\` 固定とする。
+helper は次を escape する:
+
+- `%`
+- `_`
+- `\`
 ```
 
 ---

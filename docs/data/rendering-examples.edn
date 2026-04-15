@@ -33,7 +33,13 @@
      :description "`bisql/ALL` is rendered as the SQL keyword `ALL` instead of a bind parameter. This is useful in clauses such as `LIMIT ALL`."
      :input {:kind :resource
              :resource "demo-variables-all.sql"
-             :params {:limit bisql/ALL}}}]}
+             :params {:limit bisql/ALL}}}
+    {:id "like-contains"
+     :title "1-6: LIKE contains helper"
+     :description "`bisql/LIKE_CONTAINS` adds surrounding `%` characters and escapes `%`, `_`, and `\\`. Write `ESCAPE '\\'` in SQL when you want the behavior to be explicit."
+     :input {:kind :resource
+             :resource "demo-variables-like.sql"
+             :params {:search (bisql/LIKE_CONTAINS "100%")}}}]}
   {:id "control-flow"
    :title "2. Control flow"
    :examples
