@@ -390,16 +390,8 @@
     (let [markdown (or (:markdown (doc-by-slug selected-doc-slug)) "")
           html (if-let [marked (.-marked js/window)]
                  (.parse marked markdown)
-                 markdown)
-          adjusted-html (-> html
-                            ;; Replace from deeper headings upward so each tag level
-                            ;; is lowered exactly once.
-                            (str/replace #"<(/?)h5(\b[^>]*)>" "<$1h6$2>")
-                            (str/replace #"<(/?)h4(\b[^>]*)>" "<$1h5$2>")
-                            (str/replace #"<(/?)h3(\b[^>]*)>" "<$1h4$2>")
-                            (str/replace #"<(/?)h2(\b[^>]*)>" "<$1h3$2>")
-                            (str/replace #"<(/?)h1(\b[^>]*)>" "<$1h2$2>"))]
-      (set! (.-innerHTML host) adjusted-html)
+                 markdown)]
+      (set! (.-innerHTML host) html)
       (highlight-docs-code-blocks! host))))
 
 (defn clear-docs-content!
@@ -483,7 +475,7 @@
      [:a.site-brand-link
       {:href (route-url {:page :docs
                          :doc-slug (or selected-doc-slug (first-doc-slug))})}
-      [:h1.site-brand-name "bisql"]]
+      [:div.site-brand-name "bisql"]]
      [:span.site-brand-tagline "2-way-SQL toolkit for Clojure"]]]
    [:nav.site-nav
     [:a.site-link {:href (route-url {:page :docs
@@ -562,7 +554,7 @@
                    :action :select-example})]]
 
       [:section.summary
-       [:h2 example-title]
+       [:h1 example-title]
        (into [:div.summary-body]
              (concat
               [description-block]

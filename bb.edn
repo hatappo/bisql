@@ -74,6 +74,11 @@
                         (shell "sh" "-lc" "bb scripts/demo/core.bb > docs/rendering-examples.md")
                         (shell "open" "docs/rendering-examples.md"))}
 
+  pages-clean {:doc "Remove generated Pages build outputs and shadow-cljs cache"
+               :task (do
+                       (shell "rm" "-rf" "pages/dist")
+                       (shell "rm" "-rf" "pages/.shadow-cljs"))}
+
   pages-build {:doc "Build the static pages app into pages/dist/"
                :task (do
                        (shell "rm" "-rf" "pages/dist")

@@ -44,10 +44,13 @@ body {
 
 .site-brand-name {
   margin: 0;
+  display: block;
   font-size: 1.25rem;
   font-weight: 700;
+  line-height: 1;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  text-shadow: 0.3rem 0.3rem 0 #bab5a1;
 }
 
 .site-brand-tagline {
@@ -281,9 +284,12 @@ body {
   padding-bottom: 0;
 }
 
-.summary h2 {
+.summary h1 {
   margin: 0;
-  padding: 0.1rem 1rem;
+  padding: 0.1rem 0;
+  font-family: inherit;
+  font-weight: 400;
+  letter-spacing: 0.1rem;
   text-transform: uppercase;
 }
 
