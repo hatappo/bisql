@@ -237,6 +237,7 @@ For local setup, tasks, and dev workflow, see:
 
 ## Roadmap
 
+- Support a very small expression language to improve expressiveness in `if` conditions.
 - Add Malli integration.
 - Support databases beyond PostgreSQL.
 - Compile analyzed SQL templates into reusable renderer functions for lower runtime overhead.
