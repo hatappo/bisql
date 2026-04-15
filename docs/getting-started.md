@@ -103,3 +103,13 @@ See also:
 
 - [Rendering](rendering.md)
 - [CRUD Generation](crud-generation.md)
+
+## 5. Developer Workflow with Bisql
+
+1. Run `clojure -M:bisql gen-crud` to generate the routine CRUD SQL you would otherwise write by hand.
+
+2. Add `defquery` to your application code so Bisql can turn SQL files, including generated ones, into ordinary Clojure functions.
+
+3. If needed, run `clojure -M:bisql gen-declarations` to generate matching `declare` forms for those functions.
+
+4. Call the generated query functions from your application code.

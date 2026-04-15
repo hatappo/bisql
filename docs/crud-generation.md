@@ -49,6 +49,16 @@ This allows templates such as:
 SET status = /*%if non-updating-cols.status */ t.status /*%else => EXCLUDED.status */ /*%end */
 ```
 
+In practice:
+
+- `:inserting` lists the values you want to provide for the insert path
+- `:non-updating-cols` names columns that should be used on insert, but should not be updated on conflict
+
+When a column is listed in `:non-updating-cols`, the generated upsert keeps the
+existing table value on `DO UPDATE` instead of taking the value from
+`EXCLUDED`. A typical example is `created_at`, which is usually set on insert
+but should remain unchanged on later updates.
+
 ## Typical Workflow
 
 1. generate `bisql.edn`

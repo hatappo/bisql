@@ -27,7 +27,27 @@ For example:
 (sql.postgresql.public.users.core/get-by-id ds {:id 42})
 ```
 
-This is the main macro most users will use in application code.
+This corresponds to a SQL resource like:
+
+```text
+sql/postgresql/public/users/core.get-by-id.sql
+```
+
+For example:
+
+```sql
+SELECT *
+FROM users
+WHERE id = /*$id*/1
+```
+
+Note:
+
+- Bisql resolves SQL files by `<ns-suffix>.<function-name>.sql`
+- if `<ns-suffix>` is omitted, `core` is used as the default namespace suffix
+- that is why `sql/postgresql/public/users/get-by-id.sql` also resolves to the same function
+
+`defquery` is the main macro most users will use in application code.
 
 ## `defrender`
 
@@ -52,6 +72,12 @@ For example:
 
 ```clojure
 (sql.postgresql.public.users.core/get-by-id {:id 42})
+```
+
+This corresponds to the same SQL resource:
+
+```text
+sql/postgresql/public/users/core.get-by-id.sql
 ```
 
 returns a map like:

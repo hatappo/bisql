@@ -25,9 +25,9 @@ If you prefer `bb`, define tasks like this:
 
 ```clojure
 {:tasks
- {:gen-config (clojure "-M:bisql" "gen-config")
-  :gen-crud (clojure "-M:bisql" "gen-crud")
-  :gen-declarations (clojure "-M:bisql" "gen-declarations")}}
+ {:gen-config (apply clojure "-M:bisql" "gen-config" *command-line-args*)
+  :gen-crud (apply clojure "-M:bisql" "gen-crud" *command-line-args*)
+  :gen-declarations (apply clojure "-M:bisql" "gen-declarations" *command-line-args*)}}
 ```
 
 When passing CLI flags through `bb`, use `--` as a separator:
