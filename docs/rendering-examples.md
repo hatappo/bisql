@@ -318,10 +318,11 @@ WHERE id = ?
 
 2. Input SQL:
 ```sql
-/*:doc
-Loads a user by id.
+/*:doc Loads a user by id. */
+/*:tags
+  [:example
+   :user]
 */
-/*:tags [:example :user] */
 /*:category :lookup */
 /* This is a normal comment */
 SELECT * FROM users WHERE id = /*$id*/1
@@ -341,6 +342,7 @@ SELECT * FROM users WHERE id = ?
   :category :lookup}}
 ```
 
+`/*: */` defines metadata entries keyed by keywords. `/*:doc */` is a special case: unlike other declarations, it can be written as inline text instead of EDN.
 
 ### 3-2: multiple SQL templates in one file 
 

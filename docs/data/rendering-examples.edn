@@ -81,6 +81,7 @@
    :examples
    [{:id "docstring-and-metadata"
      :title "3-1: docstring and metadata"
+     :description "`/*: */` defines metadata entries for the generated Clojure function, keyed by keywords. `/*:doc */` is a special case: unlike other declarations, it can be written as inline text instead of EDN."
      :input {:kind :resource
              :resource "demo-declarations.sql"
              :params {:id 42}}}
