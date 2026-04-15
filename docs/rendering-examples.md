@@ -342,7 +342,7 @@ SELECT * FROM users WHERE id = ?
   :category :lookup}}
 ```
 
-`/*: */` defines metadata entries keyed by keywords. `/*:doc */` is a special case: unlike other declarations, it can be written as inline text instead of EDN.
+`/*: */` defines metadata entries for the generated Clojure function, keyed by keywords. `/*:doc */` is a special case: unlike other declarations, it can be written as inline text instead of EDN.
 
 ### 3-2: multiple SQL templates in one file 
 
