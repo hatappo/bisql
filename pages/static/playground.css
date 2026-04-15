@@ -270,6 +270,11 @@ body {
   text-align: center;
 }
 
+.toolbar-nav-link-placeholder {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .bottom-nav {
   display: flex;
   justify-content: flex-end;
@@ -460,6 +465,7 @@ body {
 }
 
 .cm-host {
+  box-sizing: border-box;
   margin: 0;
   padding: 0 1rem 1rem;
 }

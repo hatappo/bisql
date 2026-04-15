@@ -495,17 +495,29 @@
 (defn pager-nav
   [{:keys [previous next previous-value next-value action]}]
   [:nav.toolbar-nav
-   (when previous
+   (if previous
      [:button.toolbar-nav-link
       {:type "button"
        :value previous-value
        :on {:click [action]}}
+      "Prev"]
+     [:button.toolbar-nav-link.toolbar-nav-link-placeholder
+      {:type "button"
+       :tab-index -1
+       :disabled true
+       :aria-hidden "true"}
       "Prev"])
-   (when next
+   (if next
      [:button.toolbar-nav-link
       {:type "button"
        :value next-value
        :on {:click [action]}}
+      "Next"]
+     [:button.toolbar-nav-link.toolbar-nav-link-placeholder
+      {:type "button"
+       :tab-index -1
+       :disabled true
+       :aria-hidden "true"}
       "Next"])])
 
 (defn render-docs-page
