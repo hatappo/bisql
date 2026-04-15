@@ -408,6 +408,64 @@ body {
   background: transparent;
 }
 
+.docs-markdown pre .cm-keyword {
+  color: #708;
+}
+
+.docs-markdown pre .cm-atom {
+  color: #219;
+}
+
+.docs-markdown pre .cm-number {
+  color: #164;
+}
+
+.docs-markdown pre .cm-def {
+  color: #00f;
+}
+
+.docs-markdown pre .cm-variable-2 {
+  color: #05a;
+}
+
+.docs-markdown pre .cm-variable-3 {
+  color: #085;
+}
+
+.docs-markdown pre .cm-comment {
+  color: #a50;
+}
+
+.docs-markdown pre .cm-string {
+  color: #a11;
+}
+
+.docs-markdown pre .cm-string-2 {
+  color: #f50;
+}
+
+.docs-markdown pre .cm-meta,
+.docs-markdown pre .cm-qualifier {
+  color: #555;
+}
+
+.docs-markdown pre .cm-builtin {
+  color: #30a;
+}
+
+.docs-markdown pre .cm-bracket {
+  color: #997;
+}
+
+.docs-markdown pre .cm-tag {
+  color: #170;
+}
+
+.docs-markdown pre .cm-attribute,
+.docs-markdown pre .cm-link {
+  color: #00c;
+}
+
 .docs-markdown a {
   text-decoration: underline;
 }
