@@ -8,12 +8,12 @@ on:
       - "bb.edn"
       - "deps.edn"
       - "pages/**"
-      - "docs/data/**"
       - "docs/*.md"
-      - "docs/img/bicycle.svg"
-      - "pages/scripts/**"
+      - "docs/data/**"
+      - "docs/img/**"
       - "scripts/sql/**"
-      - "src/**"
+      # - "src/**" # If you change runtime code used by Pages, run workflow_dispatch manually.
+      #            # This is intentionally omitted to reduce GitHub Actions usage and keep logs less noisy.
   workflow_dispatch:
 
 permissions:
