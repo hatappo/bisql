@@ -99,6 +99,7 @@
                        (shell "cp" "pages/static/playground.css" "pages/dist/playground.css")
                        (shell "mkdir" "-p" "pages/dist/img")
                        (shell "cp" "docs/img/bicycle.svg" "pages/dist/img/bicycle.svg")
+                       (shell "cp" "-R" "pages/static/img/." "pages/dist/img")
                        (shell "sh" "-lc" "cd pages && clojure -J--enable-native-access=ALL-UNNAMED -J--sun-misc-unsafe-memory-access=allow -M -m shadow.cljs.devtools.cli release playground"))}
 
   pages-dev {:doc "Start the shadow-cljs pages dev server on http://localhost:8000"
@@ -110,4 +111,5 @@
                      (shell "cp" "pages/static/playground.css" "pages/dist/playground.css")
                      (shell "mkdir" "-p" "pages/dist/img")
                      (shell "cp" "docs/img/bicycle.svg" "pages/dist/img/bicycle.svg")
+                     (shell "cp" "-R" "pages/static/img/." "pages/dist/img")
                      (shell "sh" "-lc" "cd pages && clojure -J--enable-native-access=ALL-UNNAMED -J--sun-misc-unsafe-memory-access=allow -M -m shadow.cljs.devtools.cli watch playground"))}}}
