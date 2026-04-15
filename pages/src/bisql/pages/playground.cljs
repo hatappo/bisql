@@ -32,7 +32,8 @@
 (declare example-by-id
          load-example!
          rerender!
-         sync-route-from-location!)
+         sync-route-from-location!
+         share-x-url)
 
 (defn pprint-str
   [x]
@@ -152,6 +153,10 @@
       :playground (let [example-id (normalize-example-id example-id)]
                     (str root "playground/" example-id "/"))
       root)))
+
+(defn absolute-route-url
+  [route]
+  (str (.-origin js/location) (route-url route)))
 
 (defn navigate!
   [route]
@@ -387,11 +392,29 @@
 (defn sync-docs-content!
   [selected-doc-slug]
   (when-let [host (.getElementById js/document "docs-content")]
-    (let [markdown (or (:markdown (doc-by-slug selected-doc-slug)) "")
+    (let [page (doc-by-slug selected-doc-slug)
+          markdown (or (:markdown page) "")
           html (if-let [marked (.-marked js/window)]
                  (.parse marked markdown)
-                 markdown)]
+                 markdown)
+          route {:page :docs
+                 :doc-slug selected-doc-slug}
+          title (str (:title page) " · bisql Docs")]
       (set! (.-innerHTML host) html)
+      (when-let [^js heading (.querySelector host "h1")]
+        (.add (.-classList heading) "docs-title-row")
+        (let [share-link (.createElement js/document "a")
+              icon (.createElement js/document "img")]
+          (.add (.-classList share-link) "title-share-link")
+          (set! (.-href share-link) (share-x-url {:title title
+                                                  :route route}))
+          (set! (.-target share-link) "_blank")
+          (set! (.-rel share-link) "noreferrer")
+          (set! (.-ariaLabel share-link) "Share on X")
+          (set! (.-src icon) (str (root-path) "img/share/twitter-x.svg"))
+          (set! (.-alt icon) "X")
+          (.appendChild share-link icon)
+          (.appendChild heading share-link)))
       (highlight-docs-code-blocks! host))))
 
 (defn clear-docs-content!
@@ -520,6 +543,33 @@
        :aria-hidden "true"}
       "Next"])])
 
+(defn share-x-url
+  [{:keys [title route]}]
+  (let [url (absolute-route-url route)
+        encoded-text (js/encodeURIComponent (str title "\n" url))]
+    (str "https://twitter.com/intent/tweet?text=" encoded-text)))
+
+(defn share-x-link
+  [{:keys [title route class-name]}]
+  [:a.title-share-link
+   {:href (share-x-url {:title title
+                        :route route})
+    :class class-name
+    :target "_blank"
+    :rel "noreferrer"
+    :aria-label "Share on X"}
+   [:img {:src (str (root-path) "img/share/twitter-x.svg")
+          :alt "X"}]])
+
+(defn page-actions
+  [{:keys [previous next previous-value next-value action]}]
+  [:div.page-actions
+   (pager-nav {:previous previous
+               :next next
+               :previous-value previous-value
+               :next-value next-value
+               :action action})])
+
 (defn render-docs-page
   [selected-doc-slug sidebar-open?]
   (let [{:keys [previous next]} (neighboring-docs selected-doc-slug)]
@@ -528,20 +578,19 @@
      [:div.content-column
      [:section.panel.toolbar-panel
       [:div.panel-header-row
-       #_[:div.panel-header "Selected document"]
-       (pager-nav {:previous previous
-                   :next next
-                   :previous-value (:slug previous)
-                   :next-value (:slug next)
-                   :action :select-doc})]]
+       (page-actions {:previous previous
+                      :next next
+                      :previous-value (:slug previous)
+                      :next-value (:slug next)
+                      :action :select-doc})]]
       [:section.panel.docs-panel
        [:div.docs-markdown {:id "docs-content"}]]
       [:div.bottom-nav
-       (pager-nav {:previous previous
-                   :next next
-                   :previous-value (:slug previous)
-                   :next-value (:slug next)
-                   :action :select-doc})]]]))
+       (page-actions {:previous previous
+                      :next next
+                      :previous-value (:slug previous)
+                      :next-value (:slug next)
+                      :action :select-doc})]]]))
 
 (defn render-playground-page
   [{:keys [catalog
@@ -552,21 +601,26 @@
            page-error]}]
     (let [{:keys [previous next]} (neighboring-examples catalog selected-example-id)
         description-block (into [:div.summary-description]
-                                (description-nodes example-description))]
+                                (description-nodes example-description))
+        route {:page :playground
+               :example-id selected-example-id}
+        title (str example-title " · bisql Playground")]
     [:div.docs-layout {:replicant/key "playground-page"}
      (examples-sidebar catalog selected-example-id sidebar-open?)
      [:div.content-column
-     [:section.panel.toolbar-panel
+      [:section.panel.toolbar-panel
       [:div.panel-header-row
-       #_[:div.panel-header "Selected example"]
-       (pager-nav {:previous previous
-                   :next next
-                   :previous-value (:id previous)
-                   :next-value (:id next)
-                   :action :select-example})]]
+       (page-actions {:previous previous
+                      :next next
+                      :previous-value (:id previous)
+                      :next-value (:id next)
+                      :action :select-example})]]
 
       [:section.summary
-       [:h1 example-title]
+       [:div.summary-title-row
+        [:h1 example-title]
+        (share-x-link {:title title
+                       :route route})]
        (into [:div.summary-body]
              (concat
               [description-block]
@@ -600,11 +654,11 @@
          [:div.panel-header "Errors"]
          [:div.cm-host {:id "error-output"}]]]]
       [:div.bottom-nav
-       (pager-nav {:previous previous
-                   :next next
-                   :previous-value (:id previous)
-                   :next-value (:id next)
-                   :action :select-example})]]]))
+       (page-actions {:previous previous
+                      :next next
+                      :previous-value (:id previous)
+                      :next-value (:id next)
+                      :action :select-example})]]]))
 
 (defn render-app
   [{:keys [route-page selected-doc-slug sidebar-open?] :as state}]
