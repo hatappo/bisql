@@ -27,7 +27,7 @@ No boilerplate SQL
 Add it to `deps.edn`:
 
 ```clojure
-{:deps {io.github.hatappo/bisql {:mvn/version "0.1.0"}}}
+{:deps {io.github.hatappo/bisql {:mvn/version "0.2.0"}}}
 ```
 
 If you want a shorter CLI entrypoint, you can also add an alias:
@@ -49,9 +49,9 @@ If you prefer `bb`, you can also add tasks like:
 
 ```clojure
 {:tasks
- {:gen-config (clojure "-M:bisql" "gen-config")
-  :gen-crud   (clojure "-M:bisql" "gen-crud")
-  :gen-declarations (clojure "-M:bisql" "gen-declarations")}}
+ {:gen-config (apply clojure "-M:bisql" "gen-config" *command-line-args*)
+  :gen-crud   (apply clojure "-M:bisql" "gen-crud" *command-line-args*)
+  :gen-declarations (apply clojure "-M:bisql" "gen-declarations" *command-line-args*)}}
 ```
 
 When passing CLI flags through `bb`, use `--` as a separator. For example:
