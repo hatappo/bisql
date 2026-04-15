@@ -43,17 +43,36 @@
   {:title "Docs"
    :pages
    (mapv (fn [{:keys [file] :as page}]
-           (let [slug->href
+           (let [from-route (str "docs/" (:slug page) "/")
+                 relative-path
+                 (fn [to-route]
+                   (let [from-parts (->> (str/split from-route #"/")
+                                         (remove str/blank?)
+                                         vec)
+                         to-parts (->> (str/split to-route #"/")
+                                       (remove str/blank?)
+                                       vec)
+                         common-count (count (take-while true?
+                                                         (map = from-parts to-parts)))
+                         up-count (- (count from-parts) common-count)
+                         down-parts (subvec to-parts common-count)]
+                     (str
+                      (apply str (repeat up-count "../"))
+                      (when (seq down-parts)
+                        (str (str/join "/" down-parts) "/")))))
+                 slug->href
                  (into {}
                        (map (fn [{:keys [slug file]}]
                               [(str "(" (-> file io/file .getName) ")")
-                               (str "(#/docs/" slug ")")])
+                               (str "(" (relative-path (str "docs/" slug "/")) ")")])
                             doc-pages))
                  markdown
-                 (reduce-kv (fn [s from to]
-                              (str/replace s from to))
-                            (slurp file)
-                            slug->href)]
+                 (-> (reduce-kv (fn [s from to]
+                                  (str/replace s from to))
+                                (slurp file)
+                                slug->href)
+                     (str/replace "(#/playground)"
+                                  (str "(" (relative-path "playground/") ")")))]
              (assoc page :markdown markdown)))
          doc-pages)})
 

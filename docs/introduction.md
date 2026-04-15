@@ -5,7 +5,7 @@ Bisql is a SQL-first data access library for Clojure.
 Its design goal is simple:
 
 - keep SQL as the source of truth
-- keep templates readable and close to executable SQL
+- keep templates readable and executable SQL
 - generate repetitive CRUD queries from the database schema
 - keep runtime behavior explicit and predictable
 

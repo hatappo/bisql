@@ -1,5 +1,6 @@
 (ns bisql.pages.playground
   (:require [bisql.engine :as engine]
+            [bisql.pages.docs :as docs]
             [bisql.pages.examples :as examples]
             [cljs.pprint :as pprint]
             [cljs.reader :as reader]
@@ -7,7 +8,10 @@
             [replicant.dom :as r]))
 
 (defonce *state
-  (atom {:catalog nil
+  (atom {:catalog examples/catalog
+         :docs-catalog docs/catalog
+         :route-page :docs
+         :selected-doc-slug nil
          :selected-example-id nil
          :sidebar-open? false
          :example-title ""
@@ -22,6 +26,14 @@
 (defonce *root (atom nil))
 (defonce *editors (atom {}))
 
+(def github-url
+  "https://github.com/hatappo/bisql")
+
+(declare example-by-id
+         load-example!
+         rerender!
+         sync-route-from-location!)
+
 (defn pprint-str
   [x]
   (with-out-str
@@ -30,6 +42,140 @@
 (defn flatten-examples
   [catalog]
   (mapcat :examples (:groups catalog)))
+
+(defn doc-pages
+  []
+  (:pages docs/catalog))
+
+(defn first-doc-slug
+  []
+  (some-> (doc-pages) first :slug))
+
+(defn doc-by-slug
+  [slug]
+  (some #(when (= slug (:slug %)) %) (doc-pages)))
+
+(defn normalize-doc-slug
+  [slug]
+  (if (doc-by-slug slug)
+    slug
+    (first-doc-slug)))
+
+(defn first-example-id
+  []
+  (-> examples/catalog :groups first :examples first :id))
+
+(defn normalize-example-id
+  [example-id]
+  (if (example-by-id examples/catalog example-id)
+    example-id
+    (first-example-id)))
+
+(defn root-path
+  []
+  (let [path (or (.-__BISQL_ROOT_PATH__ js/window) "/")]
+    (if (str/ends-with? path "/")
+      path
+      (str path "/"))))
+
+(defn asset-prefix
+  []
+  (or (.-__BISQL_ASSET_PREFIX__ js/window) "./"))
+
+(defn split-path-segments
+  [path]
+  (->> (str/split (or path "") #"/")
+       (remove str/blank?)
+       vec))
+
+(defn relative-pathname
+  []
+  (let [pathname (.-pathname js/location)
+        root (root-path)]
+    (if (str/starts-with? pathname root)
+      (subs pathname (count root))
+      pathname)))
+
+(defn doc-index
+  [slug]
+  (first
+   (keep-indexed
+    (fn [idx page]
+      (when (= slug (:slug page))
+        idx))
+    (doc-pages))))
+
+(defn neighboring-docs
+  [slug]
+  (let [pages (vec (doc-pages))
+        idx (or (doc-index slug) 0)]
+    {:previous (when (pos? idx)
+                 (nth pages (dec idx)))
+     :next (when (< idx (dec (count pages)))
+             (nth pages (inc idx)))}))
+
+(defn parse-route
+  []
+  (let [segments (split-path-segments (relative-pathname))]
+    (cond
+      (empty? segments)
+      {:page :docs
+       :doc-slug (first-doc-slug)}
+
+      (= ["docs"] segments)
+      {:page :docs
+       :doc-slug (first-doc-slug)}
+
+      (and (= "docs" (first segments))
+           (= 2 (count segments)))
+      {:page :docs
+       :doc-slug (normalize-doc-slug (second segments))}
+
+      (= ["playground"] segments)
+      {:page :playground
+       :example-id (first-example-id)}
+
+      (and (= "playground" (first segments))
+           (= 2 (count segments)))
+      {:page :playground
+       :example-id (normalize-example-id (second segments))}
+
+      :else
+      {:page :docs
+       :doc-slug (first-doc-slug)})))
+
+(defn route-url
+  [{:keys [page doc-slug example-id]}]
+  (let [root (root-path)]
+    (case page
+      :docs (str root "docs/" (normalize-doc-slug doc-slug) "/")
+      :playground (let [example-id (normalize-example-id example-id)]
+                    (str root "playground/" example-id "/"))
+      root)))
+
+(defn navigate!
+  [route]
+  (.pushState js/history nil "" (route-url route))
+  (sync-route-from-location!))
+
+(defn sync-route-from-location!
+  []
+  (let [{:keys [page doc-slug example-id]} (parse-route)]
+    (swap! *state assoc
+           :route-page page
+           :sidebar-open? false
+           :selected-doc-slug (normalize-doc-slug doc-slug))
+    (case page
+      :playground
+      (let [example-id (normalize-example-id example-id)]
+        (if (= example-id (:selected-example-id @*state))
+          (rerender!)
+          (load-example! example-id)))
+
+      :docs
+      (rerender!)
+
+      (rerender!))))
 
 (defn example-by-id
   [catalog example-id]
@@ -68,14 +214,9 @@
 (defn resolve-sql-template
   [{:keys [kind sql-template]}]
   (case kind
-    :direct-template
-    sql-template
-
-    :resource
-    sql-template
-
-    :resource-query
-    sql-template))
+    :direct-template sql-template
+    :resource sql-template
+    :resource-query sql-template))
 
 (defn example-params-str
   [example]
@@ -132,8 +273,6 @@
                (pprint-str {:message (ex-message ex)
                             :data (ex-data ex)}))))))
 
-(declare rerender!)
-
 (defn load-example!
   [example-id]
   (when-let [catalog (:catalog @*state)]
@@ -144,26 +283,31 @@
           (throw (ex-info "Embedded SQL template is missing."
                           {:example-id example-id
                            :input-kind (:kind input)})))
-      (swap! *state assoc
-             :selected-example-id example-id
-             :sidebar-open? false
-             :example-title title
-             :example-description description
-             :sql-template sql-template
-             :params-edn (example-params-str example)
-             :output-sql ""
-             :output-data ""
-             :output-error ""
-             :page-error "")
-       (render-current!)
-       (rerender!)))))
+        (swap! *state assoc
+               :selected-example-id example-id
+               :sidebar-open? false
+               :example-title title
+               :example-description description
+               :sql-template sql-template
+               :params-edn (example-params-str example)
+               :output-sql ""
+               :output-data ""
+               :output-error ""
+               :page-error "")
+        (render-current!)
+        (rerender!)))))
 
 (defn destroy-editor!
   [editor-key]
   (when-let [{:keys [view]} (get @*editors editor-key)]
     (let [^js view view]
-    (.toTextArea view)
-    (swap! *editors dissoc editor-key))))
+      (.toTextArea view)
+      (swap! *editors dissoc editor-key))))
+
+(defn destroy-all-editors!
+  []
+  (doseq [editor-key (keys @*editors)]
+    (destroy-editor! editor-key)))
 
 (defn attached-to-host?
   [view host]
@@ -214,6 +358,28 @@
         (replace-editor-doc! view text)))
     (destroy-editor! editor-key)))
 
+(defn sync-docs-content!
+  [selected-doc-slug]
+  (when-let [host (.getElementById js/document "docs-content")]
+    (let [markdown (or (:markdown (doc-by-slug selected-doc-slug)) "")
+          html (if-let [marked (.-marked js/window)]
+                 (.parse marked markdown)
+                 markdown)
+          adjusted-html (-> html
+                            ;; Replace from deeper headings upward so each tag level
+                            ;; is lowered exactly once.
+                            (str/replace #"<(/?)h5(\b[^>]*)>" "<$1h6$2>")
+                            (str/replace #"<(/?)h4(\b[^>]*)>" "<$1h5$2>")
+                            (str/replace #"<(/?)h3(\b[^>]*)>" "<$1h4$2>")
+                            (str/replace #"<(/?)h2(\b[^>]*)>" "<$1h3$2>")
+                            (str/replace #"<(/?)h1(\b[^>]*)>" "<$1h2$2>"))]
+      (set! (.-innerHTML host) adjusted-html))))
+
+(defn clear-docs-content!
+  []
+  (when-let [host (.getElementById js/document "docs-content")]
+    (set! (.-innerHTML host) "")))
+
 (defn panel
   [title & body]
   (into [:div.panel
@@ -237,133 +403,241 @@
    [:div.sidebar-group-links
     (map #(example-link % selected-id) examples)]])
 
-(defn render-app
+(defn doc-link
+  [{:keys [slug title]} selected-slug]
+  [:button.sidebar-link
+   {:type "button"
+    :value slug
+    :data-active (= slug selected-slug)
+    :on {:click [:select-doc]}}
+   [:span.sidebar-title title]])
+
+(defn docs-sidebar
+  [selected-doc-slug sidebar-open?]
+  [:aside.sidebar.panel
+   [:div.panel-header "Docs"]
+   [:button.sidebar-toggle
+    {:type "button"
+     :data-open sidebar-open?
+     :on {:click [:toggle-sidebar]}}
+   (if sidebar-open? "Hide docs" "Show docs")]
+   [:div.sidebar-body
+    {:data-open sidebar-open?}
+    [:div.sidebar-list
+     [:section.sidebar-group
+      {:replicant/key "docs-group"}
+      [:div.sidebar-group-title "Pages"]
+      [:div.sidebar-group-links
+       (map #(doc-link % selected-doc-slug) (doc-pages))]]]]])
+
+(defn examples-sidebar
+  [catalog selected-example-id sidebar-open?]
+  [:aside.sidebar.panel
+   [:div.panel-header "Examples"]
+   [:button.sidebar-toggle
+    {:type "button"
+     :data-open sidebar-open?
+     :on {:click [:toggle-sidebar]}}
+    (if sidebar-open? "Hide examples" "Show examples")]
+   [:div.sidebar-body
+    {:data-open sidebar-open?}
+    (if catalog
+      [:div.sidebar-list
+       (map #(example-group % selected-example-id) (:groups catalog))]
+      [:div.sidebar-loading "Loading examples..."])]])
+
+(defn site-header
+  [{:keys [route-page selected-doc-slug selected-example-id]}]
+  [:header.site-header
+   [:div.site-brand
+    [:img.site-logo {:src (str (root-path) "img/bicycle.svg")
+                     :alt "bisql"}]
+    [:div.site-brand-copy
+     [:a.site-brand-link
+      {:href (route-url {:page :docs
+                         :doc-slug (or selected-doc-slug (first-doc-slug))})}
+      [:h1.site-brand-name "bisql"]]
+     [:span.site-brand-tagline "2-way-SQL toolkit for Clojure"]]]
+   [:nav.site-nav
+    [:a.site-link {:href (route-url {:page :docs
+                                     :doc-slug (or selected-doc-slug (first-doc-slug))})
+                   :data-active (= route-page :docs)}
+     "Docs"]
+    [:a.site-link {:href (route-url {:page :playground
+                                     :example-id (or selected-example-id (first-example-id))})
+                   :data-active (= route-page :playground)}
+     "Playground"]
+    [:a.site-link
+     {:href github-url
+      :target "_blank"
+     :rel "noreferrer"}
+     "GitHub"]]])
+
+(defn pager-nav
+  [{:keys [previous next previous-value next-value action]}]
+  [:nav.toolbar-nav
+   (when previous
+     [:button.toolbar-nav-link
+      {:type "button"
+       :value previous-value
+       :on {:click [action]}}
+      "Prev"])
+   (when next
+     [:button.toolbar-nav-link
+      {:type "button"
+       :value next-value
+       :on {:click [action]}}
+      "Next"])])
+
+(defn render-docs-page
+  [selected-doc-slug sidebar-open?]
+  (let [{:keys [previous next]} (neighboring-docs selected-doc-slug)]
+    [:div.docs-layout {:replicant/key "docs-page"}
+     (docs-sidebar selected-doc-slug sidebar-open?)
+     [:div.content-column
+     [:section.panel.toolbar-panel
+      [:div.panel-header-row
+       #_[:div.panel-header "Selected document"]
+       (pager-nav {:previous previous
+                   :next next
+                   :previous-value (:slug previous)
+                   :next-value (:slug next)
+                   :action :select-doc})]]
+      [:section.panel.docs-panel
+       [:div.docs-markdown {:id "docs-content"}]]
+      [:div.bottom-nav
+       (pager-nav {:previous previous
+                   :next next
+                   :previous-value (:slug previous)
+                   :next-value (:slug next)
+                   :action :select-doc})]]]))
+
+(defn render-playground-page
   [{:keys [catalog
            selected-example-id
            sidebar-open?
            example-title
            example-description
            page-error]}]
-  (let [{:keys [previous next]} (neighboring-examples catalog selected-example-id)
+    (let [{:keys [previous next]} (neighboring-examples catalog selected-example-id)
         description-block (into [:div.summary-description]
                                 (description-nodes example-description))]
-    [:main.page
-     [:header.hero
-      [:p.eyebrow "bisql"]
-      [:h1 "Playground"]
-      [:p.lede
-       "Let's ride 🚲️ and run."]]
+    [:div.docs-layout {:replicant/key "playground-page"}
+     (examples-sidebar catalog selected-example-id sidebar-open?)
+     [:div.content-column
+     [:section.panel.toolbar-panel
+      [:div.panel-header-row
+       #_[:div.panel-header "Selected example"]
+       (pager-nav {:previous previous
+                   :next next
+                   :previous-value (:id previous)
+                   :next-value (:id next)
+                   :action :select-example})]]
 
-     [:div.docs-layout
-      [:aside.sidebar.panel
-       [:div.panel-header "Examples"]
-       [:button.sidebar-toggle
-        {:type "button"
-         :data-open sidebar-open?
-         :on {:click [:toggle-sidebar]}}
-        (if sidebar-open? "Hide examples" "Show examples")]
-       [:div.sidebar-body
-        {:data-open sidebar-open?}
-        (if catalog
-          [:div.sidebar-list
-           (map #(example-group % selected-example-id) (:groups catalog))]
-          [:div.sidebar-loading "Loading examples..."])]]
+      [:section.summary
+       [:h2 example-title]
+       (into [:div.summary-body]
+             (concat
+              [description-block]
+              [[:button {:type "button"
+                         :on {:click [:render]}}
+                "Render"]]))]
 
-      [:div.content-column
-       [:section.toolbar
-        [:div.toolbar-row
-         [:div.toolbar-copy
-          [:span.toolbar-label "Selected example"]]
-         [:nav.toolbar-nav
-          (when previous
-            [:button.toolbar-nav-link
-             {:type "button"
-              :value (:id previous)
-              :on {:click [:select-example]}}
-             "Prev"])
-          (when next
-            [:button.toolbar-nav-link
-             {:type "button"
-              :value (:id next)
-              :on {:click [:select-example]}}
-             "Next"])]]]
+      (when (seq page-error)
+        [:section.panel.error-panel
+         [:div.panel-header "Page errors"]
+         [:pre page-error]])
 
-       [:section.summary
-        [:h2 example-title]
-        (into [:div.summary-body]
-              (concat
-               [description-block]
-               [[:button {:type "button"
-                          :on {:click [:render]}}
-                 "Render"]]))]
+      [:section.workspace
+       (panel
+        "Input SQL Template"
+        [:div.cm-host {:id "sql-editor"}])
+       (panel
+        "Input params"
+        [:div.cm-host {:id "params-editor"}])]
 
-       (when (seq page-error)
-         [:section.panel.error-panel
-          [:div.panel-header "Page errors"]
-          [:pre page-error]])
-
-       [:section.workspace
+      [:section.workspace.output-grid
+       [:div.output-sql-column
         (panel
-         "Input SQL Template"
-         [:div.cm-host {:id "sql-editor"}])
+         "Output SQL"
+         [:div.cm-host {:id "sql-output"}])]
+       [:div.output-side-column
         (panel
-         "Input params"
-         [:div.cm-host {:id "params-editor"}])]
+         "Output data"
+         [:div.cm-host {:id "data-output"}])
+        [:section.panel.error-panel
+         [:div.panel-header "Errors"]
+         [:div.cm-host {:id "error-output"}]]]]
+      [:div.bottom-nav
+       (pager-nav {:previous previous
+                   :next next
+                   :previous-value (:id previous)
+                   :next-value (:id next)
+                   :action :select-example})]]]))
 
-       [:section.workspace.output-grid
-        [:div.output-sql-column
-         (panel
-          "Output SQL"
-          [:div.cm-host {:id "sql-output"}])]
-        [:div.output-side-column
-         (panel
-          "Output data"
-          [:div.cm-host {:id "data-output"}])
-         [:section.panel.error-panel
-          [:div.panel-header "Errors"]
-          [:div.cm-host {:id "error-output"}]]]]]]]))
+(defn render-app
+  [{:keys [route-page selected-doc-slug sidebar-open?] :as state}]
+  [:main.page
+   (site-header state)
+   (case route-page
+     :docs (render-docs-page selected-doc-slug sidebar-open?)
+     :playground (render-playground-page state)
+     (render-docs-page selected-doc-slug sidebar-open?))])
 
 (defn rerender!
   []
   (when-let [root @*root]
     (r/render root (render-app @*state))
-    (let [{:keys [sql-template
+    (let [{:keys [route-page
+                  selected-doc-slug
+                  sql-template
                   params-edn
                   output-sql
                   output-data
                   output-error]} @*state]
-      (ensure-editor! {:editor-key :sql-input
-                       :host-id "sql-editor"
-                       :text sql-template
-                       :editable? true
-                       :language :sql
-                       :class-names ["cm-input"]
-                       :on-change #(swap! *state assoc :sql-template %)})
-      (ensure-editor! {:editor-key :params-input
-                       :host-id "params-editor"
-                       :text params-edn
-                       :editable? true
-                       :language :clojure
-                       :class-names ["cm-input"]
-                       :on-change #(swap! *state assoc :params-edn %)})
-      (ensure-editor! {:editor-key :sql-output
-                       :host-id "sql-output"
-                       :text output-sql
-                       :editable? false
-                       :language :sql
-                       :class-names ["cm-output"]})
-      (ensure-editor! {:editor-key :data-output
-                       :host-id "data-output"
-                       :text output-data
-                       :editable? false
-                       :language :clojure
-                       :class-names ["cm-output"]})
-      (ensure-editor! {:editor-key :error-output
-                       :host-id "error-output"
-                       :text output-error
-                       :editable? false
-                       :language :clojure
-                       :class-names ["cm-output" "cm-error-output"]}))))
+      (case route-page
+        :docs
+        (do
+          (destroy-all-editors!)
+          (sync-docs-content! selected-doc-slug))
+
+        :playground
+        (do
+          (clear-docs-content!)
+          (ensure-editor! {:editor-key :sql-input
+                           :host-id "sql-editor"
+                           :text sql-template
+                           :editable? true
+                           :language :sql
+                           :class-names ["cm-input"]
+                           :on-change #(swap! *state assoc :sql-template %)})
+          (ensure-editor! {:editor-key :params-input
+                           :host-id "params-editor"
+                           :text params-edn
+                           :editable? true
+                           :language :clojure
+                           :class-names ["cm-input"]
+                           :on-change #(swap! *state assoc :params-edn %)})
+          (ensure-editor! {:editor-key :sql-output
+                           :host-id "sql-output"
+                           :text output-sql
+                           :editable? false
+                           :language :sql
+                           :class-names ["cm-output"]})
+          (ensure-editor! {:editor-key :data-output
+                           :host-id "data-output"
+                           :text output-data
+                           :editable? false
+                           :language :clojure
+                           :class-names ["cm-output"]})
+          (ensure-editor! {:editor-key :error-output
+                           :host-id "error-output"
+                           :text output-error
+                           :editable? false
+                           :language :clojure
+                           :class-names ["cm-output" "cm-error-output"]}))
+
+        nil))))
 
 (defn dispatch!
   [event-data handler]
@@ -376,8 +650,13 @@
                   :else [handler])]
     (doseq [[action & _args] actions]
       (case action
+        :select-doc
+        (navigate! {:page :docs
+                    :doc-slug target-value})
+
         :select-example
-        (load-example! target-value)
+        (navigate! {:page :playground
+                    :example-id target-value})
 
         :toggle-sidebar
         (do
@@ -395,5 +674,5 @@
   []
   (reset! *root (.getElementById js/document "app"))
   (r/set-dispatch! dispatch!)
-  (swap! *state assoc :catalog examples/catalog)
-  (load-example! (-> examples/catalog :groups first :examples first :id)))
+  (.addEventListener js/window "popstate" sync-route-from-location!)
+  (sync-route-from-location!))
