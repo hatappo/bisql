@@ -361,11 +361,19 @@ body {
   font-family: var(--code-font, ui-monospace, monospace);
 }
 
-.docs-markdown pre {
+.docs-markdown pre,
+.docs-markdown pre code,
+.docs-markdown pre code span {
   overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace !important;
+}
+
+.docs-markdown pre {
   padding: 0.9rem 1rem;
   border: 1px solid rgba(46, 39, 30, 0.24);
   background: #d7cdb8;
+  font-size: 0.92rem;
+  line-height: 1.55;
 }
 
 .docs-markdown pre code {

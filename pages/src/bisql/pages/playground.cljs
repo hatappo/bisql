@@ -322,6 +322,32 @@
     (when-not (= current text)
       (.setValue view text))))
 
+(defn docs-code-mode
+  [^js code-node]
+  (let [class-name (or (.-className code-node) "")
+        language (some->> (re-find #"language-([A-Za-z0-9_-]+)" class-name)
+                          second
+                          str/lower-case)]
+    (case language
+      ("clj" "clojure" "edn") "clojure"
+      ("sql") "text/x-sql"
+      ("sh" "shell" "bash" "zsh") "shell"
+      nil)))
+
+(defn highlight-docs-code-blocks!
+  [host]
+  (when-let [^js run-mode (some-> js/window .-CodeMirror .-runMode)]
+    (doseq [^js code-node (array-seq (.querySelectorAll host "pre code"))]
+      (let [source (or (.-textContent code-node) "")
+            pre-node (.-parentNode code-node)
+            mode (docs-code-mode code-node)]
+        (when mode
+          (.add (.-classList code-node) "cm-s-default")
+          (when pre-node
+            (.add (.-classList pre-node) "cm-s-default"))
+          (set! (.-innerHTML code-node) "")
+          (run-mode source mode code-node))))))
+
 (defn ensure-editor!
   [{:keys [editor-key host-id text editable? on-change language class-names]}]
   (if-let [host (.getElementById js/document host-id)]
@@ -373,7 +399,8 @@
                             (str/replace #"<(/?)h3(\b[^>]*)>" "<$1h4$2>")
                             (str/replace #"<(/?)h2(\b[^>]*)>" "<$1h3$2>")
                             (str/replace #"<(/?)h1(\b[^>]*)>" "<$1h2$2>"))]
-      (set! (.-innerHTML host) adjusted-html))))
+      (set! (.-innerHTML host) adjusted-html)
+      (highlight-docs-code-blocks! host))))
 
 (defn clear-docs-content!
   []
