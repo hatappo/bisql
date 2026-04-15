@@ -322,7 +322,16 @@ body {
 }
 
 .docs-markdown {
-  padding: 1rem 1rem 1.5rem;
+  padding: 0;
+}
+
+.docs-markdown > :not(h1, h2, h3, h4, h5, h6) {
+  padding-inline: 1rem;
+}
+
+.docs-markdown > :is(ul, ol) {
+  padding-left: 2.5rem;
+  padding-right: 1rem;
 }
 
 .docs-markdown h1,
@@ -348,6 +357,12 @@ body {
 .docs-markdown ul,
 .docs-markdown ol {
   padding-left: 1.5rem;
+}
+
+.docs-markdown > ul,
+.docs-markdown > ol {
+  padding-left: 2.5rem;
+  padding-right: 1rem;
 }
 
 .docs-markdown li + li {
