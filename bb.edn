@@ -53,13 +53,13 @@
   gen-declarations {:doc "Generate declaration namespace files from local SQL templates"
                     :task (apply clojure "-M" "-m" "bisql.cli" "gen-declarations" *command-line-args*)}
 
-  jar {:doc "Build the jar via build.clj; accepts `bb jar 0.1.0` or raw build args"
+  jar {:doc "Build the jar via build.clj; accepts `bb jar x.x.x` or raw build args"
        :task (build-task "jar")}
 
-  install {:doc "Install to local Maven cache via build.clj; accepts `bb install 0.1.0` or raw build args"
+  install {:doc "Install to local Maven cache via build.clj; accepts `bb install x.x.x` or raw build args"
            :task (build-task "install")}
 
-  deploy {:doc "Deploy to Clojars via build.clj; accepts `bb deploy 0.1.0` or raw build args"
+  deploy {:doc "Deploy to Clojars via build.clj; accepts `bb deploy x.x.x` or raw build args"
           :task (build-task "deploy")}
 
   token {:doc "Open ~/.m2/settings.xml for editing the temporary Clojars token"
