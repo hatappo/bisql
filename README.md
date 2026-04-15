@@ -17,6 +17,8 @@ No hidden SQL
 No boilerplate SQL  
 
 [![Clojars Project](https://img.shields.io/clojars/v/io.github.hatappo/bisql.svg)](https://clojars.org/io.github.hatappo/bisql)
+[![Docs](https://img.shields.io/badge/docs-pages-cdc0a6)](https://hatappo.github.io/bisql/)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/hatappo/bisql)
 
 > [!NOTE]
 > This project is still early and the API may change.
