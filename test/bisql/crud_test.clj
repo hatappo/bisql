@@ -78,11 +78,14 @@
       (is (contains? names "crud.upsert-by-user-id-and-role-code"))
       (is (contains? names "crud.count"))
       (is (contains? names "crud.count-by-status"))
+      (is (contains? names "crud.count-by-status-starting-with"))
       (is (contains? names "crud.count-by-state"))
       (is (contains? names "crud.count-by-state-and-created-at"))
       (is (contains? names "crud.count-by-user-id"))
+      (is (contains? names "crud.count-by-user-id-and-device-identifier-starting-with"))
       (is (= 0 (count warnings)))
       (is (contains? names "crud.list-by-user-id-order-by-device-identifier"))
+      (is (contains? names "crud.list-by-user-id-and-device-identifier-starting-with"))
       (is (contains? names "crud.list-by-user-id-order-by-last-seen-at"))
       (is (contains? names "crud.list-by-user-id-and-last-seen-at"))
       (is (contains? names "crud.list-order-by-id"))
@@ -253,6 +256,24 @@
                       "WHERE state = /*$state*/'sample'\n"
                       "  AND created_at = /*$created-at*/CURRENT_TIMESTAMP")
                  (:sql-template count-by-state-and-created-at-template)))))
+      (testing "starts-with count queries are generated only for trailing text columns"
+        (let [count-by-status-starting-with-template
+              (some #(when (and (= "users" (:table %))
+                                (= "crud.count-by-status-starting-with" (:name %)))
+                       %)
+                    templates)
+              count-by-user-id-and-device-identifier-starting-with-template
+              (some #(when (and (= "user_devices" (:table %))
+                                (= "crud.count-by-user-id-and-device-identifier-starting-with" (:name %)))
+                       %)
+                    templates)]
+          (is (= (str "SELECT COUNT(*) AS count FROM users\n"
+                      "WHERE status LIKE /*$status*/'sample%' ESCAPE '\\'")
+                 (:sql-template count-by-status-starting-with-template)))
+          (is (= (str "SELECT COUNT(*) AS count FROM user_devices\n"
+                      "WHERE user_id = /*$user-id*/1\n"
+                      "  AND device_identifier LIKE /*$device-identifier*/'sample%' ESCAPE '\\'")
+                 (:sql-template count-by-user-id-and-device-identifier-starting-with-template)))))
       (testing "count query duplicates are deduplicated by name with warnings"
         (let [user-device-count-templates (filter #(and (= "user_devices" (:table %))
                                                         (= :count (:kind %)))
@@ -287,6 +308,10 @@
               list-by-user-id-from-index-template (some #(when (= "crud.list-by-user-id-order-by-last-seen-at" (:name %))
                                                            %)
                                                         templates)
+              list-by-user-id-and-device-identifier-starting-with-template
+              (some #(when (= "crud.list-by-user-id-and-device-identifier-starting-with" (:name %))
+                       %)
+                    templates)
               list-by-user-id-and-last-seen-at-template (some #(when (= "crud.list-by-user-id-and-last-seen-at" (:name %))
                                                                  %)
                                                               templates)
@@ -342,6 +367,13 @@
                       "LIMIT /*$limit*/100\n"
                       "OFFSET /*$offset*/0")
                  (:sql-template list-by-user-id-from-index-template)))
+          (is (= (str "SELECT * FROM user_devices\n"
+                      "WHERE user_id = /*$user-id*/1\n"
+                      "  AND device_identifier LIKE /*$device-identifier*/'sample%' ESCAPE '\\'\n"
+                      "ORDER BY device_identifier\n"
+                      "LIMIT /*$limit*/100\n"
+                      "OFFSET /*$offset*/0")
+                 (:sql-template list-by-user-id-and-device-identifier-starting-with-template)))
           (is (= (str "SELECT * FROM user_devices\n"
                       "WHERE user_id = /*$user-id*/1\n"
                       "  AND last_seen_at = /*$last-seen-at*/CURRENT_TIMESTAMP\n"

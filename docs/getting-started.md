@@ -93,8 +93,10 @@ Generated SQL typically includes:
 - `insert-many`
 - `get-by-*`
 - `list-by-*`
+- `list-by-*-starting-with`
 - `count`
 - `count-by-*`
+- `count-by-*-starting-with`
 - `update-by-*`
 - `delete-by-*`
 - `upsert-by-*`

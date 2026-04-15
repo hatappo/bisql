@@ -155,7 +155,8 @@ Depending on the tables present in the target database, this writes files such a
 - `src/sql/postgresql/public/orders/crud.sql`
 
 Generated CRUD SQL includes templates such as `insert`, `insert-many`, `get-by-*`,
-`upsert-by-*`, `count`, `count-by-*`, `update-by-*`, `delete-by-*`, `list`, and `list-by-*`.
+`upsert-by-*`, `count`, `count-by-*`, `count-by-*-starting-with`, `update-by-*`,
+`delete-by-*`, `list`, `list-by-*`, and `list-by-*-starting-with`.
 
 These generated queries are meant to cover the typical index-friendly SQL patterns
 you would usually write by hand. In practice, that often means you do not need to
@@ -172,6 +173,8 @@ For the sample tables above, this typically includes:
 - `users.crud/get-by-email`
 - `users.crud/count`
 - `users.crud/count-by-status`
+- `users.crud/count-by-status-starting-with`
+- `users.crud/list-by-email-starting-with`
 - `users.crud/update-by-id`
 - `users.crud/update-by-email`
 - `users.crud/delete-by-id`
@@ -181,11 +184,13 @@ For the sample tables above, this typically includes:
 - `orders.crud/upsert-by-id`
 - `orders.crud/count`
 - `orders.crud/count-by-state`
+- `orders.crud/count-by-order-number-starting-with`
 - `orders.crud/count-by-state-and-created-at`
 - `orders.crud/list`
 - `orders.crud/get-by-id`
 - `orders.crud/update-by-id`
 - `orders.crud/delete-by-id`
+- `orders.crud/list-by-order-number-starting-with`
 - `orders.crud/list-by-state`
 - `orders.crud/list-by-state-and-created-at`
 

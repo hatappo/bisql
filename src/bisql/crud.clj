@@ -39,17 +39,51 @@
           "*/"
           (sample-token column)))))
 
+(defn- starts-with-sample-token
+  [column]
+  (let [token (sample-token column)]
+    (if (str/starts-with? token "'")
+      (str (subs token 0 (dec (count token))) "%'")
+      token)))
+
+(defn- bind-comment-starts-with
+  [column]
+  (str "/*$"
+       (kebab-name (:column_name column))
+       "*/"
+       (starts-with-sample-token column)))
+
+(defn- text-column?
+  [{:keys [data_type]}]
+  (#{"text" "character varying" "character"} data_type))
+
+(defn- exact-predicate-spec
+  [column]
+  {:column column
+   :operator :eq})
+
+(defn- starts-with-predicate-spec
+  [column]
+  {:column column
+   :operator :starts-with})
+
 (defn- where-clause
-  [columns]
-  (when (seq columns)
+  [predicate-specs]
+  (when (seq predicate-specs)
     (str/join "\n"
               (map-indexed
-               (fn [idx column]
+               (fn [idx {:keys [column operator]}]
                  (str (if (zero? idx) "WHERE " "  AND ")
                       (:column_name column)
-                      " = "
-                      (bind-comment column)))
-               columns))))
+                      (case operator
+                        :eq
+                        (str " = " (bind-comment column))
+
+                        :starts-with
+                        (str " LIKE "
+                             (bind-comment-starts-with column)
+                             " ESCAPE '\\'"))))
+               predicate-specs))))
 
 (defn- order-by-clause
   [columns]
@@ -63,26 +97,26 @@
              "OFFSET /*$offset*/0"]))
 
 (defn- select-template
-  [table predicate-columns order-columns]
+  [table predicate-specs order-columns]
   (str/join "\n"
             (remove nil?
                     [(str "SELECT * FROM " table)
-                     (where-clause predicate-columns)
+                     (where-clause predicate-specs)
                      (order-by-clause order-columns)
                      (list-limit-clause)])))
 
 (defn- count-template
-  [table predicate-columns]
+  [table predicate-specs]
   (str/join "\n"
             (remove nil?
                     [(str "SELECT COUNT(*) AS count FROM " table)
-                     (where-clause predicate-columns)])))
+                     (where-clause predicate-specs)])))
 
 (defn- get-template
   [table predicate-columns]
   (str/join "\n"
             [(str "SELECT * FROM " table)
-             (where-clause predicate-columns)]))
+             (where-clause (map exact-predicate-spec predicate-columns))]))
 
 (defn- normalize-column-names
   [column-names]
@@ -329,7 +363,7 @@
   [table predicate-columns]
   (str/join "\n"
             [(str "DELETE FROM " table)
-             (where-clause predicate-columns)
+             (where-clause (map exact-predicate-spec predicate-columns))
              "RETURNING *"]))
 
 (defn- update-bind-comment
@@ -352,7 +386,7 @@
   (str/join "\n"
             [(str "UPDATE " table)
              (set-clause set-columns)
-             (where-clause predicate-columns)
+             (where-clause (map exact-predicate-spec predicate-columns))
              "RETURNING *"]))
 
 (defn- generate-insert-templates
@@ -493,19 +527,43 @@
           (count-template-name [prefix-column-names]
             (if (seq prefix-column-names)
               (str "count-by-" (joined-name prefix-column-names))
-              "count"))]
+              "count"))
+          (count-starts-with-candidates [column-groups]
+            (->> column-groups
+                 (map normalize-column-names)
+                 distinct))
+          (count-starts-with-template-name [column-names]
+            (str "count-by-" (joined-name column-names) "-starting-with"))]
     (let [candidates (concat (count-template-candidates unique-column-groups true)
-                             (count-template-candidates index-column-groups false))]
-      (mapv (fn [prefix-column-names]
-              (let [predicate-columns (mapv columns-by-name prefix-column-names)]
-                (named-template-entry schema
-                                      table
-                                      :count
-                                      (count-template-name prefix-column-names)
-                                      prefix-column-names
-                                      (count-template table predicate-columns)
-                                      :meta {:cardinality :one})))
-            candidates))))
+                             (count-template-candidates index-column-groups false))
+          starts-with-candidates (->> (concat (count-starts-with-candidates unique-column-groups)
+                                              (count-starts-with-candidates index-column-groups))
+                                      (filter seq)
+                                      (filter #(text-column? (columns-by-name (last %)))))]
+      (mapv (fn [{:keys [name columns predicate-specs]}]
+              (named-template-entry schema
+                                    table
+                                    :count
+                                    name
+                                    columns
+                                    (count-template table predicate-specs)
+                                    :meta {:cardinality :one}))
+            (concat
+             (map (fn [prefix-column-names]
+                    (let [predicate-columns (mapv columns-by-name prefix-column-names)]
+                      {:name (count-template-name prefix-column-names)
+                       :columns prefix-column-names
+                       :predicate-specs (mapv exact-predicate-spec predicate-columns)}))
+                  candidates)
+             (map (fn [column-names]
+                    (let [columns (mapv columns-by-name column-names)
+                          exact-columns (pop columns)
+                          starts-with-column (peek columns)]
+                      {:name (count-starts-with-template-name column-names)
+                       :columns column-names
+                       :predicate-specs (-> (mapv exact-predicate-spec exact-columns)
+                                            (conj (starts-with-predicate-spec starts-with-column)))}))
+                  starts-with-candidates))))))
 
 (defn- generate-list-templates
   [schema table columns-by-name unique-column-groups index-column-groups]
@@ -521,7 +579,7 @@
                              {:prefix-column-names (subvec column-group 0 prefix-length)
                               :order-column-names (subvec column-group prefix-length)})
                            prefix-lengths))))
-                 (reduce (fn [entries {:keys [prefix-column-names order-column-names] :as entry}]
+                         (reduce (fn [entries {:keys [prefix-column-names order-column-names] :as entry}]
                            (assoc entries [prefix-column-names order-column-names] entry))
                          {})
                  vals))
@@ -529,6 +587,12 @@
             (if (seq prefix-column-names)
               (str "list-by-" (joined-name prefix-column-names))
               "list"))
+          (list-starts-with-candidates [column-groups]
+            (->> column-groups
+                 (map normalize-column-names)
+                 distinct))
+          (list-starts-with-template-name [column-names]
+            (str "list-by-" (joined-name column-names) "-starting-with"))
           (list-template-name [{:keys [prefix-column-names order-column-names]} colliding-base-names]
             (let [base-name (list-template-base-name prefix-column-names)]
               (if (and (contains? colliding-base-names base-name)
@@ -537,6 +601,10 @@
                 base-name)))]
     (let [candidates (concat (list-template-candidates unique-column-groups true)
                              (list-template-candidates index-column-groups false))
+          starts-with-candidates (->> (concat (list-starts-with-candidates unique-column-groups)
+                                              (list-starts-with-candidates index-column-groups))
+                                      (filter seq)
+                                      (filter #(text-column? (columns-by-name (last %)))))
           colliding-base-names (->> candidates
                                     (group-by #(list-template-base-name (:prefix-column-names %)))
                                     (keep (fn [[base-name entries]]
@@ -544,16 +612,32 @@
                                               base-name)))
                                     set)]
       (mapv (fn [{:keys [prefix-column-names order-column-names] :as candidate}]
-              (let [predicate-columns (mapv columns-by-name prefix-column-names)
+              (let [{:keys [name columns predicate-specs]}
+                    (when (:starts-with? candidate) candidate)
+                    predicate-columns (mapv columns-by-name prefix-column-names)
+                    predicate-specs (or predicate-specs (mapv exact-predicate-spec predicate-columns))
                     order-columns (mapv columns-by-name order-column-names)]
                 (named-template-entry schema
                                       table
                                       :list
-                                      (list-template-name candidate colliding-base-names)
-                                      prefix-column-names
-                                      (select-template table predicate-columns order-columns)
+                                      (or name
+                                          (list-template-name candidate colliding-base-names))
+                                      (or columns prefix-column-names)
+                                      (select-template table predicate-specs order-columns)
                                       :meta {:cardinality :many})))
-            candidates))))
+            (concat candidates
+                    (map (fn [column-names]
+                           (let [columns (mapv columns-by-name column-names)
+                                 exact-columns (pop columns)
+                                 starts-with-column (peek columns)]
+                             {:starts-with? true
+                              :name (list-starts-with-template-name column-names)
+                              :columns column-names
+                              :predicate-specs (-> (mapv exact-predicate-spec exact-columns)
+                                                   (conj (starts-with-predicate-spec starts-with-column)))
+                              :prefix-column-names column-names
+                              :order-column-names [(:column_name starts-with-column)]}))
+                         starts-with-candidates))))))
 
 (defn- table-columns-query
   [schema]

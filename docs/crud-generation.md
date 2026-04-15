@@ -11,8 +11,10 @@ Depending on table structure and indexes, generated SQL commonly includes:
 - `get-by-*`
 - `list`
 - `list-by-*`
+- `list-by-*-starting-with`
 - `count`
 - `count-by-*`
+- `count-by-*-starting-with`
 - `update-by-*`
 - `delete-by-*`
 - `upsert-by-*`
@@ -22,6 +24,14 @@ The generated SQL is intended to cover the repetitive queries that usually follo
 - primary keys
 - unique constraints
 - index prefixes
+
+Generated `*-starting-with` queries are intentionally conservative:
+
+- they are only generated when the final column of a unique key or index is a text column
+- earlier columns remain exact matches
+- the final text column uses `LIKE ... ESCAPE '\'`
+
+This keeps the generated queries aligned with ordinary index-friendly prefix search.
 
 ## Why This Exists
 
