@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" role="img" aria-label="bisql bicycle calm">
+  <circle cx="12" cy="34" r="8" fill="none" stroke="#5f5a50" stroke-width="3"/>
+  <circle cx="36" cy="34" r="8" fill="none" stroke="#5f5a50" stroke-width="3"/>
+  <path d="M12 34 19 20h7l-3 7" fill="none" stroke="#9d957f" stroke-linecap="round" stroke-linejoin="round" stroke-width="3"/>
+  <path d="M23 27 26 20l4 7h6" fill="none" stroke="#9d957f" stroke-linecap="round" stroke-linejoin="round" stroke-width="3"/>
+  <path d="M19 20h-5" fill="none" stroke="#9d957f" stroke-linecap="round" stroke-width="3"/>
+  <path d="M26 20h5" fill="none" stroke="#9d957f" stroke-linecap="round" stroke-width="3"/>
+  <circle cx="24" cy="18" r="2" fill="#7f7868"/>
+</svg>
