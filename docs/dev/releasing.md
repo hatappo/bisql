@@ -41,8 +41,22 @@ Notes:
 ## Publish
 
 ```sh
-bb deploy <version>
+bb release <version>
 ```
+
+## Verify The Release
+
+After publishing, confirm that the released artifact resolves from Clojars and
+that `bisql.core` can be loaded:
+
+```sh
+bb release-check <version>
+```
+
+This runs the equivalent of:
+
+- `clojure -Sdeps ... -P`
+- `clojure -Sdeps ... -M -e "(require 'bisql.core) (println :ok)"`
 
 For convenience, this project also provides:
 

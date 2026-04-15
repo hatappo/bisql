@@ -10,6 +10,10 @@
                        (not (.startsWith ^String (first args) ":")))
                 (into [":version" (pr-str (first args))] (subvec args 1))
                 args)))
+          (defn required-version-arg [args]
+            (or (first args)
+                (throw (ex-info "Version argument is required."
+                                {:example "bb release-check 0.2.0"}))))
           (defn build-task [subcommand]
             (apply clojure "-T:build" subcommand (normalize-build-args *command-line-args*))))
 
@@ -59,8 +63,14 @@
   install {:doc "Install to local Maven cache via build.clj; accepts `bb install x.x.x` or raw build args"
            :task (build-task "install")}
 
-  deploy {:doc "Deploy to Clojars via build.clj; accepts `bb deploy x.x.x` or raw build args"
-          :task (build-task "deploy")}
+  release {:doc "Release to Clojars via build.clj; accepts `bb release x.x.x` or raw build args"
+           :task (build-task "deploy")}
+
+  release-check {:doc "Verify a released version resolves from Clojars and loads bisql.core; accepts `bb release-check x.x.x`"
+                 :task (let [version (required-version-arg *command-line-args*)
+                             deps-edn (str "{:deps {io.github.hatappo/bisql {:mvn/version \"" version "\"}}}")]
+                         (shell "clojure" "-Sdeps" deps-edn "-P")
+                         (shell "clojure" "-Sdeps" deps-edn "-M" "-e" "(require 'bisql.core) (println :ok)"))}
 
   token {:doc "Open ~/.m2/settings.xml for editing the temporary Clojars token"
          :task (shell "open" (str (System/getProperty "user.home") "/.m2/settings.xml"))}

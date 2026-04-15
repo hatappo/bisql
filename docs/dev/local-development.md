@@ -67,7 +67,8 @@ gen-crud         Generate CRUD SQL files from local PostgreSQL
 gen-declarations Generate declaration namespace files from local SQL templates
 jar              Build the jar via build.clj; accepts `bb jar x.x.x` or raw build args
 install          Install to local Maven cache via build.clj; accepts `bb install x.x.x` or raw build args
-deploy           Deploy to Clojars via build.clj; accepts `bb deploy x.x.x` or raw build args
+release          Release to Clojars via build.clj; accepts `bb release x.x.x` or raw build args
+release-check    Verify a released version resolves from Clojars and loads bisql.core; accepts `bb release-check x.x.x`
 token            Open ~/.m2/settings.xml for editing the temporary Clojars token
 demo             Run example scripts for manual verification
 demo-preview     Write demo output to docs/rendering-examples.md and open it
