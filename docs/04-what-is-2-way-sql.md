@@ -53,5 +53,5 @@ Bisql does **not** try to become a full templating language.
 
 See also:
 
-- [Rendering](rendering.md)
-- [SQL File Layout](sql-file-layout.md)
+- [Rendering](06-rendering.md)
+- [SQL File Layout](05-sql-file-layout.md)

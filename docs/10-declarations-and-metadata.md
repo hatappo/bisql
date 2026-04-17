@@ -52,5 +52,5 @@ This metadata is useful both in rendering output and in generated declaration na
 
 See also:
 
-- [Rendering](rendering.md)
-- [Rendering Examples](rendering-examples.md)
+- [Rendering](06-rendering.md)
+- [Rendering Examples](07-rendering-examples.md)

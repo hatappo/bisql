@@ -28,15 +28,76 @@ No boilerplate SQL
 
 The full Installation guide lives here:
 
-- [docs/installation.md](docs/installation.md)
+- [docs/02-installation.md](docs/02-installation.md)
 - [https://hatappo.github.io/bisql/docs/installation/](https://hatappo.github.io/bisql/docs/installation/)
 
 ## Getting Started
 
 The full Getting Started guide lives here:
 
-- [docs/getting-started.md](docs/getting-started.md)
+- [docs/03-getting-started.md](docs/03-getting-started.md)
 - [https://hatappo.github.io/bisql/docs/getting-started/](https://hatappo.github.io/bisql/docs/getting-started/)
+
+## Quick Example
+
+Write one SQL template:
+
+```sql
+-- src/sql/postgresql/public/users/find-active.sql
+SELECT *
+FROM users
+WHERE status = /*$status*/'active'
+ORDER BY id
+LIMIT /*$limit*/100
+```
+
+Define query functions once:
+
+```clojure
+(ns sql
+  (:require [bisql.core :as bisql]))
+
+(bisql/defquery)
+```
+
+Then call the generated function:
+
+```clojure
+(sql.postgresql.public.users.core/find-active
+ datasource
+ {:status "active"
+  :limit 20})
+
+;; => [{:id 1
+;;      :email "user@example.com"
+;;      :status "active"}]
+```
+
+At runtime, bisql turns the SQL template and params into:
+
+```clojure
+{:sql "SELECT *\nFROM users\nWHERE status = ?\nORDER BY id\nLIMIT ?"
+ :params ["active" 20]
+ :meta {}}
+```
+
+For repetitive CRUD queries, generate SQL first:
+
+```sh
+clojure -M:bisql gen-crud
+```
+
+That writes files such as:
+
+- `src/sql/postgresql/public/users/crud.sql`
+
+Then the same `(bisql/defquery)` call exposes generated functions such as:
+
+```clojure
+(sql.postgresql.public.users.crud/count-by-status datasource {:status "active"})
+```
+
+You can keep the generated SQL as-is, or add hand-written SQL files alongside it when you need more complex queries.
 
 ## Development
 

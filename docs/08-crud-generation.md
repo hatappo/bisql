@@ -78,5 +78,5 @@ but should remain unchanged on later updates.
 
 See also:
 
-- [Getting Started](getting-started.md)
-- [Bisql Adapters](bisql-adapters.md)
+- [Getting Started](03-getting-started.md)
+- [Bisql Adapters](11-bisql-adapters.md)

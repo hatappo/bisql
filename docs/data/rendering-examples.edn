@@ -101,14 +101,22 @@
   {:id "others"
    :title "4. Others"
    :examples
-   [{:id "render-query-by-passing-a-sql-template-directly"
-     :title "4-1: render query by passing a SQL template directly"
+   [{:id "join"
+     :title "4-1: join"
+     :description "Templates can use ordinary `JOIN` clauses. Bisql only replaces the parameterized parts and leaves the SQL structure intact."
+     :input {:kind :resource
+             :resource "demo-join.sql"
+             :params {:status "active"
+                      :state "pending"
+                      :limit 20}}}
+    {:id "render-query-by-passing-a-sql-template-directly"
+     :title "4-2: render query by passing a SQL template directly"
      :description "You can also pass a SQL template directly from Clojure code. This is useful for debugging or learning, but application queries should generally live in SQL files."
      :input {:kind :direct-template
              :sql-template "SELECT * FROM users WHERE id = /*$id*/1"
              :params {:id 42}}}
     {:id "errors-missing-bind-parameter"
-     :title "4-2: Errors: missing bind parameter"
+     :title "4-3: Errors: missing bind parameter"
      :error? true
      :input {:kind :resource
              :resource "demo-variables-bind.sql"

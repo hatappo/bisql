@@ -81,11 +81,11 @@
   demo {:doc "Run example scripts for manual verification"
         :task (shell "bb scripts/demo/core.bb")}
 
-  demo-preview {:doc "Write demo output to docs/rendering-examples.md and open it"
+  demo-preview {:doc "Write demo output to docs/07-rendering-examples.md and open it"
                 :task (do
                         (shell "mkdir" "-p" "docs")
-                        (shell "sh" "-lc" "bb scripts/demo/core.bb > docs/rendering-examples.md")
-                        (shell "open" "docs/rendering-examples.md"))}
+                        (shell "sh" "-lc" "bb scripts/demo/core.bb > docs/07-rendering-examples.md")
+                        (shell "open" "docs/07-rendering-examples.md"))}
 
   pages-clean {:doc "Remove generated Pages build outputs and shadow-cljs cache"
                :task (do

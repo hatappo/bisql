@@ -30,5 +30,5 @@ This keeps:
 
 See also:
 
-- [Getting Started](getting-started.md)
-- [CRUD Generation](crud-generation.md)
+- [Getting Started](03-getting-started.md)
+- [CRUD Generation](08-crud-generation.md)

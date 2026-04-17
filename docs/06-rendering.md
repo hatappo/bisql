@@ -121,4 +121,4 @@ Typical user-facing APIs are:
 
 For lower-level examples, see:
 
-- [Rendering Examples](rendering-examples.md)
+- [Rendering Examples](07-rendering-examples.md)

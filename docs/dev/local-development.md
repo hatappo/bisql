@@ -71,7 +71,7 @@ release          Release to Clojars via build.clj; accepts `bb release x.x.x` or
 release-check    Verify a released version resolves from Clojars and loads bisql.core; accepts `bb release-check x.x.x`
 token            Open ~/.m2/settings.xml for editing the temporary Clojars token
 demo             Run example scripts for manual verification
-demo-preview     Write demo output to docs/rendering-examples.md and open it
+demo-preview     Write demo output to docs/07-rendering-examples.md and open it
 pages-build      Build the static pages app into pages/dist/
 pages-dev        Start the shadow-cljs pages dev server on http://localhost:8000
 ```
@@ -150,4 +150,4 @@ Notes:
 ## Related Docs
 
 - [dev-releasing.md](dev-releasing.md)
-- [../rendering-examples.md](../rendering-examples.md)
+- [../07-rendering-examples.md](../07-rendering-examples.md)

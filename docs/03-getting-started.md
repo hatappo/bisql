@@ -185,9 +185,9 @@ body included.
 
 See also:
 
-- [Rendering](rendering.md)
-- [CRUD Generation](crud-generation.md)
-- [Rendering Examples](rendering-examples.md)
+- [Rendering](06-rendering.md)
+- [CRUD Generation](08-crud-generation.md)
+- [Rendering Examples](07-rendering-examples.md)
 
 ## 5. Wrap up
 

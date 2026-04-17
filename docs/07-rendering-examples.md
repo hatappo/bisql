@@ -397,7 +397,52 @@ A single SQL file can contain multiple templates. Each template starts with a `/
 
 ## 4. Others
 
-### 4-1: render query by passing a SQL template directly 
+### 4-1: join 
+
+1. Input Form:
+```clj
+(render "demo-join.sql" {:status "active", :state "pending", :limit 20})
+```
+
+2. Input SQL:
+```sql
+SELECT u.id,
+       u.email,
+       o.id AS order_id,
+       o.state,
+       o.created_at
+FROM users u
+JOIN orders o
+  ON o.user_id = u.id
+WHERE u.status = /*$status*/'active'
+  AND o.state = /*$state*/'pending'
+ORDER BY o.created_at DESC
+LIMIT /*$limit*/100
+```
+
+3. Output SQL and Params:
+```sql
+SELECT u.id,
+       u.email,
+       o.id AS order_id,
+       o.state,
+       o.created_at
+FROM users u
+JOIN orders o
+  ON o.user_id = u.id
+WHERE u.status = ?
+  AND o.state = ?
+ORDER BY o.created_at DESC
+LIMIT ?
+```
+
+```clj
+{:params ["active" "pending" 20]}
+```
+
+Templates can use ordinary `JOIN` clauses. Bisql only replaces the parameterized parts and leaves the SQL structure intact.
+
+### 4-2: render query by passing a SQL template directly 
 
 1. Input Form:
 ```clj
@@ -420,7 +465,7 @@ SELECT * FROM users WHERE id = ?
 
 You can also pass a SQL template directly from Clojure code. This is useful for debugging or learning, but application queries should generally live in SQL files.
 
-### 4-2: Errors: missing bind parameter 
+### 4-3: Errors: missing bind parameter 
 
 1. Input Form:
 ```clj

@@ -4,40 +4,37 @@
          '[clojure.string :as str]
          '[clojure.pprint :as pprint])
 
+(defn- prefixed-doc-file?
+  [^java.io.File file]
+  (boolean (re-matches #"\d{2}-.+\.md" (.getName file))))
+
+(defn- doc-order-key
+  [^java.io.File file]
+  (let [[_ prefix suffix] (re-matches #"(\d{2})-(.+)\.md" (.getName file))]
+    [(parse-long prefix) suffix]))
+
+(defn- doc-slug
+  [^java.io.File file]
+  (second (re-matches #"\d{2}-(.+)\.md" (.getName file))))
+
+(defn- doc-title
+  [file]
+  (or (some->> (line-seq (java.io.BufferedReader. (io/reader file)))
+               (some (fn [line]
+                       (when-let [[_ title] (re-matches #"^#\s+(.+)$" line)]
+                         title))))
+      (-> file doc-slug (str/replace #"-" " "))))
+
 (def doc-pages
-  [{:slug "introduction"
-    :title "Introduction"
-    :file "docs/introduction.md"}
-   {:slug "installation"
-    :title "Installation"
-    :file "docs/installation.md"}
-   {:slug "getting-started"
-    :title "Getting Started"
-    :file "docs/getting-started.md"}
-   {:slug "what-is-2-way-sql"
-    :title "What is 2-way-SQL"
-    :file "docs/what-is-2-way-sql.md"}
-   {:slug "sql-file-layout"
-    :title "SQL File Layout"
-    :file "docs/sql-file-layout.md"}
-   {:slug "rendering"
-    :title "Rendering"
-    :file "docs/rendering.md"}
-   {:slug "rendering-examples"
-    :title "Rendering Examples"
-    :file "docs/rendering-examples.md"}
-   {:slug "crud-generation"
-    :title "CRUD Generation"
-    :file "docs/crud-generation.md"}
-   {:slug "generate-clojure-functions"
-    :title "Generate Clojure Functions"
-    :file "docs/generate-clojure-functions.md"}
-   {:slug "declarations-and-metadata"
-    :title "Declarations and Metadata"
-    :file "docs/declarations-and-metadata.md"}
-   {:slug "bisql-adapters"
-    :title "Bisql Adapters"
-    :file "docs/bisql-adapters.md"}])
+  (->> (file-seq (io/file "docs"))
+       (filter #(.isFile ^java.io.File %))
+       (filter #(= (.getParentFile ^java.io.File %) (io/file "docs")))
+       (filter prefixed-doc-file?)
+       (sort-by doc-order-key)
+       (mapv (fn [file]
+               {:slug (doc-slug file)
+                :title (doc-title file)
+                :file (.getPath ^java.io.File file)}))))
 
 (def catalog
   {:title "Docs"

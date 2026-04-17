@@ -15,18 +15,16 @@ Instead, it gives you:
 - comment-based 2-way SQL templating
 - rendering into SQL + bind params
 - declaration metadata inside `.sql` files
-- generated CRUD SQL and Clojure entrypoints
+- generated CRUD-oriented SQL and Clojure entrypoints, including many index-friendly query variants
 - adapter-based execution, currently centered on `next.jdbc`
 
-The intended workflow is:
+The minimal intended workflow is:
 
 1. write or generate SQL templates
-2. load them from the classpath
-3. render them with params
-4. execute them through an adapter
+2. add a single macro call to your code to turn those SQL templates into Clojure functions
 
 See also:
 
-- [Installation](installation.md)
-- [Getting Started](getting-started.md)
-- [What is 2-way-SQL](what-is-2-way-sql.md)
+- [Installation](02-installation.md)
+- [Getting Started](03-getting-started.md)
+- [What is 2-way-SQL](04-what-is-2-way-sql.md)

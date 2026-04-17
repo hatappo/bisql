@@ -16,23 +16,28 @@
 (def default-description
   "SQL-obsessed 2way-sql data access toolkit for Clojure.")
 
-(def doc-slugs
-  (->> (.listFiles (io/file "docs"))
-       (filter #(.isFile ^java.io.File %))
-       (map #(.getName ^java.io.File %))
-       (filter #(str/ends-with? % ".md"))
-       (map #(str/replace % #"\.md$" ""))
-       sort))
+(defn- prefixed-doc-file?
+  [^java.io.File file]
+  (boolean (re-matches #"\d{2}-.+\.md" (.getName file))))
+
+(defn- doc-order-key
+  [^java.io.File file]
+  (let [[_ prefix suffix] (re-matches #"(\d{2})-(.+)\.md" (.getName file))]
+    [(parse-long prefix) suffix]))
+
+(defn- doc-slug
+  [^java.io.File file]
+  (second (re-matches #"\d{2}-(.+)\.md" (.getName file))))
 
 (defn markdown->doc-meta
-  [slug]
-  (let [content (slurp (str "docs/" slug ".md"))
+  [^java.io.File file]
+  (let [content (slurp file)
         lines (str/split-lines content)
         title (or (some (fn [line]
                           (when-let [[_ heading] (re-matches #"^#\s+(.+)$" line)]
                             heading))
                         lines)
-                  slug)
+                  (doc-slug file))
         description (or (some (fn [line]
                                 (let [line (str/trim line)]
                                   (when (and (seq line)
@@ -44,12 +49,17 @@
                                     line)))
                               lines)
                         default-description)]
-    {:slug slug
+    {:slug (doc-slug file)
      :title title
      :description description}))
 
 (def doc-pages
-  (mapv markdown->doc-meta doc-slugs))
+  (->> (file-seq (io/file "docs"))
+       (filter #(.isFile ^java.io.File %))
+       (filter #(= (.getParentFile ^java.io.File %) (io/file "docs")))
+       (filter prefixed-doc-file?)
+       (sort-by doc-order-key)
+       (mapv markdown->doc-meta)))
 
 (def example-ids
   (-> "docs/data/rendering-examples.edn"
