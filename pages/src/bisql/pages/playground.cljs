@@ -548,12 +548,13 @@
        :value next-value
        :on {:click [action]}}
       "Next"]
-     [:button.toolbar-nav-link.toolbar-nav-link-placeholder
-      {:type "button"
-       :tab-index -1
-       :disabled true
-       :aria-hidden "true"}
-      "Next"])])
+     [:div.toolbar-nav-link.toolbar-nav-link-finished
+      {:role "note"
+       :aria-label "Reached the last page"}
+      [:span.toolbar-nav-finished-line.toolbar-nav-finished-line-top
+       "Thanks for "]
+      [:span.toolbar-nav-finished-line.toolbar-nav-finished-line-bottom
+       " your reading"]])])
 
 (defn share-x-url
   [{:keys [title route]}]
