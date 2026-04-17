@@ -78,13 +78,12 @@
   token {:doc "Open ~/.m2/settings.xml for editing the temporary Clojars token"
          :task (shell "open" (str (System/getProperty "user.home") "/.m2/settings.xml"))}
 
-  demo {:doc "Run example scripts for manual verification"
-        :task (shell "bb scripts/demo/core.bb")}
-
-  demo-preview {:doc "Write demo output to docs/07-rendering-examples.md and open it"
+  gen-examples {:doc "Generate docs/07-rendering-examples.md from docs/data/rendering-examples.edn"
+                :requires ([examples.markdown :as examples])
                 :task (do
                         (shell "mkdir" "-p" "docs")
-                        (shell "sh" "-lc" "bb scripts/demo/core.bb > docs/07-rendering-examples.md")
+                        (spit "docs/07-rendering-examples.md"
+                              (examples/render-examples-markdown))
                         (shell "open" "docs/07-rendering-examples.md"))}
 
   pages-clean {:doc "Remove generated Pages build outputs and shadow-cljs cache"

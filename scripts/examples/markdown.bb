@@ -1,5 +1,6 @@
-(ns demo.lib
+(ns examples.markdown
   (:require [bisql.query :as bisql]
+            [clojure.edn :as edn]
             [clojure.pprint :as pprint]
             [clojure.string :as str]))
 
@@ -158,3 +159,23 @@
     (when-let [lines (seq (input-sql-lines example))]
       (print-code-block "2. Input SQL" "sql" lines))
     (print-code-block "3. Output Error" "clj" (error-output-lines error))))
+
+(defn render-examples-markdown
+  []
+  (let [examples-doc (-> "docs/data/rendering-examples.edn"
+                         slurp
+                         edn/read-string)]
+    (with-out-str
+      (println (str "# " (:title examples-doc)))
+      (doseq [{:keys [title examples]} (:groups examples-doc)]
+        (println)
+        (println (str "## " title))
+        (doseq [example examples]
+          (if (:error? example)
+            (show-error-example example)
+            (show-example example))))
+      (when-let [notes (seq (:notes examples-doc))]
+        (println "## Notes")
+        (println)
+        (doseq [note notes]
+          (println (str "- " note)))))))

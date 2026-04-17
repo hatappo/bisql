@@ -70,8 +70,7 @@ install          Install to local Maven cache via build.clj; accepts `bb install
 release          Release to Clojars via build.clj; accepts `bb release x.x.x` or raw build args
 release-check    Verify a released version resolves from Clojars and loads bisql.core; accepts `bb release-check x.x.x`
 token            Open ~/.m2/settings.xml for editing the temporary Clojars token
-demo             Run example scripts for manual verification
-demo-preview     Write demo output to docs/07-rendering-examples.md and open it
+gen-examples     Generate docs/07-rendering-examples.md from docs/data/rendering-examples.edn and open it
 pages-build      Build the static pages app into pages/dist/
 pages-dev        Start the shadow-cljs pages dev server on http://localhost:8000
 ```
