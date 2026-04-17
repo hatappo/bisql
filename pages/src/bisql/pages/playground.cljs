@@ -528,7 +528,7 @@
      "GitHub"]]])
 
 (defn pager-nav
-  [{:keys [previous next previous-value next-value action]}]
+  [{:keys [previous next previous-value next-value action finished-top finished-bottom finished-aria-label]}]
   [:nav.toolbar-nav
    (if previous
      [:button.toolbar-nav-link
@@ -550,15 +550,15 @@
       "Next"]
      [:div.toolbar-nav-link.toolbar-nav-link-finished
       {:role "note"
-       :aria-label "Reached the last page"}
+       :aria-label (or finished-aria-label "Reached the last page")}
       [:span.toolbar-nav-finished-stitch.toolbar-nav-finished-stitch-top-left]
       [:span.toolbar-nav-finished-stitch.toolbar-nav-finished-stitch-top-right]
       [:span.toolbar-nav-finished-stitch.toolbar-nav-finished-stitch-bottom-left]
       [:span.toolbar-nav-finished-stitch.toolbar-nav-finished-stitch-bottom-right]
       [:span.toolbar-nav-finished-line.toolbar-nav-finished-line-top
-       "Thanks for "]
+       (or finished-top "Thanks for ")]
       [:span.toolbar-nav-finished-line.toolbar-nav-finished-line-bottom
-       " your reading"]])])
+       (or finished-bottom " your reading")]])])
 
 (defn share-x-url
   [{:keys [title route]}]
@@ -579,13 +579,16 @@
           :alt "X"}]])
 
 (defn page-actions
-  [{:keys [previous next previous-value next-value action]}]
+  [{:keys [previous next previous-value next-value action finished-top finished-bottom finished-aria-label]}]
   [:div.page-actions
    (pager-nav {:previous previous
                :next next
                :previous-value previous-value
                :next-value next-value
-               :action action})])
+               :action action
+               :finished-top finished-top
+               :finished-bottom finished-bottom
+               :finished-aria-label finished-aria-label})])
 
 (defn render-docs-page
   [selected-doc-slug sidebar-open?]
@@ -631,7 +634,10 @@
                       :next next
                       :previous-value (:id previous)
                       :next-value (:id next)
-                      :action :select-example})]]
+                      :action :select-example
+                      :finished-top "Thanks"
+                      :finished-bottom "for your playing"
+                      :finished-aria-label "Reached the last playground page"})]]
 
       [:section.summary
        [:div.summary-title-row
@@ -675,7 +681,10 @@
                       :next next
                       :previous-value (:id previous)
                       :next-value (:id next)
-                      :action :select-example})]]]))
+                      :action :select-example
+                      :finished-top "Thanks"
+                      :finished-bottom "for your playing"
+                      :finished-aria-label "Reached the last playground page"})]]]))
 
 (defn render-app
   [{:keys [route-page selected-doc-slug sidebar-open?] :as state}]
