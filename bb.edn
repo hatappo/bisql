@@ -35,6 +35,9 @@
   test {:doc "Run tests"
         :task (clojure "-M:test")}
 
+  test-build {:doc "Run build.clj unit tests"
+              :task (clojure "-M:test-build")}
+
   test-db {:doc "Reset sample schema and run integration tests against local PostgreSQL"
            :depends [db-reset]
            :task (clojure "-M:test-db")}
