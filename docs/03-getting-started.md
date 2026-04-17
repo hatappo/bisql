@@ -175,13 +175,16 @@ The same options can also be passed through environment variables such as
 
 The precedence order is CLI options > environment variables > config file > defaults.
 
-`gen-declarations` is an optional helper for projects that prefer explicit namespace
-files. It generates navigation-oriented `declare` forms with docstrings derived
-from the SQL templates, so IDEs and the REPL can jump to the intended namespace
-and query source without letting a shallow `(defquery)` populate undeclared
-namespaces. By default those docstrings include the project-relative SQL file path
-and line number; pass `--include-sql-template` if you also want the SQL template
-body included.
+`gen-functions` generates explicit namespace files with `declare` forms and
+docstrings derived from your SQL templates. That makes the generated query
+functions easy to `require` and navigate in ordinary application code, while also
+helping IDEs and the REPL jump to the intended namespace and query source. By
+default those docstrings include the project-relative SQL file path and line
+number; pass `--include-sql-template` if you also want the SQL template body
+included.
+
+If you are starting from database schema and want both the SQL templates and the
+matching function namespace files in one step, use `clojure -M:bisql gen-crud-and-functions`.
 
 See also:
 
@@ -195,8 +198,8 @@ The developer workflow with Bisql is straightforward:
 
 1. Add `defquery` to your application code once, so Bisql can turn SQL files, including generated ones, into ordinary Clojure functions.
 
-2. Run `clojure -M:bisql gen-crud` to generate the routine CRUD SQL you would otherwise write by hand, and add hand-written SQL where you need more complex queries.
+2. Run `clojure -M:bisql gen-crud-and-functions` to generate both routine CRUD SQL and matching function namespace files, and add hand-written SQL where you need more complex queries.
 
-3. If needed, run `clojure -M:bisql gen-declarations` to generate matching `declare` forms for those functions.
+3. If needed, run `clojure -M:bisql gen-functions` again after adding or changing hand-written SQL templates.
 
 4. Call the generated query functions from your application code.

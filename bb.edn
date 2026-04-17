@@ -13,7 +13,7 @@
           (defn required-version-arg [args]
             (or (first args)
                 (throw (ex-info "Version argument is required."
-                                {:example "bb release-check 0.2.0"}))))
+                                {:example "bb release-check 0.2.1"}))))
           (defn build-task [subcommand]
             (apply clojure "-T:build" subcommand (normalize-build-args *command-line-args*))))
 
@@ -54,8 +54,11 @@
   gen-crud {:doc "Generate CRUD SQL files from local PostgreSQL"
             :task (apply clojure "-M" "-m" "bisql.cli" "gen-crud" *command-line-args*)}
 
-  gen-declarations {:doc "Generate declaration namespace files from local SQL templates"
-                    :task (apply clojure "-M" "-m" "bisql.cli" "gen-declarations" *command-line-args*)}
+  gen-functions {:doc "Generate function namespace files from local SQL templates"
+                 :task (apply clojure "-M" "-m" "bisql.cli" "gen-functions" *command-line-args*)}
+
+  gen-crud-and-functions {:doc "Generate CRUD SQL files and function namespace files in sequence"
+                          :task (apply clojure "-M" "-m" "bisql.cli" "gen-crud-and-functions" *command-line-args*)}
 
   list-functions {:doc "List the Clojure functions resolved from a SQL file or directory"
                   :task (apply clojure "-M" "-m" "bisql.cli" "list-functions" *command-line-args*)}

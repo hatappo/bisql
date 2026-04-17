@@ -787,17 +787,22 @@ docstring 付きの query var を `declare` する:
 ```sh
 clojure -M -m bisql.cli gen-config
 clojure -M -m bisql.cli gen-crud --config bisql.edn
-clojure -M -m bisql.cli gen-declarations --config bisql.edn
+clojure -M -m bisql.cli gen-functions --config bisql.edn
+clojure -M -m bisql.cli gen-crud-and-functions --config bisql.edn
 ```
 
 設定ファイルは `:db` と `:generate` を持つ EDN map とし、生成される雛形では既定値をコメントで例示する。設定ファイルがなくても、優先順位が CLI オプション > 環境変数 > 設定ファイル > デフォルトなので各コマンドは動作する。
 
-`gen-declarations` は補助機能として残す。浅い階層で `(defquery)` を呼んだときに、
+`gen-functions` は、明示的な namespace ファイルを生成するための
+利用者向けコマンドとして残す。浅い階層で `(defquery)` を呼んだときに、
 未宣言の namespace に関数が定義されるのを避けたいプロジェクトや、
-IDE / REPL で使うナビゲーション用の declare と docstring がほしい
-プロジェクトでは、明示的な namespace ファイルを生成する用途で使える。
-デフォルトでは docstring にはプロジェクトルートからの相対 SQL パスと行番号だけを含め、
+生成された query 関数を通常のアプリケーションコードから素直に
+`require` したいプロジェクトで使いやすい。あわせて IDE / REPL 向けの
+ナビゲーション用 `declare` と docstring も得られる。デフォルトでは
+docstring にはプロジェクトルートからの相対 SQL パスと行番号だけを含め、
 SQL テンプレート本文も含めたい場合は `--include-sql-template` を使う。
+`gen-crud-and-functions` は、CRUD テンプレート生成と関数 namespace 生成を
+順にまとめて実行するだけのコマンドである。
 
 **理由:**
 

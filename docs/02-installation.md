@@ -3,7 +3,7 @@
 Add Bisql to `deps.edn`:
 
 ```clojure
-{:deps {io.github.hatappo/bisql {:mvn/version "0.2.0"}}}
+{:deps {io.github.hatappo/bisql {:mvn/version "0.2.1"}}}
 ```
 
 If you want a shorter CLI entrypoint, add an alias:
@@ -18,7 +18,8 @@ Then these commands become available:
 ```sh
 clojure -M:bisql gen-config
 clojure -M:bisql gen-crud
-clojure -M:bisql gen-declarations
+clojure -M:bisql gen-functions
+clojure -M:bisql gen-crud-and-functions
 ```
 
 If you prefer `bb`, define tasks like this:
@@ -27,13 +28,14 @@ If you prefer `bb`, define tasks like this:
 {:tasks
  {:gen-config (apply clojure "-M:bisql" "gen-config" *command-line-args*)
   :gen-crud (apply clojure "-M:bisql" "gen-crud" *command-line-args*)
-  :gen-declarations (apply clojure "-M:bisql" "gen-declarations" *command-line-args*)}}
+  :gen-functions (apply clojure "-M:bisql" "gen-functions" *command-line-args*)
+  :gen-crud-and-functions (apply clojure "-M:bisql" "gen-crud-and-functions" *command-line-args*)}}
 ```
 
 When passing CLI flags through `bb`, use `--` as a separator:
 
 ```sh
-bb gen-declarations -- --include-sql-template --suppress-unused-public-var
+bb gen-functions -- --include-sql-template --suppress-unused-public-var
 ```
 
 Current assumptions:

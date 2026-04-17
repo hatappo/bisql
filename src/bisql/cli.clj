@@ -38,7 +38,8 @@
    ["Usage:"
     "  clojure -M -m bisql.cli gen-config [options]"
     "  clojure -M -m bisql.cli gen-crud [options]"
-    "  clojure -M -m bisql.cli gen-declarations [options]"
+    "  clojure -M -m bisql.cli gen-functions [options]"
+    "  clojure -M -m bisql.cli gen-crud-and-functions [options]"
     "  clojure -M -m bisql.cli list-functions --path PATH [--namespace NS]"
     ""
     "Options:"
@@ -236,19 +237,24 @@
      (:files file-result))
     (print-warnings! (:warnings generated-crud))))
 
-(defn- run-gen-declarations!
+(defn- run-gen-functions!
   [options]
   (let [base-dir (or (:base-dir options) default-base-dir)
-        file-result (bisql/write-declaration-files! {:output-root base-dir
-                                                     :suppress-unused-public-var?
-                                                     (true? (:suppress-unused-public-var? options))
-                                                     :include-sql-template?
-                                                     (true? (:include-sql-template? options))})
+        file-result (bisql/write-function-files! {:output-root base-dir
+                                                  :suppress-unused-public-var?
+                                                  (true? (:suppress-unused-public-var? options))
+                                                  :include-sql-template?
+                                                  (true? (:include-sql-template? options))})
         file-count (count (:files file-result))]
     (print-generated-files!
-     (str "Wrote " file-count " declaration namespace files to " base-dir)
+     (str "Wrote " file-count " function namespace files to " base-dir)
      base-dir
      (:files file-result))))
+
+(defn- run-gen-crud-and-functions!
+  [options]
+  (run-gen-crud! options)
+  (run-gen-functions! options))
 
 (defn- run-list-functions!
   [options]
@@ -286,8 +292,11 @@
           (= command "gen-crud")
           (run-gen-crud! options)
 
-          (= command "gen-declarations")
-          (run-gen-declarations! options)
+          (= command "gen-functions")
+          (run-gen-functions! options)
+
+          (= command "gen-crud-and-functions")
+          (run-gen-crud-and-functions! options)
 
           (= command "list-functions")
           (run-list-functions! options)

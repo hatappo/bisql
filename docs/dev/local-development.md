@@ -64,7 +64,8 @@ fix              Run format, lint, and tests
 db-reset         Reset local PostgreSQL sample schema and seed data
 gen-config       Generate a bisql.edn config template
 gen-crud         Generate CRUD SQL files from local PostgreSQL
-gen-declarations Generate declaration namespace files from local SQL templates
+gen-functions    Generate function namespace files from local SQL templates
+gen-crud-and-functions Generate CRUD SQL files and function namespace files in sequence
 jar              Build the jar via build.clj; accepts `bb jar x.x.x` or raw build args
 install          Install to local Maven cache via build.clj; accepts `bb install x.x.x` or raw build args
 release          Release to Clojars via build.clj; accepts `bb release x.x.x` or raw build args
@@ -75,8 +76,8 @@ pages-build      Build the static pages app into pages/dist/
 pages-dev        Start the shadow-cljs pages dev server on http://localhost:8000
 ```
 
-`bb gen-declarations` に CLI フラグ相当を渡したい場合は、
-`bb gen-declarations -- --include-sql-template --suppress-unused-public-var`
+`bb gen-functions` に CLI フラグ相当を渡したい場合は、
+`bb gen-functions -- --include-sql-template --suppress-unused-public-var`
 のように `--` 区切りで渡す。`bb` の `--flag` は Babashka 自身が先に解釈するため、
 この書き方に統一する。
 

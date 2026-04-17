@@ -61,10 +61,10 @@
 (def write-crud-files!
   crud/write-crud-files!)
 
-(def render-declaration-files
+(def render-function-files
   define/render-declaration-files)
 
-(def write-declaration-files!
+(def write-function-files!
   define/write-declaration-files!)
 
 (def query-function-definition-report

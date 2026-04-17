@@ -51,13 +51,13 @@
     (is (str/includes? output "src/app/sql/postgresql/public/users/crud.sql"))
     (is (str/includes? output "https://github.com/hatappo/bisql/issues"))))
 
-(deftest cli-gen-declarations-uses-db-spec-defaults-and-root
+(deftest cli-gen-functions-uses-db-spec-defaults-and-root
   (let [write-args* (atom nil)
         output (with-out-str
-                 (with-redefs [bisql/write-declaration-files! (fn [options]
-                                                                (reset! write-args* options)
-                                                                {:files [{:path "postgresql/public/users/crud.clj"}]})]
-                   (cli/-main "gen-declarations"
+                 (with-redefs [bisql/write-function-files! (fn [options]
+                                                             (reset! write-args* options)
+                                                             {:files [{:path "postgresql/public/users/crud.clj"}]})]
+                   (cli/-main "gen-functions"
                               "--host" "db.example.com"
                               "--port" "15432"
                               "--dbname" "app_dev"
@@ -69,37 +69,37 @@
             :suppress-unused-public-var? false
             :include-sql-template? false}
            @write-args*))
-    (is (str/includes? output "Wrote 1 declaration namespace files"))
+    (is (str/includes? output "Wrote 1 function namespace files"))
     (is (str/includes? output "src/app/sql/postgresql/public/users/crud.clj"))))
 
-(deftest cli-gen-declarations-supports-unused-public-var-suppression
+(deftest cli-gen-functions-supports-unused-public-var-suppression
   (let [write-args* (atom nil)]
-    (with-redefs [bisql/write-declaration-files! (fn [options]
-                                                   (reset! write-args* options)
-                                                       {:files []})]
-      (cli/-main "gen-declarations" "--suppress-unused-public-var"))
+    (with-redefs [bisql/write-function-files! (fn [options]
+                                                (reset! write-args* options)
+                                                {:files []})]
+      (cli/-main "gen-functions" "--suppress-unused-public-var"))
     (is (= {:output-root "src/sql"
             :suppress-unused-public-var? true
             :include-sql-template? false}
            @write-args*))))
 
-(deftest cli-gen-declarations-supports-including-sql-template
+(deftest cli-gen-functions-supports-including-sql-template
   (let [write-args* (atom nil)]
-    (with-redefs [bisql/write-declaration-files! (fn [options]
-                                                   (reset! write-args* options)
-                                                       {:files []})]
-      (cli/-main "gen-declarations" "--include-sql-template"))
+    (with-redefs [bisql/write-function-files! (fn [options]
+                                                (reset! write-args* options)
+                                                {:files []})]
+      (cli/-main "gen-functions" "--include-sql-template"))
     (is (= {:output-root "src/sql"
             :suppress-unused-public-var? false
             :include-sql-template? true}
            @write-args*))))
 
-(deftest cli-gen-declarations-supports-double-dash-separator
+(deftest cli-gen-functions-supports-double-dash-separator
   (let [write-args* (atom nil)]
-    (with-redefs [bisql/write-declaration-files! (fn [options]
-                                                   (reset! write-args* options)
-                                                   {:files []})]
-      (cli/-main "gen-declarations"
+    (with-redefs [bisql/write-function-files! (fn [options]
+                                                (reset! write-args* options)
+                                                {:files []})]
+      (cli/-main "gen-functions"
                  "--"
                  "--include-sql-template"
                  "--suppress-unused-public-var"))
@@ -107,6 +107,37 @@
             :suppress-unused-public-var? true
             :include-sql-template? true}
            @write-args*))))
+
+(deftest cli-gen-crud-and-functions-runs-both-generators
+  (let [call-order* (atom [])
+        output (with-out-str
+                 (with-redefs [jdbc/get-datasource (fn [_spec]
+                                                     ::datasource)
+                               bisql/generate-crud (fn [datasource options]
+                                                     (swap! call-order* conj [:generate-crud datasource options])
+                                                     {:dialect "postgresql"
+                                                      :schema "public"
+                                                      :templates [{:table "users"}]
+                                                      :warnings []})
+                               bisql/write-crud-files! (fn [crud-result options]
+                                                         (swap! call-order* conj [:write-crud crud-result options])
+                                                         {:files [{:path "postgresql/public/users/crud.sql"}]})
+                               bisql/write-function-files! (fn [options]
+                                                             (swap! call-order* conj [:write-functions options])
+                                                             {:files [{:path "postgresql/public/users/crud.clj"}]})]
+                   (cli/-main "gen-crud-and-functions" "--base-dir" "src/app/sql")))]
+    (is (= [[:generate-crud ::datasource {:schema "public"}]
+            [:write-crud {:dialect "postgresql"
+                          :schema "public"
+                          :templates [{:table "users"}]
+                          :warnings []}
+             {:output-root "src/app/sql"}]
+            [:write-functions {:output-root "src/app/sql"
+                               :suppress-unused-public-var? false
+                               :include-sql-template? false}]]
+           @call-order*))
+    (is (str/includes? output "Wrote 1 CRUD SQL files"))
+    (is (str/includes? output "Wrote 1 function namespace files"))))
 
 (deftest cli-list-functions-prints-resolved-function-symbols
   (let [definitions [{:function-symbol 'sql.postgresql.public.users.crud/count}

@@ -781,17 +781,19 @@ The same generation flow can be exposed as a CLI:
 ```sh
 clojure -M -m bisql.cli gen-config
 clojure -M -m bisql.cli gen-crud --config bisql.edn
-clojure -M -m bisql.cli gen-declarations --config bisql.edn
+clojure -M -m bisql.cli gen-functions --config bisql.edn
+clojure -M -m bisql.cli gen-crud-and-functions --config bisql.edn
 ```
 
 The config file is an EDN map with `:db` and `:generate` sections. Generated templates show default values as commented examples. Commands still work without a config file because the precedence order is CLI options > environment variables > config file > defaults.
 
-`gen-declarations` is an optional helper. It is useful for projects that prefer explicit
-namespace files and want IDE/REPL navigation stubs with docstrings, without
-letting a shallow `(defquery)` define functions into namespaces that were not
-declared in source ahead of time. By default those docstrings include the
-project-relative SQL file path and line number; `--include-sql-template` can be
-used when the SQL template body should also be embedded.
+`gen-functions` is the user-facing command for generating explicit namespace files.
+It is useful for projects that want generated query functions to be easy to
+`require` in ordinary source files, while also providing IDE/REPL navigation
+stubs with docstrings. By default those docstrings include the project-relative
+SQL file path and line number; `--include-sql-template` can be used when the SQL
+template body should also be embedded. `gen-crud-and-functions` simply runs the
+CRUD template generation and function namespace generation steps in sequence.
 
 **Reasoning:**
 - Keeps the API surface small

@@ -39,8 +39,8 @@
     (is (fn? bisql/generate-crud))
     (is (fn? bisql/render-crud-files))
     (is (fn? bisql/write-crud-files!))
-    (is (fn? bisql/render-declaration-files))
-    (is (fn? bisql/write-declaration-files!))
+    (is (fn? bisql/render-function-files))
+    (is (fn? bisql/write-function-files!))
     (is (fn? bisql/query-function-definitions))))
 
 (deftest query-function-definitions-returns-resolved-function-symbols
