@@ -8,9 +8,9 @@
   <img src="docs/img/bicycle.svg" alt="Bisql bicycle logo" width="96" height="96" />
 </p>
 
-Bisql (pronounced `báisikl` 🚲) is a SQL-first, SQL-only, SQL-obsessed data access toolkit for Clojure.
+<p align="center"><code>bisql</code> (<code>báisikl</code>)</p>
 
-Write real SQL. Keep it executable. Generate the boring parts.
+Executable SQL as Clojure functions, with generated CRUD queries and SQL-first development.
 
 - Query templates remain valid, executable SQL.
 - Typical index-friendly queries are generated automatically, as comprehensively as possible.

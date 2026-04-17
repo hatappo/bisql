@@ -511,7 +511,7 @@
       {:href (route-url {:page :docs
                          :doc-slug (or selected-doc-slug (first-doc-slug))})}
       [:div.site-brand-name "bisql"]]
-     [:span.site-brand-tagline "2-way-SQL toolkit for Clojure"]]]
+     [:span.site-brand-tagline "Executable SQL as Clojure functions."]]]
    [:nav.site-nav
     [:a.site-link {:href (route-url {:page :docs
                                      :doc-slug (or selected-doc-slug (first-doc-slug))})
