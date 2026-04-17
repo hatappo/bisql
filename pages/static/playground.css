@@ -65,6 +65,11 @@ body {
   flex-wrap: wrap;
 }
 
+/* Reusable cut-corner style: trims the top-right and bottom-left corners of a button. */
+.cut-corner {
+  clip-path: polygon(0 0, calc(100% - 0.55rem) 0, 100% 0.55rem, 100% 100%, 0.55rem 100%, 0 calc(100% - 0.55rem));
+}
+
 .site-link {
   display: inline-flex;
   align-items: center;
@@ -322,20 +327,57 @@ body {
   align-items: center;
   justify-content: center;
   gap: 0;
+  position: relative;
   min-width: 7rem;
   min-height: 2.35rem;
   padding: 0.3rem 0.85rem 0.22rem;
   box-sizing: border-box;
-  border: 1px solid rgba(34, 29, 23, 0.18);
-  background: var(--bg-color);
-  box-shadow: inset 0 0 0 1px rgba(255, 248, 232, 0.2);
+  background: transparent;
+  box-shadow: none;
   opacity: 0.58;
   cursor: default;
-  clip-path: polygon(0 0, calc(100% - 0.55rem) 0, 100% 0.55rem, 100% 100%, 0.55rem 100%, 0 calc(100% - 0.55rem));
+}
+
+.toolbar-nav-finished-stitch {
+  position: absolute;
+  width: 0.72rem;
+  height: 1px;
+  background: rgba(34, 29, 23, 0.18);
+  pointer-events: none;
+}
+
+.toolbar-nav-finished-stitch-top-left {
+  top: 0;
+  left: 0;
+  transform: rotate(33deg);
+  transform-origin: left center;
+}
+
+.toolbar-nav-finished-stitch-top-right {
+  top: 0;
+  right: 0;
+  transform: rotate(-33deg);
+  transform-origin: right center;
+}
+
+.toolbar-nav-finished-stitch-bottom-left {
+  bottom: 0;
+  left: 0;
+  transform: rotate(-33deg);
+  transform-origin: left center;
+}
+
+.toolbar-nav-finished-stitch-bottom-right {
+  bottom: 0;
+  right: 0;
+  transform: rotate(33deg);
+  transform-origin: right center;
 }
 
 .toolbar-nav-finished-line {
   display: block;
+  position: relative;
+  z-index: 1;
   width: 100%;
   font-size: 0.5rem;
   line-height: 0.95;

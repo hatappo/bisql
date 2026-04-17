@@ -524,7 +524,7 @@
     [:a.site-link
      {:href github-url
       :target "_blank"
-     :rel "noreferrer"}
+      :rel "noreferrer"}
      "GitHub"]]])
 
 (defn pager-nav
@@ -551,6 +551,10 @@
      [:div.toolbar-nav-link.toolbar-nav-link-finished
       {:role "note"
        :aria-label "Reached the last page"}
+      [:span.toolbar-nav-finished-stitch.toolbar-nav-finished-stitch-top-left]
+      [:span.toolbar-nav-finished-stitch.toolbar-nav-finished-stitch-top-right]
+      [:span.toolbar-nav-finished-stitch.toolbar-nav-finished-stitch-bottom-left]
+      [:span.toolbar-nav-finished-stitch.toolbar-nav-finished-stitch-bottom-right]
       [:span.toolbar-nav-finished-line.toolbar-nav-finished-line-top
        "Thanks for "]
       [:span.toolbar-nav-finished-line.toolbar-nav-finished-line-bottom
