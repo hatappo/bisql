@@ -3,7 +3,7 @@
 Add Bisql to `deps.edn`:
 
 ```clojure
-{:deps {io.github.hatappo/bisql {:mvn/version "0.2.1"}}}
+{:deps {io.github.hatappo/bisql {:mvn/version "0.2.2"}}}
 ```
 
 If you want a shorter CLI entrypoint, add an alias:
