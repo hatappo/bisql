@@ -12,6 +12,8 @@
 
 Executable SQL as Clojure functions, with generated CRUD queries and SQL-first development.
 
+![SQL transformation screenshot](docs/img/screenshot-sql-example.png)
+
 - Query templates remain valid, executable SQL.
 - Typical index-friendly queries are generated automatically, as comprehensively as possible.
 
@@ -20,16 +22,11 @@ No data mapper
 No hidden SQL  
 No boilerplate SQL  
 
+Start a database, run the generation commands, add `(defquery)`, and you can immediately call query functions from your Clojure code. Every function still corresponds to real SQL.
+
 > [!NOTE]
 > This project is still early and the API may change.
 > Support for databases beyond PostgreSQL and Malli integration are both planned.
-
-## Installation
-
-The full Installation guide lives here:
-
-- [docs/02-installation.md](docs/02-installation.md)
-- [https://hatappo.github.io/bisql/docs/installation/](https://hatappo.github.io/bisql/docs/installation/)
 
 ## Getting Started
 
@@ -37,6 +34,13 @@ The full Getting Started guide lives here:
 
 - [docs/03-getting-started.md](docs/03-getting-started.md)
 - [https://hatappo.github.io/bisql/docs/getting-started/](https://hatappo.github.io/bisql/docs/getting-started/)
+
+## Installation
+
+The full Installation guide lives here:
+
+- [docs/02-installation.md](docs/02-installation.md)
+- [https://hatappo.github.io/bisql/docs/installation/](https://hatappo.github.io/bisql/docs/installation/)
 
 ## Quick Example
 
