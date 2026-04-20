@@ -132,5 +132,5 @@ Instead, compare parameters:
 
 See also:
 
-- [Rendering](06-rendering.md)
+- [SQL Rendering](06-sql-rendering.md)
 - [Rendering Examples](07-rendering-examples.md)

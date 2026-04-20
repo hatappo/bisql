@@ -110,4 +110,4 @@ See also:
 
 - [SQL File Layout](05-sql-file-layout.md)
 - [CRUD Generation](09-crud-generation.md)
-- [Rendering](06-rendering.md)
+- [SQL Rendering](06-sql-rendering.md)

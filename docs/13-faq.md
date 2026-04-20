@@ -1,26 +1,4 @@
-# Tips and FAQ
-
-## Tips
-
-### Bisql block comment sigils
-
-Bisql reserves five sigils at the start of block comments:
-
-`$`, `^`, `!`, `%`, `:`
-
-1. `/*$ */` - bind values (ex. `?`)
-2. `/*^ */` - literal values (ex. `'John'`)
-3. `/*! */` - raw values (ex. `created_at`)
-4. `/*% */` - control flow (if / for)
-5. `/*: */` - metadata declarations
-
-Do not use those sigils accidentally at the start of an ordinary SQL block comment.
-To keep room for future extensions, prefer a space or `*` when you mean a normal comment:
-
-- `/*  */`
-- `/** */`
-
-## FAQ
+# FAQ
 
 ### Why does Bisql not provide a query builder or data mapper?
 
