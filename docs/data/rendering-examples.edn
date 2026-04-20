@@ -129,6 +129,4 @@
      :error? true
      :input {:kind :resource
              :resource "demo-variables-bind.sql"
-             :params {:ic 42}}}]}]
- :notes
- ["The sample code assumes `(require '[bisql.core :as bisql])`."]}
+             :params {:ic 42}}}]}]}

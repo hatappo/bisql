@@ -167,15 +167,16 @@
                          edn/read-string)]
     (with-out-str
       (println (str "# " (:title examples-doc)))
+      (println)
+      (println "> [!NOTE]+ ")
+      (println "> - The exact same content as this page is also available in the")
+      (println "> [Playground](https://hatappo.github.io/bisql/playground/).")
+      (println "> ")
+      (println "> - The sample code assumes `(require '[bisql.core :as bisql])`.")
       (doseq [{:keys [title examples]} (:groups examples-doc)]
         (println)
         (println (str "## " title))
         (doseq [example examples]
           (if (:error? example)
             (show-error-example example)
-            (show-example example))))
-      (when-let [notes (seq (:notes examples-doc))]
-        (println "## Notes")
-        (println)
-        (doseq [note notes]
-          (println (str "- " note)))))))
+            (show-example example)))))))

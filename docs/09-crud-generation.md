@@ -1,6 +1,11 @@
 # CRUD Generation
 
-Bisql can generate typical index-friendly CRUD SQL from the database schema.
+Bisql can generate typical index-friendly CRUD SQL from the database schema with
+`gen-crud`.
+
+> [!TIP]+
+> In practice, you will usually also want the corresponding function namespace
+> files, so `gen-crud-and-functions` is typically the more convenient command.
 
 ## Generated Query Families
 
@@ -68,13 +73,6 @@ When a column is listed in `:non-updating-cols`, the generated upsert keeps the
 existing table value on `DO UPDATE` instead of taking the value from
 `EXCLUDED`. A typical example is `created_at`, which is usually set on insert
 but should remain unchanged on later updates.
-
-## Typical Workflow
-
-1. generate `bisql.edn`
-2. adjust config if needed
-3. run `gen-crud`
-4. load generated SQL through `defquery`
 
 See also:
 

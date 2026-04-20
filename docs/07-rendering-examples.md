@@ -1,5 +1,11 @@
 # Rendering Examples
 
+> [!NOTE]+ 
+> - The exact same content as this page is also available in the
+> [Playground](https://hatappo.github.io/bisql/playground/).
+> 
+> - The sample code assumes `(require '[bisql.core :as bisql])`.
+
 ## 1. Variables
 
 ### 1-1: bind values 
@@ -524,6 +530,3 @@ SELECT * FROM users WHERE id = /*$id*/1
   :collection? false}}
 ```
 
-## Notes
-
-- The sample code assumes `(require '[bisql.core :as bisql])`.

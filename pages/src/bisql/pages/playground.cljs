@@ -374,16 +374,8 @@
   kind)
 
 (defn- callout-title
-  [kind explicit-title]
-  (let [kind (normalize-callout-kind kind)]
-    (or explicit-title
-        (case kind
-        "NOTE" "Note"
-        "TIP" "Tip"
-        "IMPORTANT" "Important"
-        "WARNING" "Warning"
-        "CAUTION" "Caution"
-        kind))))
+  [_kind explicit-title]
+  (or explicit-title ""))
 
 (defn- callout-icon-src
   [kind]
@@ -405,12 +397,15 @@
       (when (and first-child
                  (= "P" (.-tagName first-child)))
         (let [raw-text (or (.-textContent first-child) "")
+              raw-html (or (.-innerHTML first-child) "")
               lines (->> (str/split-lines raw-text)
                          (map str/trim)
                          (remove str/blank?)
                          vec)
+              html-lines (str/split-lines raw-html)
               first-line (first lines)
-              remaining-lines (rest lines)]
+              remaining-lines (rest lines)
+              remaining-html (some->> html-lines rest (str/join "\n") str/trim)]
           (when-let [[_ raw-kind open-flag explicit-title] (some->> first-line (re-matches callout-pattern))]
             (let [details (.createElement js/document "details")
                   summary (.createElement js/document "summary")
@@ -436,9 +431,12 @@
               (.appendChild summary title)
               (.appendChild details summary)
               (.remove first-child)
-              (when (seq remaining-lines)
+              (when (or (seq remaining-lines)
+                        (not (str/blank? remaining-html)))
                 (let [leading-paragraph (.createElement js/document "p")]
-                  (set! (.-textContent leading-paragraph) (str/join " " remaining-lines))
+                  (if (str/blank? remaining-html)
+                    (set! (.-textContent leading-paragraph) (str/join " " remaining-lines))
+                    (set! (.-innerHTML leading-paragraph) remaining-html))
                   (.appendChild body leading-paragraph)))
               (doseq [child (array-seq (.-childNodes blockquote))]
                 (.appendChild body child))
