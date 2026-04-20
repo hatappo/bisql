@@ -79,10 +79,6 @@
       path
       (str path "/"))))
 
-(defn asset-prefix
-  []
-  (or (.-__BISQL_ASSET_PREFIX__ js/window) "./"))
-
 (defn split-path-segments
   [path]
   (->> (str/split (or path "") #"/")

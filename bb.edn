@@ -97,24 +97,8 @@
   pages-build {:doc "Build the static pages app into pages/dist/"
                :task (do
                        (shell "rm" "-rf" "pages/dist")
-                       (shell "mkdir" "-p" "pages/dist")
-                       (shell "bb" "pages/scripts/generate_examples_catalog.bb")
-                       (shell "bb" "pages/scripts/generate_docs_catalog.bb")
-                       (shell "bb" "pages/scripts/generate_route_html.bb")
-                       (shell "cp" "pages/static/playground.css" "pages/dist/playground.css")
-                       (shell "mkdir" "-p" "pages/dist/img")
-                       (shell "cp" "docs/img/bicycle.svg" "pages/dist/img/bicycle.svg")
-                       (shell "cp" "-R" "pages/static/img/." "pages/dist/img")
+                       (shell "bb" "scripts/pages/sync.bb")
                        (shell "sh" "-lc" "cd pages && clojure -J--enable-native-access=ALL-UNNAMED -J--sun-misc-unsafe-memory-access=allow -M -m shadow.cljs.devtools.cli release playground"))}
 
   pages-dev {:doc "Start the shadow-cljs pages dev server on http://localhost:8000"
-             :task (do
-                     (shell "mkdir" "-p" "pages/dist")
-                     (shell "bb" "pages/scripts/generate_examples_catalog.bb")
-                     (shell "bb" "pages/scripts/generate_docs_catalog.bb")
-                     (shell "bb" "pages/scripts/generate_route_html.bb")
-                     (shell "cp" "pages/static/playground.css" "pages/dist/playground.css")
-                     (shell "mkdir" "-p" "pages/dist/img")
-                     (shell "cp" "docs/img/bicycle.svg" "pages/dist/img/bicycle.svg")
-                     (shell "cp" "-R" "pages/static/img/." "pages/dist/img")
-                     (shell "sh" "-lc" "cd pages && clojure -J--enable-native-access=ALL-UNNAMED -J--sun-misc-unsafe-memory-access=allow -M -m shadow.cljs.devtools.cli watch playground"))}}}
+             :task (shell "bb" "scripts/pages/dev.bb")}}}
