@@ -6,42 +6,24 @@
 CREATE TABLE users (
   id BIGSERIAL PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,
-  status TEXT NOT NULL
-);
-
-CREATE TABLE orders (
-  id BIGSERIAL PRIMARY KEY,
-  user_id BIGINT NOT NULL,
-  state TEXT NOT NULL,
+  status TEXT NOT NULL,
+  display_name TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX orders_state_created_at_idx
-  ON orders (state, created_at);
+CREATE INDEX users_status_created_at_idx
+  ON users (status, created_at);
+
+CREATE INDEX users_status_display_name_idx
+  ON users (status, display_name);
+
+INSERT INTO users (id, email, status, display_name, created_at)
+VALUES
+  (42, 'alice@example.com', 'active', 'Alice', '2026-04-01T10:00:00Z'),
+  (43, 'bob@example.com', 'inactive', 'Bob', '2026-04-02T11:00:00Z');
 ```
 
-## 2. Write One SQL Template
-
-Place a SQL template under a classpath `sql/...` directory.
-
-For example:
-
-```text
-src/sql/postgresql/public/users/find-active.sql
-```
-
-```sql
-SELECT *
-FROM users
-WHERE status = /*$status*/'active'
-ORDER BY id
-LIMIT /*$limit*/100
-```
-
-This template remains executable SQL with its embedded sample values.
-At runtime, Bisql renders it into SQL plus bind params.
-
-## 3. Define Query Functions
+## 2. Define Query Functions
 
 ```clojure
 (ns sql
@@ -50,40 +32,20 @@ At runtime, Bisql renders it into SQL plus bind params.
 (bisql/defquery)
 ```
 
-Then call the generated function:
-
-```clojure
-(ns app.user-service
-  (:require [next.jdbc :as jdbc]
-            [sql.postgresql.public.users.core :as users]))
-
-(def datasource
-  (jdbc/get-datasource
-   {:dbtype "postgresql"
-    :host "localhost"
-    :port 5432
-    :dbname "bisql_dev"
-    :user "bisql"
-    :password "bisql"}))
-
-(users/find-active datasource {:status "active"
-                               :limit 20})
-```
-
 `bisql.core/defquery` uses the current namespace only to find SQL files.
 Each discovered SQL file defines executable query functions in the namespace derived
 from its file path, so the same SQL file always maps to the same namespace.
 By default, query execution uses the `:next-jdbc` adapter.
 
-## 4. Generate CRUD SQL and Function Namespaces
+## 3. Generate CRUD SQL and Function Declarations
 
-Continuing from the previous example, you can generate a config template (`bisql.edn`) and modify it if needed:
+Continuing from the schema above, you can generate a config template (`bisql.edn`) and modify it if needed:
 
 ```sh
 clojure -M -m bisql.cli gen-config
 ```
 
-Then generate CRUD SQL:
+Then generate CRUD SQL and matching function namespace files:
 
 ```sh
 clojure -M -m bisql.cli gen-crud-and-functions
@@ -92,20 +54,19 @@ clojure -M -m bisql.cli gen-crud-and-functions
 This writes files such as:
 
 - `src/sql/postgresql/public/users/crud.sql`
-- `src/sql/postgresql/public/orders/crud.sql`
 
 Generated SQL covers the common CRUD-oriented, index-friendly query patterns you
 would otherwise write by hand. The same command also writes matching function
 namespace files so those generated queries are easy to `require` from ordinary
 application code.
 
-## 5. Execute One Generated Query
+## 4. Execute One Generated Query
 
 ```clojure
-(ns app.order-service
+(ns app.user-service
   (:require [next.jdbc :as jdbc]
             [sql]
-            [sql.postgresql.public.orders.crud :as orders]))
+            [sql.postgresql.public.users.crud :as users]))
 
 (def datasource
   (jdbc/get-datasource
@@ -116,34 +77,58 @@ application code.
     :user "bisql"
     :password "bisql"}))
 
-(orders/list datasource {:limit 20
-                         :offset 0})
+(users/get-by-id datasource {:id 42})
+
+;; => {:id 42
+;;     :email "alice@example.com"
+;;     :status "active"
+;;     :display_name "Alice"
+;;     :created_at #object[java.time.OffsetDateTime ...]}
 ```
 
-## 6. Copy and Adapt One Generated Query
+## 5. Write a Custom SQL Template
 
-When you need a custom query, a generated SQL template is often a convenient
-starting point.
-
-For example, you might copy a generated list query and narrow the selected
-columns for a real application use case:
+The generated `get-by-id` query is a good starting point for a custom query:
 
 ```sql
-SELECT id, email, created_at
+SELECT *
 FROM users
-WHERE status = /*$status*/'active'
-ORDER BY id
-LIMIT /*$limit*/100
+WHERE id = /*$id*/1
+```
+
+This template remains executable SQL with its embedded sample values.
+At runtime, Bisql renders it into SQL plus bind params.
+
+When you need a custom query, you can copy that generated SQL and narrow it for
+your application.
+
+For example, you might save this as:
+
+```text
+src/sql/postgresql/public/users/find-email-by-id.sql
+```
+
+```sql
+SELECT email
+FROM users
+WHERE id = /*$id*/1
 ```
 
 This keeps the SQL-first workflow intact while still letting you customize the
 final query.
 
-## 7. Execute the Customized Query
+After adding a hand-written SQL file, regenerate function namespace files:
+
+```sh
+clojure -M -m bisql.cli gen-functions
+```
+
+## 6. Execute the Customized Query
 
 ```clojure
 (ns app.user-service
-  (:require [next.jdbc :as jdbc]
+  (:require [sql]
+            [next.jdbc :as jdbc]
             [sql.postgresql.public.users.core :as users]))
 
 (def datasource
@@ -155,8 +140,9 @@ final query.
     :user "bisql"
     :password "bisql"}))
 
-(users/find-active datasource {:status "active"
-                               :limit 20})
+(users/find-email-by-id datasource {:id 42})
+
+;; => {:email "alice@example.com"}
 ```
 
 See also:
@@ -166,7 +152,7 @@ See also:
 - [CRUD Generation](09-crud-generation.md)
 - [Rendering Examples](07-rendering-examples.md)
 
-## 8. Wrap up
+## 7. Wrap up
 
 The developer workflow with Bisql is straightforward:
 
@@ -208,23 +194,18 @@ The developer workflow with Bisql is straightforward:
 > - `users.crud/get-by-email`
 > - `users.crud/count`
 > - `users.crud/count-by-status`
-> - `users.crud/count-by-status-starting-with`
-> - `users.crud/list-by-email-starting-with`
+> - `users.crud/count-by-status-and-created-at`
+> - `users.crud/count-by-status-and-display-name`
+> - `users.crud/count-by-status-and-display-name-starting-with`
+> - `users.crud/list`
+> - `users.crud/list-order-by-status-and-created-at`
+> - `users.crud/list-order-by-status-and-display-name`
+> - `users.crud/list-by-status-order-by-created-at`
+> - `users.crud/list-by-status-order-by-display-name`
+> - `users.crud/list-by-status-and-created-at`
+> - `users.crud/list-by-status-and-display-name`
+> - `users.crud/list-by-status-and-display-name-starting-with`
 > - `users.crud/update-by-id`
 > - `users.crud/update-by-email`
 > - `users.crud/delete-by-id`
 > - `users.crud/delete-by-email`
-> - `orders.crud/insert`
-> - `orders.crud/insert-many`
-> - `orders.crud/upsert-by-id`
-> - `orders.crud/count`
-> - `orders.crud/count-by-state`
-> - `orders.crud/count-by-order-number-starting-with`
-> - `orders.crud/count-by-state-and-created-at`
-> - `orders.crud/list`
-> - `orders.crud/get-by-id`
-> - `orders.crud/update-by-id`
-> - `orders.crud/delete-by-id`
-> - `orders.crud/list-by-order-number-starting-with`
-> - `orders.crud/list-by-state`
-> - `orders.crud/list-by-state-and-created-at`
