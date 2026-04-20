@@ -1391,3 +1391,48 @@
                       "status = 'pending'"])
            (:sql result)))
     (is (= [] (:params result)))))
+
+(deftest render-query-supports-compound-conditional-expressions
+  (let [result (bisql/render-query
+                {:sql-template (str/join "\n"
+                                         ["SELECT *"
+                                          "FROM users"
+                                          "WHERE"
+                                          "/*%if active and status = expected_status */"
+                                          "  status = 'pending'"
+                                          "/*%else */"
+                                          "  status = 'inactive'"
+                                          "/*%end */"])}
+                {:active true
+                 :status "pending"
+                 :expected_status "pending"})]
+    (is (= (str/join "\n"
+                     ["SELECT *"
+                      "FROM users"
+                      "WHERE"
+                      "  status = 'pending'"])
+           (:sql result)))
+    (is (= [] (:params result)))))
+
+(deftest render-query-supports-parenthesized-conditional-expressions
+  (let [result (bisql/render-query
+                {:sql-template (str/join "\n"
+                                         ["SELECT *"
+                                          "FROM users"
+                                          "WHERE"
+                                          "/*%if (active and status = expected_status) or pending */"
+                                          "  status = 'pending'"
+                                          "/*%else */"
+                                          "  status = 'inactive'"
+                                          "/*%end */"])}
+                {:active false
+                 :status "active"
+                 :expected_status "pending"
+                 :pending true})]
+    (is (= (str/join "\n"
+                     ["SELECT *"
+                      "FROM users"
+                      "WHERE"
+                      "  status = 'pending'"])
+           (:sql result)))
+    (is (= [] (:params result)))))

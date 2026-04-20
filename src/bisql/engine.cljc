@@ -1,5 +1,6 @@
 (ns bisql.engine
-  (:require [clojure.string :as str]
+  (:require [bisql.expr :as expr]
+            [clojure.string :as str]
             #?(:clj [clojure.edn :as edn]
                :cljs [cljs.reader :as reader]))
   #?(:clj (:import [java.io PushbackReader StringReader])))
@@ -523,16 +524,15 @@
    :sigil sigil
    :collection? collection?})
 
-(defn- truthy?
-  [value]
-  (not (or (nil? value) (false? value))))
-
 (defn- eval-condition
-  [parameter-name template-params]
-  (truthy? (let [value (resolved-parameter-value template-params parameter-name)]
-             (if (= value missing)
-               nil
-               value))))
+  [expression template-params]
+  (expr/evaluate
+   (expr/parse expression)
+   (fn [parameter-name]
+     (let [value (resolved-parameter-value template-params parameter-name)]
+       (if (= value missing)
+         nil
+         value)))))
 
 (defn- trim-leading-newline
   [s]
@@ -653,18 +653,49 @@
             (recur remaining clause-context (conj annotated annotated-node)))))
       annotated)))
 
+(defn- parse-inline-fragment-args
+  [raw-args]
+  (let [trimmed (str/trim (or raw-args ""))]
+    (if-let [[_ condition fragment] (re-matches #"(?s)^(.*?)(?:\s*=>\s*(.+))?$" trimmed)]
+      {:arg1 (some-> condition str/trim not-empty)
+       :arg4 (some-> fragment str/trim not-empty)}
+      {:arg1 nil
+       :arg4 nil})))
+
+(defn- parse-for-args
+  [raw-args]
+  (let [trimmed (str/trim (or raw-args ""))]
+    (if-let [[_ item-name collection-name separator]
+             (re-matches #"(?s)^([A-Za-z0-9\-\.]+)\s+in\s+([A-Za-z0-9\-\.]+)(?:\s+separating\s+(.+?))?$"
+                         trimmed)]
+      {:arg1 item-name
+       :arg2 collection-name
+       :arg3 separator}
+      (throw (ex-info "Invalid for directive."
+                      {:directive "for"
+                       :args raw-args})))))
+
 (defn- parse-control-directive
   [matcher]
-  {:directive (regex-group matcher 1)
-   :arg1 (regex-group matcher 2)
-   :arg2 (regex-group matcher 3)
-   :arg3 (regex-group matcher 4)
-   :arg4 (regex-group matcher 5)
-   :start (regex-start matcher)
-   :end (regex-end matcher)})
+  (let [directive (regex-group matcher 1)
+        raw-args (regex-group matcher 2)
+        parsed-args (case directive
+                      ("if" "elseif") (parse-inline-fragment-args raw-args)
+                      "else" {:arg4 (some->> raw-args
+                                             str/trim
+                                             (re-matches #"(?s)^=>\s*(.+)$")
+                                             second
+                                             str/trim
+                                             not-empty)}
+                      "for" (parse-for-args raw-args)
+                      {})]
+    (merge {:directive directive
+            :start (regex-start matcher)
+            :end (regex-end matcher)}
+           parsed-args)))
 
 (def ^:private control-directive-pattern
-  #"/\*%(if|elseif|else|for|end)(?:\s+([A-Za-z0-9\-\.]+)(?:\s+in\s+([A-Za-z0-9\-\.]+)(?:\s+separating\s+(.+?))?)?)?(?:\s*=>\s*(.+?))?\s*\*/")
+  #"/\*%(if|elseif|else|for|end)(.*?)\*/")
 
 (defn- append-conditional-branch
   [branches current-expr branch-start branch-end sql inline-body]
@@ -785,17 +816,14 @@
 
 (defn- parse-template-nodes
   [segment]
-  (let [matcher (volatile! (regex-matcher #"/\*%(if|for)\s+([A-Za-z0-9\-\.]+)(?:\s+in\s+([A-Za-z0-9\-\.]+)(?:\s+separating\s+(.+?))?)?\s*\*/" segment))]
+  (let [matcher (volatile! (regex-matcher #"/\*%(if|for)(.*?)\*/" segment))]
     (loop [cursor 0
            nodes []]
       (if-not (regex-find @matcher cursor)
         (into nodes (parse-variable-nodes (subs segment cursor)))
-        (let [directive (regex-group @matcher 1)
-              arg1 (regex-group @matcher 2)
-              arg2 (regex-group @matcher 3)
-              arg3 (regex-group @matcher 4)
-              block-start (regex-start @matcher)
-              block-end (regex-end @matcher)
+        (let [{:keys [directive arg1 arg2 arg3 start end]} (parse-control-directive @matcher)
+              block-start start
+              block-end end
               nodes (into nodes (parse-variable-nodes (subs segment cursor block-start)))]
           (if (= directive "if")
             (let [{:keys [branches end]}

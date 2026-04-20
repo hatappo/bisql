@@ -121,4 +121,5 @@ Typical user-facing APIs are:
 
 For lower-level examples, see:
 
+- [Conditional Expressions](08-conditional-expressions.md)
 - [Rendering Examples](07-rendering-examples.md)

@@ -109,5 +109,5 @@ Once a SQL file exists under `sql/...`, Bisql can generate matching Clojure func
 See also:
 
 - [SQL File Layout](05-sql-file-layout.md)
-- [CRUD Generation](08-crud-generation.md)
+- [CRUD Generation](09-crud-generation.md)
 - [Rendering](06-rendering.md)

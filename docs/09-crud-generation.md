@@ -79,4 +79,4 @@ but should remain unchanged on later updates.
 See also:
 
 - [Getting Started](03-getting-started.md)
-- [Bisql Adapters](11-bisql-adapters.md)
+- [Bisql Adapters](12-bisql-adapters.md)

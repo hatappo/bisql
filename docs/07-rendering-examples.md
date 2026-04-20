@@ -302,7 +302,40 @@ status = 'pending'
 
 `else` and `elseif` bodies can also be written inline inside the directive comment by using `=>`. This keeps the template closer to executable SQL.
 
-### 2-6: for 
+### 2-6: conditional expressions 
+
+1. Input Form:
+```clj
+(render "demo-if-expression.sql" {:active false, :status "active", :expected_status "pending", :pending true})
+```
+
+2. Input SQL:
+```sql
+SELECT *
+FROM users
+WHERE
+/*%if (active and status = expected_status) or pending */
+  status = 'pending'
+/*%else */
+  status = 'inactive'
+/*%end */
+```
+
+3. Output SQL and Params:
+```sql
+SELECT *
+FROM users
+WHERE
+  status = 'pending'
+```
+
+```clj
+{:params []}
+```
+
+`if` and `elseif` conditions can use a small expression language with `and`, `or`, parentheses, and comparison operators. Operands are parameter references.
+
+### 2-7: for 
 
 1. Input Form:
 ```clj

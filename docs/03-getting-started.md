@@ -162,7 +162,8 @@ final query.
 See also:
 
 - [Rendering](06-rendering.md)
-- [CRUD Generation](08-crud-generation.md)
+- [Conditional Expressions](08-conditional-expressions.md)
+- [CRUD Generation](09-crud-generation.md)
 - [Rendering Examples](07-rendering-examples.md)
 
 ## 8. Wrap up
@@ -177,57 +178,53 @@ The developer workflow with Bisql is straightforward:
 
 4. Call both generated and hand-written query functions from your application code.
 
-<details>
-<summary>See a more detailed example of generated CRUD query families</summary>
-
-Generated SQL typically includes:
-
-- `insert`
-- `insert-many`
-- `get-by-*`
-- `list-by-*`
-- `list-by-*-starting-with`
-- `count`
-- `count-by-*`
-- `count-by-*-starting-with`
-- `update-by-*`
-- `delete-by-*`
-- `upsert-by-*`
-
-These generated queries are meant to cover the typical index-friendly SQL patterns
-you would usually write by hand. In practice, that often means you do not need to
-write much custom SQL at all. When you do need a custom query, the generated SQL
-templates are also a convenient base to copy and adapt.
-
-For the sample tables above, this typically includes:
-
-- `users.crud/insert`
-- `users.crud/insert-many`
-- `users.crud/upsert-by-id`
-- `users.crud/upsert-by-email`
-- `users.crud/get-by-id`
-- `users.crud/get-by-email`
-- `users.crud/count`
-- `users.crud/count-by-status`
-- `users.crud/count-by-status-starting-with`
-- `users.crud/list-by-email-starting-with`
-- `users.crud/update-by-id`
-- `users.crud/update-by-email`
-- `users.crud/delete-by-id`
-- `users.crud/delete-by-email`
-- `orders.crud/insert`
-- `orders.crud/insert-many`
-- `orders.crud/upsert-by-id`
-- `orders.crud/count`
-- `orders.crud/count-by-state`
-- `orders.crud/count-by-order-number-starting-with`
-- `orders.crud/count-by-state-and-created-at`
-- `orders.crud/list`
-- `orders.crud/get-by-id`
-- `orders.crud/update-by-id`
-- `orders.crud/delete-by-id`
-- `orders.crud/list-by-order-number-starting-with`
-- `orders.crud/list-by-state`
-- `orders.crud/list-by-state-and-created-at`
-
-</details>
+> [!TIP]- See a more detailed example of generated CRUD query families
+> Generated SQL typically includes:
+>
+> - `insert`
+> - `insert-many`
+> - `get-by-*`
+> - `list-by-*`
+> - `list-by-*-starting-with`
+> - `count`
+> - `count-by-*`
+> - `count-by-*-starting-with`
+> - `update-by-*`
+> - `delete-by-*`
+> - `upsert-by-*`
+>
+> These generated queries are meant to cover the typical index-friendly SQL
+> patterns you would usually write by hand. In practice, that often means you do
+> not need to write much custom SQL at all. When you do need a custom query, the
+> generated SQL templates are also a convenient base to copy and adapt.
+>
+> For the sample tables above, this typically includes:
+>
+> - `users.crud/insert`
+> - `users.crud/insert-many`
+> - `users.crud/upsert-by-id`
+> - `users.crud/upsert-by-email`
+> - `users.crud/get-by-id`
+> - `users.crud/get-by-email`
+> - `users.crud/count`
+> - `users.crud/count-by-status`
+> - `users.crud/count-by-status-starting-with`
+> - `users.crud/list-by-email-starting-with`
+> - `users.crud/update-by-id`
+> - `users.crud/update-by-email`
+> - `users.crud/delete-by-id`
+> - `users.crud/delete-by-email`
+> - `orders.crud/insert`
+> - `orders.crud/insert-many`
+> - `orders.crud/upsert-by-id`
+> - `orders.crud/count`
+> - `orders.crud/count-by-state`
+> - `orders.crud/count-by-order-number-starting-with`
+> - `orders.crud/count-by-state-and-created-at`
+> - `orders.crud/list`
+> - `orders.crud/get-by-id`
+> - `orders.crud/update-by-id`
+> - `orders.crud/delete-by-id`
+> - `orders.crud/list-by-order-number-starting-with`
+> - `orders.crud/list-by-state`
+> - `orders.crud/list-by-state-and-created-at`
