@@ -48,9 +48,12 @@ Rendered result:
 - declaration bodies are parsed as EDN by default
 - `:doc` also accepts plain text and is trimmed into a string
 
-This metadata is useful both in rendering output and in generated declaration namespaces.
+This metadata is useful both in rendering output and in generated declaration
+namespaces. Generated query vars also include `:sql/file` and `:sql/line`
+metadata so tooling can keep the SQL source location separate from the generated
+Clojure file location.
 
 See also:
 
-- [Rendering](06-rendering.md)
+- [SQL Rendering](06-sql-rendering.md)
 - [Rendering Examples](07-rendering-examples.md)

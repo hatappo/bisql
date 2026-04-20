@@ -79,10 +79,6 @@
       path
       (str path "/"))))
 
-(defn asset-prefix
-  []
-  (or (.-__BISQL_ASSET_PREFIX__ js/window) "./"))
-
 (defn split-path-segments
   [path]
   (->> (str/split (or path "") #"/")
@@ -370,6 +366,83 @@
           (set! (.-innerHTML code-node) "")
           (run-mode source mode code-node))))))
 
+(def callout-pattern
+  #"^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]([+-])?(?:\s+(.+))?$")
+
+(defn- normalize-callout-kind
+  [kind]
+  kind)
+
+(defn- callout-title
+  [_kind explicit-title]
+  (or explicit-title ""))
+
+(defn- callout-icon-src
+  [kind]
+  (let [kind (normalize-callout-kind kind)]
+  (str (root-path)
+       "img/"
+       (case kind
+         "NOTE" "bootstrap-info.info.svg"
+         "TIP" "bootstrap-lightbulb.tips.svg"
+         "IMPORTANT" "bootstrap-exclamation.important.svg"
+         "WARNING" "bootstrap-exclamation-triangle.warning.svg"
+         "CAUTION" "bootstrap-exclamation-octagon.critical.svg"
+         "bootstrap-info.info.svg"))))
+
+(defn enhance-doc-callouts!
+  [host]
+  (doseq [^js blockquote (array-seq (.querySelectorAll host "blockquote"))]
+    (let [^js first-child (.-firstElementChild blockquote)]
+      (when (and first-child
+                 (= "P" (.-tagName first-child)))
+        (let [raw-text (or (.-textContent first-child) "")
+              raw-html (or (.-innerHTML first-child) "")
+              lines (->> (str/split-lines raw-text)
+                         (map str/trim)
+                         (remove str/blank?)
+                         vec)
+              html-lines (str/split-lines raw-html)
+              first-line (first lines)
+              remaining-lines (rest lines)
+              remaining-html (some->> html-lines rest (str/join "\n") str/trim)]
+          (when-let [[_ raw-kind open-flag explicit-title] (some->> first-line (re-matches callout-pattern))]
+            (let [details (.createElement js/document "details")
+                  summary (.createElement js/document "summary")
+                  body (.createElement js/document "div")
+                  icon (.createElement js/document "span")
+                  label (.createElement js/document "span")
+                  kind (normalize-callout-kind raw-kind)
+                  title (.createElement js/document "span")]
+              (.add (.-classList details) "callout" (str "callout-" (str/lower-case kind)))
+              (.add (.-classList summary) "callout-summary")
+              (.add (.-classList body) "callout-body")
+              (.add (.-classList icon) "callout-icon")
+              (.add (.-classList label) "callout-kind")
+              (.add (.-classList title) "callout-title")
+              (when (not= open-flag "-")
+                (set! (.-open details) true))
+              (.setProperty (.-style icon) "--callout-icon-url" (str "url('" (callout-icon-src kind) "')"))
+              (set! (.-ariaHidden icon) "true")
+              (set! (.-textContent label) kind)
+              (set! (.-textContent title) (callout-title kind explicit-title))
+              (.appendChild summary icon)
+              (.appendChild summary label)
+              (.appendChild summary title)
+              (.appendChild details summary)
+              (.remove first-child)
+              (when (or (seq remaining-lines)
+                        (not (str/blank? remaining-html)))
+                (let [leading-paragraph (.createElement js/document "p")]
+                  (if (str/blank? remaining-html)
+                    (set! (.-textContent leading-paragraph) (str/join " " remaining-lines))
+                    (set! (.-innerHTML leading-paragraph) remaining-html))
+                  (.appendChild body leading-paragraph)))
+              (doseq [child (array-seq (.-childNodes blockquote))]
+                (.appendChild body child))
+              (.appendChild details body)
+              (.replaceWith blockquote details))))))))
+
 (defn ensure-editor!
   [{:keys [editor-key host-id text editable? on-change language class-names]}]
   (if-let [host (.getElementById js/document host-id)]
@@ -418,6 +491,7 @@
                  :doc-slug selected-doc-slug}
           title (str (:title page) " · bisql Docs")]
       (set! (.-innerHTML host) html)
+      (enhance-doc-callouts! host)
       (when-let [^js heading (.querySelector host "h1")]
         (.add (.-classList heading) "docs-title-row")
         (let [share-link (.createElement js/document "a")

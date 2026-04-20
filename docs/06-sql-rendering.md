@@ -1,4 +1,4 @@
-# Rendering
+# SQL Rendering
 
 Rendering is the process of turning:
 
@@ -10,6 +10,24 @@ into:
 - rendered SQL
 - bind params
 - metadata
+
+> [!TIP]- Bisql block comment sigils
+> Bisql reserves five sigils at the start of block comments:
+>
+> `$`, `^`, `!`, `%`, `:`
+>
+> 1. `/*$ */` - bind values (ex. `?`)
+> 2. `/*^ */` - literal values (ex. `'John'`)
+> 3. `/*! */` - raw values (ex. `created_at`)
+> 4. `/*% */` - control flow (if / for)
+> 5. `/*: */` - metadata declarations
+>
+> Do not use those sigils accidentally at the start of an ordinary SQL block
+> comment. To keep room for future extensions, prefer a space or `*` when you
+> mean a normal comment:
+>
+> - `/*  */`
+> - `/** */`
 
 ## Render Result Shape
 
@@ -121,4 +139,5 @@ Typical user-facing APIs are:
 
 For lower-level examples, see:
 
+- [Conditional Expressions](08-conditional-expressions.md)
 - [Rendering Examples](07-rendering-examples.md)

@@ -5,6 +5,12 @@
 
 (def ^:private navigation-stub-key ::navigation-stub)
 
+(defn- sql-source-metadata
+  [{:keys [project-relative-path resource-path source-line query-name]}]
+  {:sql/file (or project-relative-path resource-path)
+   :sql/line (or source-line 1)
+   :sql/query-name query-name})
+
 (defn build-query-docstring
   ([template]
    (build-query-docstring template {:include-sql-template? true}))
@@ -33,7 +39,7 @@
                   :project-relative-path project-relative-path
                   :source-line source-line
                   :sql-template sql-template}]
-    (-> (merge meta reserved)
+    (-> (merge meta reserved (sql-source-metadata template))
         (assoc :declared-doc (:doc meta)
                :doc (build-query-docstring template)
                navigation-stub-key false))))
@@ -43,7 +49,8 @@
    (navigation-stub-metadata template arglists {}))
   ([template arglists options]
   (let [cardinality (some-> template :meta :cardinality)]
-    (cond-> (array-map :arglists (list 'quote arglists))
+    (cond-> (merge (array-map :arglists (list 'quote arglists))
+                   (sql-source-metadata template))
       cardinality
       (assoc :cardinality cardinality)
 

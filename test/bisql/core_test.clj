@@ -100,6 +100,9 @@
     (is (= "core.get-by-id" (:query-name metadata)))
     (is (= "get-by-id" (:function-name metadata)))
     (is (= ["core"] (:namespace-suffix metadata)))
+    (is (= "test/sql/postgresql/public/users/get-by-id.sql" (:sql/file metadata)))
+    (is (= 1 (:sql/line metadata)))
+    (is (= "core.get-by-id" (:sql/query-name metadata)))
     (is (= "sql/postgresql/public/users/get-by-id.sql" (:resource-path metadata)))
     (is (= "test/sql/postgresql/public/users/get-by-id.sql" (:project-relative-path metadata)))
     (is (= 1 (:source-line metadata)))
@@ -108,6 +111,9 @@
 (deftest defrender-merges-declarations-into-var-metadata
   (let [metadata (query-var-meta 'sql.core 'example-declarations-valid)]
     (is (= "Loads a user by id." (:declared-doc metadata)))
+    (is (= "test/sql/example-declarations-valid.sql" (:sql/file metadata)))
+    (is (= 1 (:sql/line metadata)))
+    (is (= "core.example-declarations-valid" (:sql/query-name metadata)))
     (is (str/includes? (:doc metadata) "Loads a user by id."))
     (is (str/includes? (:doc metadata) "This function is generated from SQL: "))
     (is (str/includes? (:doc metadata) "test/sql/example-declarations-valid.sql:1"))
@@ -125,8 +131,12 @@
                   {:meta {:doc 'foo}
                    :project-relative-path "src/sql/example.sql"
                    :source-line 1
+                   :query-name "core.example"
                    :sql-template "SELECT 1"}
                   '([datasource] [datasource template-params]))]
+    (is (= "src/sql/example.sql" (:sql/file metadata)))
+    (is (= 1 (:sql/line metadata)))
+    (is (= "core.example" (:sql/query-name metadata)))
     (is (str/includes? (:doc metadata) "foo\nThis function is generated from SQL: src/sql/example.sql:1"))))
 
 (deftest defrender-defines-one-function-per-query
@@ -1379,5 +1389,50 @@
                       "FROM users"
                       "WHERE"
                       "status = 'pending'"])
+           (:sql result)))
+    (is (= [] (:params result)))))
+
+(deftest render-query-supports-compound-conditional-expressions
+  (let [result (bisql/render-query
+                {:sql-template (str/join "\n"
+                                         ["SELECT *"
+                                          "FROM users"
+                                          "WHERE"
+                                          "/*%if active and status = expected_status */"
+                                          "  status = 'pending'"
+                                          "/*%else */"
+                                          "  status = 'inactive'"
+                                          "/*%end */"])}
+                {:active true
+                 :status "pending"
+                 :expected_status "pending"})]
+    (is (= (str/join "\n"
+                     ["SELECT *"
+                      "FROM users"
+                      "WHERE"
+                      "  status = 'pending'"])
+           (:sql result)))
+    (is (= [] (:params result)))))
+
+(deftest render-query-supports-parenthesized-conditional-expressions
+  (let [result (bisql/render-query
+                {:sql-template (str/join "\n"
+                                         ["SELECT *"
+                                          "FROM users"
+                                          "WHERE"
+                                          "/*%if (active and status = expected_status) or pending */"
+                                          "  status = 'pending'"
+                                          "/*%else */"
+                                          "  status = 'inactive'"
+                                          "/*%end */"])}
+                {:active false
+                 :status "active"
+                 :expected_status "pending"
+                 :pending true})]
+    (is (= (str/join "\n"
+                     ["SELECT *"
+                      "FROM users"
+                      "WHERE"
+                      "  status = 'pending'"])
            (:sql result)))
     (is (= [] (:params result)))))

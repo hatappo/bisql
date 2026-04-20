@@ -21,6 +21,8 @@ bb pages-clean
 
 - `bb pages-dev`
   - starts the dev server
+  - watches docs markdown, Pages scripts, and static assets
+  - re-syncs generated docs HTML, CSS, and images into `pages/dist/` on changes
   - serves the app at `http://localhost:8000`
 - `bb pages-build`
   - writes the static site into `pages/dist/`
@@ -37,6 +39,10 @@ bb pages-clean
   - HTML template used to generate route-specific pages
 - [static/playground.css](/Users/fumi/ws/hobby/bisql/pages/static/playground.css)
   - shared styling for Docs and Playground
+- [../scripts/pages/sync.bb](/Users/fumi/ws/hobby/bisql/scripts/pages/sync.bb)
+  - one-shot sync for docs catalogs, route HTML, CSS, and images
+- [../scripts/pages/dev.bb](/Users/fumi/ws/hobby/bisql/scripts/pages/dev.bb)
+  - polling watcher used by `bb pages-dev`
 - [scripts/generate_docs_catalog.bb](/Users/fumi/ws/hobby/bisql/pages/scripts/generate_docs_catalog.bb)
   - builds the Docs catalog from `docs/*.md`
 - [scripts/generate_examples_catalog.bb](/Users/fumi/ws/hobby/bisql/pages/scripts/generate_examples_catalog.bb)

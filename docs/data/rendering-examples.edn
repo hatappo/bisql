@@ -74,8 +74,17 @@
              :resource "demo-if-inline-elseif-else.sql"
              :params {:active false
                       :pending true}}}
+    {:id "conditional-expressions"
+     :title "2-6: conditional expressions"
+     :description "`if` and `elseif` conditions can use a small expression language with `and`, `or`, parentheses, and comparison operators. Operands are parameter references."
+     :input {:kind :resource
+             :resource "demo-if-expression.sql"
+             :params {:active false
+                      :status "active"
+                      :expected_status "pending"
+                      :pending true}}}
     {:id "for"
-     :title "2-6: for"
+     :title "2-7: for"
      :description "`for` loops can declare a separator with `separating`. This is useful when joining an arbitrary number of fragments with `,`, `AND`, or `OR`."
      :input {:kind :resource
              :resource "demo-for.sql"
@@ -120,6 +129,4 @@
      :error? true
      :input {:kind :resource
              :resource "demo-variables-bind.sql"
-             :params {:ic 42}}}]}]
- :notes
- ["The sample code assumes `(require '[bisql.core :as bisql])`."]}
+             :params {:ic 42}}}]}]}
