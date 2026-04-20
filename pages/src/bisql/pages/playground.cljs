@@ -166,6 +166,11 @@
 (defn sync-route-from-location!
   []
   (let [{:keys [page doc-slug example-id]} (parse-route)]
+    (let [canonical-path (route-url {:page page
+                                     :doc-slug doc-slug
+                                     :example-id example-id})]
+      (when-not (= (.-pathname js/location) canonical-path)
+        (.replaceState js/history nil "" canonical-path)))
     (swap! *state assoc
            :route-page page
            :sidebar-open? false
