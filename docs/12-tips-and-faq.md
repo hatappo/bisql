@@ -57,6 +57,8 @@ For example, Bisql can generate a minimal namespace stub like this:
 (declare ^{:arglists (quote ([datasource] [datasource template-params]))
            :cardinality :one
            :bisql.define/navigation-stub true
+           :sql/file "src/sql/postgresql/public/orders/crud.sql"
+           :sql/line 1
            :doc "This function is generated from SQL: src/sql/postgresql/public/orders/crud.sql:1"}
   insert)
 ```
