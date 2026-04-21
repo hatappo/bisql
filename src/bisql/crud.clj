@@ -1,11 +1,14 @@
 (ns bisql.crud
   (:require [clojure.java.io :as io]
+            [clojure.pprint :as pprint]
             [clojure.string :as str]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs]))
 
 (def ^:private metadata-query-options
   {:builder-fn rs/as-unqualified-lower-maps})
+
+(declare render-schema-files)
 
 (defn- kebab-name
   [s]
@@ -163,12 +166,41 @@
   [dialect schema table]
   (str dialect "/" schema "/" table "/crud.sql"))
 
+(defn- table-schema-file-path
+  [dialect schema table]
+  (str dialect "/" schema "/" table "/schema.clj"))
+
+(defn- table-schema-namespace-symbol
+  [dialect schema table]
+  (symbol (str "sql."
+               (kebab-name dialect)
+               "."
+               (kebab-name schema)
+               "."
+               (kebab-name table)
+               ".schema")))
+
+(defn- declaration-key-name
+  [k]
+  (if-let [ns-name (namespace k)]
+    (str ns-name "/" (name k))
+    (name k)))
+
+(def ^:private default-sentinel-schema-symbol
+  'bisql.schema/malli-default-sentinel)
+
+(def ^:private limit-schema-symbol
+  'bisql.schema/malli-limit)
+
+(def ^:private offset-schema-symbol
+  'bisql.schema/malli-offset)
+
 (defn- query-block
   [{:keys [name meta sql-template]}]
   (let [declarations (concat [[:name name]]
                              (sort-by key (dissoc (or meta {}) :name)))
         declaration-lines (map (fn [[k v]]
-                                 (str "/*:" (clojure.core/name k) " "
+                                 (str "/*:" (declaration-key-name k) " "
                                       (if (= k :name)
                                         v
                                         (pr-str v))
@@ -286,12 +318,18 @@
   "Writes generated CRUD templates as one SQL file per table."
   [crud-result {:keys [output-root]
                 :or {output-root "src/sql"}}]
-  (let [file-result (render-crud-files crud-result)]
-    (doseq [{:keys [path content]} (:files file-result)]
+  (let [sql-file-result (render-crud-files crud-result)
+        schema-files (render-schema-files crud-result)
+        files (vec (concat (:files sql-file-result) schema-files))]
+    (doseq [{:keys [path content]} files]
       (let [output-file (io/file output-root path)]
         (io/make-parents output-file)
         (spit output-file content)))
-    file-result))
+    {:dialect (:dialect sql-file-result)
+     :schema (:schema sql-file-result)
+     :sql-files (:files sql-file-result)
+     :schema-files schema-files
+     :files files}))
 
 (defn- generate-get-templates
   [schema table columns-by-name unique-column-groups]
@@ -639,12 +677,238 @@
                               :order-column-names [(:column_name starts-with-column)]}))
                          starts-with-candidates))))))
 
+(defn- map-entry-form
+  ([k schema]
+   [k schema])
+  ([k schema optional?]
+   (if optional?
+     [k {:optional true} schema]
+     [k schema])))
+
+(defn- column-keyword
+  [column-name]
+  (keyword (kebab-name column-name)))
+
+(defn- nullable-column?
+  [column]
+  (= "YES" (:is_nullable column)))
+
+(defn- defaultable-column?
+  [column]
+  (some? (:column_default column)))
+
+(defn- column-schema-leaf
+  [{:keys [data_type]}]
+  (case data_type
+    ("smallint" "integer" "bigint") 'int?
+    ("numeric" "real" "double precision") 'number?
+    ("text" "character varying" "character") 'string?
+    "boolean" 'boolean?
+    "uuid" 'bisql.schema/uuid-value?
+    "date" 'bisql.schema/local-date?
+    "time without time zone" 'bisql.schema/local-time?
+    "time with time zone" 'bisql.schema/offset-time?
+    "timestamp without time zone" 'bisql.schema/local-date-time?
+    "timestamp with time zone" 'bisql.schema/offset-date-time?
+    "bytea" 'bytes?
+    'any?))
+
+(defn- maybe-schema-form
+  [schema nullable?]
+  (if nullable?
+    [:maybe schema]
+    schema))
+
+(defn- defaultable-schema-form
+  [schema allow-default? column]
+  (if (and allow-default? (defaultable-column? column))
+    [:or schema default-sentinel-schema-symbol]
+    schema))
+
+(defn- column-value-schema-form
+  [column & {:keys [allow-default?]
+             :or {allow-default? false}}]
+  (-> (column-schema-leaf column)
+      (maybe-schema-form (nullable-column? column))
+      (defaultable-schema-form allow-default? column)))
+
+(defn- map-schema-form
+  [entries]
+  (into [:map] entries))
+
+(defn- schema-var-symbol
+  [dialect schema table var-name]
+  (symbol (str (table-schema-namespace-symbol dialect schema table))
+          (name var-name)))
+
+(defn- row-schema-definition
+  [columns]
+  ['row
+   (map-schema-form
+    (mapv (fn [column]
+            (map-entry-form (column-keyword (:column_name column))
+                            (column-value-schema-form column)))
+          columns))])
+
+(defn- insert-schema-definition
+  [columns]
+  ['insert
+   (map-schema-form
+    (mapv (fn [column]
+            (map-entry-form (column-keyword (:column_name column))
+                            (column-value-schema-form column :allow-default? true)))
+          (filterv insertable-column? columns)))])
+
+(defn- simple-params-schema-form
+  [columns-by-name column-names]
+  (map-schema-form
+   (mapv (fn [column-name]
+           (let [column (columns-by-name column-name)]
+             (map-entry-form (column-keyword column-name)
+                             (column-value-schema-form column))))
+         column-names)))
+
+(defn- list-params-schema-form
+  [columns-by-name column-names]
+  (map-schema-form
+   (concat
+    (mapv (fn [column-name]
+            (let [column (columns-by-name column-name)]
+              (map-entry-form (column-keyword column-name)
+                              (column-value-schema-form column))))
+          column-names)
+    [[:limit limit-schema-symbol]
+     [:offset offset-schema-symbol]])))
+
+(defn- update-params-schema-form
+  [columns-by-name predicate-column-names set-column-names]
+  (map-schema-form
+   (concat
+    (mapv (fn [column-name]
+            (let [column (columns-by-name column-name)]
+              (map-entry-form (column-keyword column-name)
+                              (column-value-schema-form column))))
+          predicate-column-names)
+    (mapv (fn [column-name]
+            (let [column (columns-by-name column-name)]
+              (map-entry-form (column-keyword column-name)
+                              (column-value-schema-form column :allow-default? true))))
+          set-column-names))))
+
+(defn- upsert-params-schema-form
+  [set-column-names]
+  (let [non-updating-cols-schema
+        (map-schema-form
+         (mapv (fn [column-name]
+                 (map-entry-form (column-keyword column-name)
+                                 'boolean?
+                                 true))
+               set-column-names))]
+    (cond-> (map-schema-form [[:inserting 'insert]])
+      (seq set-column-names)
+      (conj (map-entry-form :non-updating-cols non-updating-cols-schema true)))))
+
+(defn- query-schema-definitions
+  [columns]
+  (let [definitions (concat
+                     [(row-schema-definition columns)]
+                     (when (seq (filterv insertable-column? columns))
+                       [(insert-schema-definition columns)]))]
+    (:definitions
+     (reduce (fn [{:keys [seen definitions] :as acc} [definition-name schema-form]]
+               (if (contains? seen definition-name)
+                 acc
+                 {:seen (conj seen definition-name)
+                  :definitions (conj definitions [definition-name schema-form])}))
+             {:seen #{}
+              :definitions []}
+             definitions))))
+
+(defn- template-input-schema-form
+  [dialect schema table columns-by-name template]
+  (case (:kind template)
+    :insert (if (= (:name template) "crud.insert-many")
+              (map-schema-form [[:rows [:sequential (schema-var-symbol dialect schema table 'insert)]]])
+              (schema-var-symbol dialect schema table 'insert))
+    :get (simple-params-schema-form columns-by-name (:columns template))
+    :count (simple-params-schema-form columns-by-name (:columns template))
+    :delete (simple-params-schema-form columns-by-name (:columns template))
+    :list (list-params-schema-form columns-by-name (:columns template))
+    :update (update-params-schema-form columns-by-name (:columns template) (:set-columns template))
+    :upsert (upsert-params-schema-form (:set-columns template))))
+
+(defn- template-output-schema-form
+  [dialect schema table template]
+  (let [row-symbol (schema-var-symbol dialect schema table 'row)]
+    (cond
+      (= (:kind template) :get) [:maybe row-symbol]
+      (= (:kind template) :list) [:sequential row-symbol]
+      (= (:kind template) :count) [:map [:count 'int?]]
+      (= (:name template) "crud.insert-many") [:sequential row-symbol]
+      :else row-symbol)))
+
+(defn- attach-malli-metadata
+  [dialect schema columns-by-table templates]
+  (mapv (fn [template]
+          (let [table (:table template)
+                columns-by-name (into {} (map (juxt :column_name identity)
+                                              (get columns-by-table table)))]
+            (update template
+                    :meta
+                    (fn [meta]
+                      (assoc (or meta {})
+                             :malli/in (template-input-schema-form dialect schema table columns-by-name template)
+                             :malli/out (template-output-schema-form dialect schema table template))))))
+        templates))
+
+(defn- pprint-str
+  [value]
+  (str/trimr
+   (with-out-str
+     (binding [pprint/*print-right-margin* 100]
+       (pprint/pprint value)))))
+
+(defn- indent-lines
+  [s prefix]
+  (str/join "\n" (map #(str prefix %) (str/split-lines s))))
+
+(defn- schema-definition-block
+  [[definition-name schema-form]]
+  (str "(def " definition-name "\n"
+       (indent-lines (pprint-str schema-form) "  ")
+       ")\n"))
+
+(defn- table-schema-content
+  [dialect schema table columns _templates]
+  (let [definitions (query-schema-definitions columns)]
+    (str "(ns " (table-schema-namespace-symbol dialect schema table) "\n"
+         "  (:require [bisql.schema :as bisql.schema]))\n\n"
+         (str/join "\n" (map schema-definition-block definitions)))))
+
+(defn- render-schema-files
+  [{:keys [dialect schema columns-by-table templates]}]
+  (if (seq columns-by-table)
+    (->> columns-by-table
+         (sort-by key)
+         (mapv (fn [[table columns]]
+                 {:table table
+                  :path (table-schema-file-path dialect schema table)
+                  :content (table-schema-content dialect
+                                                schema
+                                                table
+                                                columns
+                                                (sort-templates-for-file
+                                                 (filterv #(= table (:table %)) templates)))})))
+    []))
+
 (defn- table-columns-query
   [schema]
   ["SELECT table_name,
            column_name,
            data_type,
            is_identity,
+           is_nullable,
+           column_default,
            ordinal_position
       FROM information_schema.columns
      WHERE table_schema = ?
@@ -756,7 +1020,7 @@
                                             columns-by-name
                                             unique-column-groups
                                             index-column-groups)
-                  (generate-list-templates schema
+                   (generate-list-templates schema
                                             table
                                             columns-by-name
                                             unique-column-groups
@@ -767,5 +1031,6 @@
         (dedupe-templates-by-name generated-templates)]
     {:dialect dialect
      :schema schema
-     :templates templates
+     :columns-by-table columns-by-table
+     :templates (attach-malli-metadata dialect schema columns-by-table templates)
      :warnings warnings}))

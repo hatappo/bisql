@@ -100,7 +100,7 @@
 
 (defn- parse-declaration-block
   [sql]
-  (let [pattern #"(?s)^/\*:([A-Za-z0-9\-]+)\s*\n?(.*?)\*/"
+  (let [pattern #"(?s)^/\*:([A-Za-z0-9\-/]+)\s*\n?(.*?)\*/"
         matcher (volatile! (regex-matcher pattern sql))]
     (when (regex-find @matcher)
       {:directive (some-> (regex-group @matcher 1) keyword)

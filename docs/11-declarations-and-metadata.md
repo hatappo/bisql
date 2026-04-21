@@ -26,6 +26,17 @@ FROM users
 WHERE id = /*$id*/1
 ```
 
+Namespaced declaration keys are also supported.
+For example:
+
+```sql
+/*:malli/in sql.postgresql.public.users.schema/get-by-id-in */
+/*:malli/out sql.postgresql.public.users.schema/maybe-row */
+SELECT *
+FROM users
+WHERE id = /*$id*/1
+```
+
 Rendered result:
 
 ```clojure
@@ -40,6 +51,7 @@ Rendered result:
 - documentation
 - tags
 - cardinality hints
+- `:malli/in` and `:malli/out`
 - project-specific metadata
 
 ## Notes

@@ -230,9 +230,20 @@
         generated-crud (crud-result options)
         file-result (bisql/write-crud-files! generated-crud {:output-root base-dir})
         file-count (count (:files file-result))
+        sql-file-count (count (:sql-files file-result))
+        schema-file-count (count (:schema-files file-result))
         template-count (count (:templates generated-crud))]
     (print-generated-files!
-     (str "Wrote " file-count " CRUD SQL files (" template-count " SQL templates) to " base-dir)
+     (str "Wrote "
+          file-count
+          " generated CRUD files ("
+          sql-file-count
+          " SQL, "
+          schema-file-count
+          " schema; "
+          template-count
+          " SQL templates) to "
+          base-dir)
      base-dir
      (:files file-result))
     (print-warnings! (:warnings generated-crud))))

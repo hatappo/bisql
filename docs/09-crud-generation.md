@@ -3,6 +3,10 @@
 Bisql can generate typical index-friendly CRUD SQL from the database schema with
 `gen-crud`.
 
+Alongside `crud.sql`, Bisql also generates a sibling `schema.clj` file for each
+table. These generated schema namespaces are currently used to attach
+`:malli/in` and `:malli/out` declarations to generated CRUD queries.
+
 > [!TIP]+
 > In practice, you will usually also want the corresponding function namespace
 > files, so `gen-crud-and-functions` is typically the more convenient command.
@@ -37,6 +41,22 @@ Generated `*-starting-with` queries are intentionally conservative:
 - the final text column uses `LIKE ... ESCAPE '\'`
 
 This keeps the generated queries aligned with ordinary index-friendly prefix search.
+
+## Generated Schema Files
+
+For each generated CRUD SQL file, Bisql also writes a colocated schema namespace:
+
+- `src/sql/postgresql/public/users/crud.sql`
+- `src/sql/postgresql/public/users/schema.clj`
+
+The schema file contains table-level base schemas such as:
+
+- `row`
+- `insert`
+
+Generated CRUD SQL then refers to those definitions through declaration comments
+like `/*:malli/in ... */` and `/*:malli/out ... */`, composing simple Malli
+forms inline where that keeps the generated schema file smaller.
 
 ## Why This Exists
 

@@ -89,6 +89,17 @@
     (is (= "SELECT * FROM users WHERE id = /*$id*/1"
            (str/trim (:sql-template result))))))
 
+(deftest analyze-template-supports-namespaced-declarations
+  (let [result (bisql/analyze-template
+                {:query-name "core.example"
+                 :sql-template (str "/*:malli/in sql.postgresql.public.users.schema/get-by-id-in */\n"
+                                    "/*:malli/out sql.postgresql.public.users.schema/maybe-row */\n"
+                                    "SELECT * FROM users WHERE id = /*$id*/1")})]
+    (is (= 'sql.postgresql.public.users.schema/get-by-id-in
+           (get-in result [:meta :malli/in])))
+    (is (= 'sql.postgresql.public.users.schema/maybe-row
+           (get-in result [:meta :malli/out])))))
+
 (deftest defrender-defines-a-render-function
   (let [result ((query-fn 'sql.core 'example-declarations-valid) {:id 42})]
     (is (= "SELECT * FROM users WHERE id = ?" (:sql result)))

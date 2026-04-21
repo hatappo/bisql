@@ -138,7 +138,11 @@
                                 %)
                              templates)]
           (is (= "crud.insert-many" (:query-name template)))
-          (is (= {:cardinality :many} (:meta template)))
+          (is (= :many (get-in template [:meta :cardinality])))
+          (is (= [:map [:rows [:sequential 'sql.postgresql.public.orders.schema/insert]]]
+                 (get-in template [:meta :malli/in])))
+          (is (= [:sequential 'sql.postgresql.public.orders.schema/row]
+                 (get-in template [:meta :malli/out])))
           (is (= ["user_id" "order_number" "state" "total_amount" "created_at"]
                  (:columns template)))
           (is (= (str "INSERT INTO orders (\n"
@@ -165,7 +169,18 @@
                                          (= "crud.upsert-by-id" (:name %)))
                                 %)
                              templates)]
-          (is (= {:cardinality :one} (:meta template)))
+          (is (= :one (get-in template [:meta :cardinality])))
+          (is (= [:map
+                  [:inserting 'insert]
+                  [:non-updating-cols
+                   {:optional true}
+                   [:map
+                    [:email {:optional true} 'boolean?]
+                    [:display-name {:optional true} 'boolean?]
+                    [:status {:optional true} 'boolean?]]]]
+                 (get-in template [:meta :malli/in])))
+          (is (= 'sql.postgresql.public.users.schema/row
+                 (get-in template [:meta :malli/out])))
           (is (= ["email" "display_name" "status"] (:set-columns template)))
           (is (= (str "INSERT INTO users AS t (\n"
                       "  email,\n"
@@ -236,7 +251,7 @@
                                                (= "crud.count" (:name %)))
                                       %)
                                    templates)
-              count-by-state-template (some #(when (and (= "orders" (:table %))
+          count-by-state-template (some #(when (and (= "orders" (:table %))
                                                         (= "crud.count-by-state" (:name %)))
                                                %)
                                             templates)
@@ -246,7 +261,11 @@
                                                            templates)]
           (is (= "crud.count" (:query-name count-template)))
           (is (= [] (:columns count-template)))
-          (is (= {:cardinality :one} (:meta count-template)))
+          (is (= :one (get-in count-template [:meta :cardinality])))
+          (is (= [:map]
+                 (get-in count-template [:meta :malli/in])))
+          (is (= [:map [:count 'int?]]
+                 (get-in count-template [:meta :malli/out])))
           (is (= "SELECT COUNT(*) AS count FROM user_roles"
                  (:sql-template count-template)))
           (is (= (str "SELECT COUNT(*) AS count FROM orders\n"
@@ -519,19 +538,47 @@
                        (System/nanoTime))
         crud-result {:dialect "postgresql"
                      :schema "public"
+                     :columns-by-table {"users" [{:column_name "id"
+                                                  :data_type "bigint"
+                                                  :is_identity "YES"
+                                                  :is_nullable "NO"
+                                                  :column_default nil}
+                                                 {:column_name "email"
+                                                  :data_type "text"
+                                                  :is_identity "NO"
+                                                  :is_nullable "NO"
+                                                  :column_default nil}
+                                                 {:column_name "created_at"
+                                                  :data_type "timestamp with time zone"
+                                                  :is_identity "NO"
+                                                  :is_nullable "NO"
+                                                  :column_default "CURRENT_TIMESTAMP"}]}
                      :templates [{:table "users"
                                   :name "crud.get-by-id"
-                                  :meta {:cardinality :one}
+                                  :kind :get
+                                  :columns ["id"]
+                                  :meta {:cardinality :one
+                                         :malli/in 'sql.postgresql.public.users.schema/get-by-id-in
+                                         :malli/out 'sql.postgresql.public.users.schema/maybe-row}
                                   :sql-template "SELECT * FROM users WHERE id = /*$id*/1"}]}
         result (crud/write-crud-files! crud-result {:output-root temp-root})
-        output-file (io/file temp-root "postgresql/public/users/crud.sql")]
+        output-file (io/file temp-root "postgresql/public/users/crud.sql")
+        schema-file (io/file temp-root "postgresql/public/users/schema.clj")]
     (is (.exists output-file))
+    (is (.exists schema-file))
     (is (= (str "/*:name crud.get-by-id */\n"
                 "/*:cardinality :one */\n"
+                "/*:malli/in sql.postgresql.public.users.schema/get-by-id-in */\n"
+                "/*:malli/out sql.postgresql.public.users.schema/maybe-row */\n"
                 "SELECT * FROM users WHERE id = /*$id*/1")
            (slurp output-file)))
-    (is (= "postgresql/public/users/crud.sql"
-           (:path (first (:files result)))))))
+    (is (str/includes? (slurp schema-file) "(ns sql.postgresql.public.users.schema"))
+    (is (str/includes? (slurp schema-file) "(def row"))
+    (is (str/includes? (slurp schema-file) "(def insert"))
+    (is (not (str/includes? (slurp schema-file) "(def get-by-id-in")))
+    (is (= ["postgresql/public/users/crud.sql"
+            "postgresql/public/users/schema.clj"]
+           (mapv :path (:files result))))))
 
 (deftest render-declaration-files-groups-queries-into-namespaces
   (let [rendered (define/render-declaration-files {:output-root "test/sql/postgresql/public"})

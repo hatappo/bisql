@@ -22,7 +22,10 @@
                                                       :warnings ["WARNING: duplicate generated CRUD template. Please report it here: https://github.com/hatappo/bisql/issues"]})
                                bisql/write-crud-files! (fn [crud-result options]
                                                          (reset! write-args* [crud-result options])
-                                                         {:files [{:path "postgresql/public/users/crud.sql"}]})]
+                                                         {:sql-files [{:path "postgresql/public/users/crud.sql"}]
+                                                          :schema-files [{:path "postgresql/public/users/schema.clj"}]
+                                                          :files [{:path "postgresql/public/users/crud.sql"}
+                                                                  {:path "postgresql/public/users/schema.clj"}]})]
                    (cli/-main "gen-crud"
                               "--dbtype" "postgresql"
                               "--host" "db.example.com"
@@ -45,10 +48,11 @@
              :schema "public"
              :templates [{:table "users"}]
              :warnings ["WARNING: duplicate generated CRUD template. Please report it here: https://github.com/hatappo/bisql/issues"]}
-            {:output-root "src/app/sql"}]
+           {:output-root "src/app/sql"}]
            @write-args*))
-    (is (str/includes? output "Wrote 1 CRUD SQL files"))
+    (is (str/includes? output "Wrote 2 generated CRUD files"))
     (is (str/includes? output "src/app/sql/postgresql/public/users/crud.sql"))
+    (is (str/includes? output "src/app/sql/postgresql/public/users/schema.clj"))
     (is (str/includes? output "https://github.com/hatappo/bisql/issues"))))
 
 (deftest cli-gen-functions-uses-db-spec-defaults-and-root
@@ -121,7 +125,10 @@
                                                       :warnings []})
                                bisql/write-crud-files! (fn [crud-result options]
                                                          (swap! call-order* conj [:write-crud crud-result options])
-                                                         {:files [{:path "postgresql/public/users/crud.sql"}]})
+                                                         {:sql-files [{:path "postgresql/public/users/crud.sql"}]
+                                                          :schema-files [{:path "postgresql/public/users/schema.clj"}]
+                                                          :files [{:path "postgresql/public/users/crud.sql"}
+                                                                  {:path "postgresql/public/users/schema.clj"}]})
                                bisql/write-function-files! (fn [options]
                                                              (swap! call-order* conj [:write-functions options])
                                                              {:files [{:path "postgresql/public/users/crud.clj"}]})]
@@ -136,7 +143,7 @@
                                :suppress-unused-public-var? false
                                :include-sql-template? false}]]
            @call-order*))
-    (is (str/includes? output "Wrote 1 CRUD SQL files"))
+    (is (str/includes? output "Wrote 2 generated CRUD files"))
     (is (str/includes? output "Wrote 1 function namespace files"))))
 
 (deftest cli-list-functions-prints-resolved-function-symbols
