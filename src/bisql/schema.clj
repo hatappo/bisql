@@ -36,3 +36,49 @@
 
 (def malli-offset
   int?)
+
+(defn malli-map-all-entries-optional
+  [schema-form]
+  (let [[tag & entries] schema-form]
+    (when-not (= :map tag)
+      (throw (ex-info "malli-map-all-entries-optional requires a :map schema form."
+                      {:schema schema-form})))
+    (into [tag]
+          (map (fn [entry]
+                 (let [[k maybe-opts schema] entry]
+                   (if (map? maybe-opts)
+                     [k (assoc maybe-opts :optional true) schema]
+                     [k {:optional true} maybe-opts]))))
+          entries)))
+
+(defn- malli-strip-default-sentinel
+  [schema-form]
+  (if (and (vector? schema-form)
+           (= :or (first schema-form)))
+    (let [members (vec (remove #(= % malli-default-sentinel)
+                               (rest schema-form)))]
+      (cond
+        (empty? members)
+        (throw (ex-info "malli-strip-default-sentinel removed every branch."
+                        {:schema schema-form}))
+
+        (= 1 (count members))
+        (first members)
+
+        :else
+        (into [:or] members)))
+    schema-form))
+
+(defn malli-map-all-entries-strip-default-sentinel
+  [schema-form]
+  (let [[tag & entries] schema-form]
+    (when-not (= :map tag)
+      (throw (ex-info "malli-map-all-entries-strip-default-sentinel requires a :map schema form."
+                      {:schema schema-form})))
+    (into [tag]
+          (map (fn [entry]
+                 (let [[k maybe-opts schema] entry]
+                   (if (map? maybe-opts)
+                     [k maybe-opts (malli-strip-default-sentinel schema)]
+                     [k (malli-strip-default-sentinel maybe-opts)]))))
+          entries)))

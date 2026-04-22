@@ -53,6 +53,7 @@ The schema file contains table-level base schemas such as:
 
 - `row`
 - `insert`
+- `update`
 
 Generated CRUD SQL then refers to those definitions through declaration comments
 like `/*:malli/in ... */` and `/*:malli/out ... */`, composing simple Malli
@@ -73,26 +74,44 @@ That means:
 
 Generated upserts use PostgreSQL `ON CONFLICT ... DO UPDATE`.
 
-Bisql also supports generated update policy control via:
+Generated update and upsert templates now use map-shaped params:
 
-- `:inserting`
-- `:non-updating-cols`
+- `update-by-*`
+  - `:where`
+  - `:updates`
+- `upsert-by-*`
+  - `:inserts`
+  - `:updates`
 
-This allows templates such as:
+For example, a generated update template uses a `for` block in `SET`:
 
 ```sql
-SET status = /*%if non-updating-cols.status */ t.status /*%else => EXCLUDED.status */ /*%end */
+UPDATE users
+SET
+/*%for item in updates separating , */
+  /*!item.name*/created_at = /*$item.value*/CURRENT_TIMESTAMP
+/*%end */
+WHERE id = /*$where.id*/1
+RETURNING *
 ```
 
-In practice:
+This allows:
 
-- `:inserting` lists the values you want to provide for the insert path
-- `:non-updating-cols` names columns that should be used on insert, but should not be updated on conflict
+- partial updates without supplying every updatable column
+- updating columns that also appear in the predicate
+- generated SQL that still remains ordinary executable SQL templates
 
-When a column is listed in `:non-updating-cols`, the generated upsert keeps the
-existing table value on `DO UPDATE` instead of taking the value from
-`EXCLUDED`. A typical example is `created_at`, which is usually set on insert
-but should remain unchanged on later updates.
+Generated upserts follow the same idea:
+
+- `:inserts` contains the insert path values
+- `:updates` contains the conflict update assignments
+
+If `:updates` is `nil`, the generated upsert renders `DO NOTHING`.
+If `:updates` is an empty map, rendering still fails because an empty `SET`
+clause is not allowed.
+
+If you need special `EXCLUDED` expressions or more unusual conflict behavior,
+write a custom SQL template instead.
 
 See also:
 

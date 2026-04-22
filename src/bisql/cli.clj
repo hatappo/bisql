@@ -56,6 +56,7 @@
     "  --base-dir PATH"
     "  --skip-invalid"
     "  --include-sql-template"
+    "  --no-derive"
     "  --suppress-unused-public-var"
     "  --help"
     ""
@@ -100,6 +101,10 @@
           (= option "--include-sql-template")
           (recur more
                  (assoc options :include-sql-template? true))
+
+          (= option "--no-derive")
+          (recur more
+                 (assoc options :derive-schemas? false))
 
           (= option "--skip-invalid")
           (recur more
@@ -215,23 +220,40 @@
 
 (defn- print-generated-files!
   [headline output-root files]
+  (println)
   (println headline)
   (doseq [{:keys [path]} files]
-    (println (project-relative-path output-root path))))
+    (println (str "  " (project-relative-path output-root path)))))
 
 (defn- print-warnings!
   [warnings]
   (doseq [warning warnings]
     (println warning)))
 
+(defn- sql-file?
+  [{:keys [path]}]
+  (str/ends-with? path ".sql"))
+
+(defn- clj-file?
+  [{:keys [path]}]
+  (or (str/ends-with? path ".clj")
+      (str/ends-with? path ".cljc")))
+
 (defn- run-gen-crud!
   [options]
   (let [base-dir (or (:base-dir options) default-base-dir)
         generated-crud (crud-result options)
-        file-result (bisql/write-crud-files! generated-crud {:output-root base-dir})
+        file-result (bisql/write-crud-files! generated-crud {:output-root base-dir
+                                                             :derive-schemas? (not= false (:derive-schemas? options))
+                                                             :suppress-unused-public-var?
+                                                             (true? (:suppress-unused-public-var? options))})
+        sql-files (or (seq (:sql-files file-result))
+                      (filterv sql-file? (:files file-result)))
+        schema-files (or (seq (:schema-files file-result))
+                         (filterv clj-file? (:files file-result)))
         file-count (count (:files file-result))
-        sql-file-count (count (:sql-files file-result))
-        schema-file-count (count (:schema-files file-result))
+        sql-file-count (count sql-files)
+        schema-file-count (count schema-files)
         template-count (count (:templates generated-crud))]
     (print-generated-files!
      (str "Wrote "
@@ -245,7 +267,15 @@
           " SQL templates) to "
           base-dir)
      base-dir
-     (:files file-result))
+     [])
+    (print-generated-files!
+     (str "Wrote " sql-file-count " generated SQL template files to " base-dir)
+     base-dir
+     sql-files)
+    (print-generated-files!
+     (str "Wrote " schema-file-count " generated schema files to " base-dir)
+     base-dir
+     schema-files)
     (print-warnings! (:warnings generated-crud))))
 
 (defn- run-gen-functions!
@@ -258,7 +288,7 @@
                                                   (true? (:include-sql-template? options))})
         file-count (count (:files file-result))]
     (print-generated-files!
-     (str "Wrote " file-count " function namespace files to " base-dir)
+     (str "Wrote " file-count " generated Clojure files to " base-dir)
      base-dir
      (:files file-result))))
 

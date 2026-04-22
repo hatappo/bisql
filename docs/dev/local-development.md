@@ -122,12 +122,13 @@ More advanced example:
 ```clojure
 (sql.postgresql.public.user-devices.crud/upsert-by-user-id-and-device-identifier
  ds
- {:inserting {:user-id 1
-              :device-type "browser"
-              :device-identifier "browser-1"
-              :status "active"
-              :last-seen-at (java.time.OffsetDateTime/parse "2026-04-14T00:00:00Z")}
-  :non-updating-cols {:status true}})
+ {:inserts {:user-id 1
+            :device-type "browser"
+            :device-identifier "browser-1"
+            :status "active"
+            :last-seen-at (java.time.OffsetDateTime/parse "2026-04-14T00:00:00Z")}
+  :updates {:status "active"
+            :last-seen-at (java.time.OffsetDateTime/parse "2026-04-14T00:00:00Z")}})
 ```
 
 Then fetch the row again:

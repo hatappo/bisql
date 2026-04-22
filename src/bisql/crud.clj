@@ -2,6 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.pprint :as pprint]
             [clojure.string :as str]
+            [bisql.schema :as bisql.schema]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs]))
 
@@ -42,6 +43,13 @@
           "*/"
           (sample-token column)))))
 
+(defn- bind-comment-with-sample
+  [parameter-path sample-column]
+  (str "/*$"
+       parameter-path
+       "*/"
+       (sample-token sample-column)))
+
 (defn- starts-with-sample-token
   [column]
   (let [token (sample-token column)]
@@ -71,7 +79,9 @@
    :operator :starts-with})
 
 (defn- where-clause
-  [predicate-specs]
+  ([predicate-specs]
+   (where-clause nil predicate-specs))
+  ([parameter-prefix predicate-specs]
   (when (seq predicate-specs)
     (str/join "\n"
               (map-indexed
@@ -80,13 +90,20 @@
                       (:column_name column)
                       (case operator
                         :eq
-                        (str " = " (bind-comment column))
+                        (str " = " (bind-comment parameter-prefix column))
 
                         :starts-with
                         (str " LIKE "
-                             (bind-comment-starts-with column)
+                             (if parameter-prefix
+                               (str "/*$"
+                                    parameter-prefix
+                                    "."
+                                    (kebab-name (:column_name column))
+                                    "*/"
+                                    (starts-with-sample-token column))
+                               (bind-comment-starts-with column))
                              " ESCAPE '\\'"))))
-               predicate-specs))))
+               predicate-specs)))))
 
 (defn- order-by-clause
   [columns]
@@ -316,10 +333,13 @@
 
 (defn write-crud-files!
   "Writes generated CRUD templates as one SQL file per table."
-  [crud-result {:keys [output-root]
-                :or {output-root "src/sql"}}]
+  [crud-result {:keys [output-root derive-schemas? suppress-unused-public-var?]
+                :or {output-root "src/sql"
+                     derive-schemas? true
+                     suppress-unused-public-var? false}}]
   (let [sql-file-result (render-crud-files crud-result)
-        schema-files (render-schema-files crud-result)
+        schema-files (render-schema-files crud-result {:derive-schemas? derive-schemas?
+                                                       :suppress-unused-public-var? suppress-unused-public-var?})
         files (vec (concat (:files sql-file-result) schema-files))]
     (doseq [{:keys [path content]} files]
       (let [output-file (io/file output-root path)]
@@ -345,13 +365,12 @@
    unique-column-groups))
 
 (defn- insertable-column?
-  [column]
-  (not= "YES" (:is_identity column)))
+  [_column]
+  true)
 
-(defn- updatable-column?
-  [predicate-column-names column]
-  (and (insertable-column? column)
-       (not (contains? (set predicate-column-names) (:column_name column)))))
+(defn- updateable-column?
+  [column]
+  (insertable-column? column))
 
 (defn- insert-template
   [table columns]
@@ -404,27 +423,23 @@
              (where-clause (map exact-predicate-spec predicate-columns))
              "RETURNING *"]))
 
-(defn- update-bind-comment
-  [column]
-  (bind-comment column))
-
-(defn- set-clause
-  [columns]
+(defn- dynamic-set-clause
+  [sample-column]
   (str/join "\n"
-            (map-indexed
-             (fn [idx column]
-               (str (if (zero? idx) "SET " "  , ")
-                    (:column_name column)
-                    " = "
-                    (update-bind-comment column)))
-             columns)))
+            ["SET"
+             "/*%for item in updates separating , */"
+             (str "  /*!item.name*/"
+                  (:column_name sample-column)
+                  " = "
+                  (bind-comment-with-sample "item.value" sample-column))
+             "/*%end */"]))
 
 (defn- update-template
-  [table predicate-columns set-columns]
+  [table predicate-columns sample-column]
   (str/join "\n"
             [(str "UPDATE " table)
-             (set-clause set-columns)
-             (where-clause (map exact-predicate-spec predicate-columns))
+             (dynamic-set-clause sample-column)
+             (where-clause "where" (map exact-predicate-spec predicate-columns))
              "RETURNING *"]))
 
 (defn- generate-insert-templates
@@ -448,38 +463,12 @@
 
 (defn- upsert-template
   [table constraint-name insert-columns update-columns]
-  (let [lhs-width (apply max 0 (map #(count (:column_name %)) update-columns))
-        if-width (apply max 0 (map #(count (str "/*%if non-updating-cols."
-                                                (kebab-name (:column_name %))
-                                                " */"))
-                                   update-columns))
-        target-width (apply max 0 (map #(count (str "t." (:column_name %))) update-columns))
-        pad-right (fn [s width]
-                    (str s (apply str (repeat (max 0 (- width (count s))) " "))))
-        update-lines (map-indexed
-                      (fn [idx column]
-                        (let [column-name (:column_name column)
-                              target-expr (str "t." column-name)
-                              excluded-expr (str "EXCLUDED." column-name)
-                              if-expr (str "/*%if non-updating-cols."
-                                           (kebab-name column-name)
-                                           " */")]
-                          (str (if (zero? idx) "SET " "  , ")
-                               (pad-right column-name lhs-width)
-                               " = "
-                               (pad-right if-expr if-width)
-                               " "
-                               (pad-right target-expr target-width)
-                               " "
-                               "/*%else => "
-                               excluded-expr
-                               " */"
-                               " /*%end*/")))
-                      update-columns)]
+  (let [update-lines (when (seq update-columns)
+                       [(dynamic-set-clause (last update-columns))])]
     (str/join
      "\n"
      (concat
-      [(str "INSERT INTO " table " AS t (")
+      [(str "INSERT INTO " table " (")
        (str/join "\n" (map-indexed (fn [idx column]
                                      (str "  "
                                           (:column_name column)
@@ -489,13 +478,17 @@
        "VALUES ("
        (str/join "\n" (map-indexed (fn [idx column]
                                      (str "  "
-                                          (bind-comment "inserting" column)
+                                          (bind-comment "inserts" column)
                                           (when (< idx (dec (count insert-columns))) ",")))
                                    insert-columns))
        ")"
-       (str "ON CONFLICT ON CONSTRAINT " constraint-name)]
+       (str "ON CONFLICT ON CONSTRAINT " constraint-name)
+       "/*%if updates */"
+       "DO UPDATE"]
       (if (seq update-columns)
-        (into ["DO UPDATE"] update-lines)
+        (concat update-lines
+                ["/*%else => DO NOTHING */"
+                 "/*%end */"])
         ["DO NOTHING"])
       ["RETURNING *"]))))
 
@@ -504,9 +497,7 @@
   (let [insert-columns (filterv insertable-column? columns)]
     (->> constraints
          (map (fn [{:keys [constraint_name column_names]}]
-                (let [predicate-column-names (set column_names)
-                      update-columns (filterv (partial updatable-column? predicate-column-names)
-                                              columns)]
+                (let [update-columns (filterv updateable-column? columns)]
                   (named-template-entry schema
                                         table
                                         :upsert
@@ -535,14 +526,13 @@
   (->> unique-column-groups
        (map (fn [predicate-column-names]
               (let [predicate-columns (mapv columns-by-name predicate-column-names)
-                    set-columns (filterv (partial updatable-column? predicate-column-names)
-                                         columns)]
+                    set-columns (filterv updateable-column? columns)]
                 (when (seq set-columns)
                   (template-entry schema
                                   table
                                   :update
                                   predicate-column-names
-                                  (update-template table predicate-columns set-columns)
+                                  (update-template table predicate-columns (last set-columns))
                                   :meta {:cardinality :one}
                                   :set-columns (mapv :column_name set-columns))))))
        (remove nil?)
@@ -695,7 +685,8 @@
 
 (defn- defaultable-column?
   [column]
-  (some? (:column_default column)))
+  (or (some? (:column_default column))
+      (= "YES" (:is_identity column))))
 
 (defn- column-schema-leaf
   [{:keys [data_type]}]
@@ -742,13 +733,16 @@
           (name var-name)))
 
 (defn- row-schema-definition
-  [columns]
-  ['row
-   (map-schema-form
-    (mapv (fn [column]
-            (map-entry-form (column-keyword (:column_name column))
-                            (column-value-schema-form column)))
-          columns))])
+  [columns derive?]
+  (if derive?
+    ['row
+     '(bisql.schema/malli-map-all-entries-strip-default-sentinel insert)]
+    ['row
+     (map-schema-form
+      (mapv (fn [column]
+              (map-entry-form (column-keyword (:column_name column))
+                              (column-value-schema-form column)))
+            columns))]))
 
 (defn- insert-schema-definition
   [columns]
@@ -758,6 +752,15 @@
             (map-entry-form (column-keyword (:column_name column))
                             (column-value-schema-form column :allow-default? true)))
           (filterv insertable-column? columns)))])
+
+(defn- update-schema-definition
+  [_columns derive?]
+  (if derive?
+    ['update
+     '(bisql.schema/malli-map-all-entries-optional insert)]
+    ['update
+     (let [[_ insert-schema-form] (insert-schema-definition _columns)]
+       (bisql.schema/malli-map-all-entries-optional insert-schema-form))]))
 
 (defn- simple-params-schema-form
   [columns-by-name column-names]
@@ -781,39 +784,25 @@
      [:offset offset-schema-symbol]])))
 
 (defn- update-params-schema-form
-  [columns-by-name predicate-column-names set-column-names]
+  [dialect schema table columns-by-name predicate-column-names]
   (map-schema-form
-   (concat
-    (mapv (fn [column-name]
-            (let [column (columns-by-name column-name)]
-              (map-entry-form (column-keyword column-name)
-                              (column-value-schema-form column))))
-          predicate-column-names)
-    (mapv (fn [column-name]
-            (let [column (columns-by-name column-name)]
-              (map-entry-form (column-keyword column-name)
-                              (column-value-schema-form column :allow-default? true))))
-          set-column-names))))
+   [[:where (simple-params-schema-form columns-by-name predicate-column-names)]
+    [:updates (schema-var-symbol dialect schema table 'update)]]))
 
 (defn- upsert-params-schema-form
-  [set-column-names]
-  (let [non-updating-cols-schema
-        (map-schema-form
-         (mapv (fn [column-name]
-                 (map-entry-form (column-keyword column-name)
-                                 'boolean?
-                                 true))
-               set-column-names))]
-    (cond-> (map-schema-form [[:inserting 'insert]])
-      (seq set-column-names)
-      (conj (map-entry-form :non-updating-cols non-updating-cols-schema true)))))
+  [dialect schema table set-column-names]
+  (cond-> (map-schema-form [[:inserts (schema-var-symbol dialect schema table 'insert)]])
+    (seq set-column-names)
+    (conj [:updates [:maybe (schema-var-symbol dialect schema table 'update)]])))
 
 (defn- query-schema-definitions
-  [columns]
+  [columns {:keys [derive-schemas?]
+            :or {derive-schemas? true}}]
   (let [definitions (concat
-                     [(row-schema-definition columns)]
-                     (when (seq (filterv insertable-column? columns))
-                       [(insert-schema-definition columns)]))]
+                     [(insert-schema-definition columns)
+                      (update-schema-definition columns derive-schemas?)
+                      (row-schema-definition columns derive-schemas?)]
+                     )]
     (:definitions
      (reduce (fn [{:keys [seen definitions] :as acc} [definition-name schema-form]]
                (if (contains? seen definition-name)
@@ -834,8 +823,8 @@
     :count (simple-params-schema-form columns-by-name (:columns template))
     :delete (simple-params-schema-form columns-by-name (:columns template))
     :list (list-params-schema-form columns-by-name (:columns template))
-    :update (update-params-schema-form columns-by-name (:columns template) (:set-columns template))
-    :upsert (upsert-params-schema-form (:set-columns template))))
+    :update (update-params-schema-form dialect schema table columns-by-name (:columns template))
+    :upsert (upsert-params-schema-form dialect schema table (:set-columns template))))
 
 (defn- template-output-schema-form
   [dialect schema table template]
@@ -873,20 +862,27 @@
   (str/join "\n" (map #(str prefix %) (str/split-lines s))))
 
 (defn- schema-definition-block
-  [[definition-name schema-form]]
-  (str "(def " definition-name "\n"
+  [[definition-name schema-form] {:keys [suppress-unused-public-var?]
+                                  :or {suppress-unused-public-var? false}}]
+  (str (when suppress-unused-public-var?
+         "#_{:clojure-lsp/ignore [:clojure-lsp/unused-public-var]}\n")
+       "(def " definition-name "\n"
        (indent-lines (pprint-str schema-form) "  ")
        ")\n"))
 
 (defn- table-schema-content
-  [dialect schema table columns _templates]
-  (let [definitions (query-schema-definitions columns)]
+  [dialect schema table columns _templates {:keys [derive-schemas?]
+                                            :or {derive-schemas? true}
+                                            :as options}]
+  (let [definitions (query-schema-definitions columns {:derive-schemas? derive-schemas?})]
     (str "(ns " (table-schema-namespace-symbol dialect schema table) "\n"
+         "  (:refer-clojure :exclude [update])\n"
          "  (:require [bisql.schema :as bisql.schema]))\n\n"
-         (str/join "\n" (map schema-definition-block definitions)))))
+         (str/join "\n" (map #(schema-definition-block % options) definitions)))))
 
 (defn- render-schema-files
-  [{:keys [dialect schema columns-by-table templates]}]
+  [{:keys [dialect schema columns-by-table templates]}
+   {:as options}]
   (if (seq columns-by-table)
     (->> columns-by-table
          (sort-by key)
@@ -898,7 +894,8 @@
                                                 table
                                                 columns
                                                 (sort-templates-for-file
-                                                 (filterv #(= table (:table %)) templates)))})))
+                                                 (filterv #(= table (:table %)) templates))
+                                                options)})))
     []))
 
 (defn- table-columns-query

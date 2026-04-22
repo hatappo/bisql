@@ -30,8 +30,8 @@ Namespaced declaration keys are also supported.
 For example:
 
 ```sql
-/*:malli/in sql.postgresql.public.users.schema/get-by-id-in */
-/*:malli/out sql.postgresql.public.users.schema/maybe-row */
+/*:malli/in [:map [:id int?]] */
+/*:malli/out [:maybe sql.postgresql.public.users.schema/row] */
 SELECT *
 FROM users
 WHERE id = /*$id*/1
