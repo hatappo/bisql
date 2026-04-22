@@ -434,6 +434,17 @@
                   (bind-comment-with-sample "item.value" sample-column))
              "/*%end */"]))
 
+(defn- nested-dynamic-set-clause
+  [sample-column]
+  (str/join "\n"
+            ["SET"
+             "  /*%for item in updates separating , */"
+             (str "    /*!item.name*/"
+                  (:column_name sample-column)
+                  " = "
+                  (bind-comment-with-sample "item.value" sample-column))
+             "  /*%end */"]))
+
 (defn- update-template
   [table predicate-columns sample-column]
   (str/join "\n"
@@ -464,7 +475,7 @@
 (defn- upsert-template
   [table constraint-name insert-columns update-columns]
   (let [update-lines (when (seq update-columns)
-                       [(dynamic-set-clause (last update-columns))])]
+                       [(nested-dynamic-set-clause (last update-columns))])]
     (str/join
      "\n"
      (concat
