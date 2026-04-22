@@ -244,9 +244,7 @@
   (let [base-dir (or (:base-dir options) default-base-dir)
         generated-crud (crud-result options)
         file-result (bisql/write-crud-files! generated-crud {:output-root base-dir
-                                                             :derive-schemas? (not= false (:derive-schemas? options))
-                                                             :suppress-unused-public-var?
-                                                             (true? (:suppress-unused-public-var? options))})
+                                                             :derive-schemas? (not= false (:derive-schemas? options))})
         sql-files (or (seq (:sql-files file-result))
                       (filterv sql-file? (:files file-result)))
         schema-files (or (seq (:schema-files file-result))

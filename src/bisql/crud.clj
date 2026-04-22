@@ -333,13 +333,11 @@
 
 (defn write-crud-files!
   "Writes generated CRUD templates as one SQL file per table."
-  [crud-result {:keys [output-root derive-schemas? suppress-unused-public-var?]
+  [crud-result {:keys [output-root derive-schemas?]
                 :or {output-root "src/sql"
-                     derive-schemas? true
-                     suppress-unused-public-var? false}}]
+                     derive-schemas? true}}]
   (let [sql-file-result (render-crud-files crud-result)
-        schema-files (render-schema-files crud-result {:derive-schemas? derive-schemas?
-                                                       :suppress-unused-public-var? suppress-unused-public-var?})
+        schema-files (render-schema-files crud-result {:derive-schemas? derive-schemas?})
         files (vec (concat (:files sql-file-result) schema-files))]
     (doseq [{:keys [path content]} files]
       (let [output-file (io/file output-root path)]
@@ -873,10 +871,8 @@
   (str/join "\n" (map #(str prefix %) (str/split-lines s))))
 
 (defn- schema-definition-block
-  [[definition-name schema-form] {:keys [suppress-unused-public-var?]
-                                  :or {suppress-unused-public-var? false}}]
-  (str (when suppress-unused-public-var?
-         "#_{:clojure-lsp/ignore [:clojure-lsp/unused-public-var]}\n")
+  [[definition-name schema-form] _options]
+  (str "#_{:clojure-lsp/ignore [:clojure-lsp/unused-public-var]}\n"
        "(def " definition-name "\n"
        (indent-lines (pprint-str schema-form) "  ")
        ")\n"))

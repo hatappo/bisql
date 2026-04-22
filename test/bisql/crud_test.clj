@@ -647,7 +647,7 @@
     (is (str/includes? schema-text "(def insert"))
     (is (str/includes? schema-text "(def update"))))
 
-(deftest write-crud-files-can-suppress-unused-public-var-in-generated-schemas
+(deftest write-crud-files-always-suppresses-unused-public-var-in-generated-schemas
   (let [temp-root (str (System/getProperty "java.io.tmpdir")
                        "/bisql-crud-test-suppress-"
                        (System/nanoTime))
@@ -661,11 +661,10 @@
                                                  {:column_name "email"
                                                   :data_type "text"
                                                   :is_identity "NO"
-                                                  :is_nullable "NO"
+                                                 :is_nullable "NO"
                                                   :column_default nil}]}
                      :templates []}
-        _result (crud/write-crud-files! crud-result {:output-root temp-root
-                                                     :suppress-unused-public-var? true})
+        _result (crud/write-crud-files! crud-result {:output-root temp-root})
         schema-file (io/file temp-root "postgresql/public/users/schema.clj")
         schema-text (slurp schema-file)]
     (is (str/includes? schema-text

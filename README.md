@@ -65,6 +65,9 @@ For local setup, tasks, and dev workflow, see:
 ## Roadmap
 
 - Add Malli integration.
+- Add sentinels for SQL time literals such as `CURRENT_DATE`, `CURRENT_TIME`, and `CURRENT_TIMESTAMP`.
+- Split the CLI into a separate package.
+  - Add `rewrite-clj` as a CLI-side dependency and implement pruning for unused generated vars.
 - Support databases beyond PostgreSQL.
 - Compile analyzed SQL templates into reusable renderer functions for lower runtime overhead.
   - Simplify emitted renderer forms further, especially around branch and loop body handling.
