@@ -112,23 +112,31 @@
   (with-redefs [jdbc/execute-one! (fn [_ds _statement _options]
                                     {:id 42})]
     (binding [validation/*bisql-malli-validation-mode* :when-present]
-      (is (thrown-with-msg?
-           clojure.lang.ExceptionInfo
-           #"Malli validation failed"
-           (adapter/exec! ::datasource
-                          (query-fn 'bisql.adapter-next-jdbc-test 'example-exec-one-with-malli)
-                          {:id "42"}))))))
+      (try
+        (adapter/exec! ::datasource
+                       (query-fn 'bisql.adapter-next-jdbc-test 'example-exec-one-with-malli)
+                       {:id "42"})
+        (is false "expected Malli validation failure")
+        (catch clojure.lang.ExceptionInfo ex
+          (is (re-find #"Malli input validation failed for example.get-by-id\."
+                       (ex-message ex)))
+          (is (= :in (:phase (ex-data ex))))
+          (is (= "example.get-by-id" (:query-name (ex-data ex)))))))))
 
 (deftest exec-validates-output-when-present
   (with-redefs [jdbc/execute-one! (fn [_ds _statement _options]
                                     {:id "42"})]
     (binding [validation/*bisql-malli-validation-mode* :when-present]
-      (is (thrown-with-msg?
-           clojure.lang.ExceptionInfo
-           #"Malli validation failed"
-           (adapter/exec! ::datasource
-                          (query-fn 'bisql.adapter-next-jdbc-test 'example-exec-one-with-malli)
-                          {:id 42}))))))
+      (try
+        (adapter/exec! ::datasource
+                       (query-fn 'bisql.adapter-next-jdbc-test 'example-exec-one-with-malli)
+                       {:id 42})
+        (is false "expected Malli validation failure")
+        (catch clojure.lang.ExceptionInfo ex
+          (is (re-find #"Malli output validation failed for example.get-by-id\."
+                       (ex-message ex)))
+          (is (= :out (:phase (ex-data ex))))
+          (is (= "example.get-by-id" (:query-name (ex-data ex)))))))))
 
 (deftest exec-skips-validation-when-schema-is-missing-in-when-present-mode
   (with-redefs [jdbc/execute-one! (fn [_ds _statement _options]
@@ -141,12 +149,16 @@
 
 (deftest exec-requires-schema-in-strict-mode
   (binding [validation/*bisql-malli-validation-mode* :strict]
-    (is (thrown-with-msg?
-         clojure.lang.ExceptionInfo
-         #"Required Malli schema metadata is missing"
-         (adapter/exec! ::datasource
-                        (query-fn 'bisql.adapter-next-jdbc-test 'example-exec-one-without-malli)
-                        {:id 42})))))
+    (try
+      (adapter/exec! ::datasource
+                     (query-fn 'bisql.adapter-next-jdbc-test 'example-exec-one-without-malli)
+                     {:id 42})
+      (is false "expected missing schema failure")
+      (catch clojure.lang.ExceptionInfo ex
+        (is (re-find #"Required Malli input schema metadata is missing for example.get-by-id\."
+                     (ex-message ex)))
+        (is (= :in (:phase (ex-data ex))))
+        (is (= "example.get-by-id" (:query-name (ex-data ex))))))))
 
 (deftest core-defquery-facade-defines-executable-functions
   (let [captured (atom nil)]

@@ -49,6 +49,29 @@
   [phase]
   (get (validation-mode) phase))
 
+(defn- phase-label
+  [phase]
+  (case phase
+    :in "input"
+    :out "output"
+    (name phase)))
+
+(defn- validation-failure-message
+  [phase query-name humanized]
+  (str "Malli " (phase-label phase) " validation failed"
+       (when query-name
+         (str " for " query-name))
+       "."
+       (when humanized
+         (str " " (pr-str humanized)))))
+
+(defn- missing-schema-message
+  [phase query-name]
+  (str "Required Malli " (phase-label phase) " schema metadata is missing"
+       (when query-name
+         (str " for " query-name))
+       "."))
+
 (defn- resolve-schema-symbol
   [sym]
   (let [resolved-var (if-let [ns-name (namespace sym)]
@@ -89,6 +112,7 @@
 (defn validate-query-data!
   [phase queryish value]
   (let [mode (phase-mode phase)
+        query-name (some-> (meta queryish) :query-name)
         schema-form (schema-for-phase queryish phase)]
     (case mode
       :off
@@ -98,28 +122,30 @@
       (when schema-form
         (let [schema (realized-schema-form schema-form)]
           (when-not (m/validate schema value)
-            (let [explanation (m/explain schema value)]
-              (throw (ex-info "Malli validation failed."
+            (let [explanation (m/explain schema value)
+                  humanized (me/humanize explanation)]
+              (throw (ex-info (validation-failure-message phase query-name humanized)
                               {:phase phase
-                               :query-name (some-> (meta queryish) :query-name)
+                               :query-name query-name
                                :schema-form schema-form
                                :value value
                                :explanation explanation
-                               :humanized (me/humanize explanation)}))))))
+                               :humanized humanized}))))))
 
       :strict
       (if-not schema-form
-        (throw (ex-info "Required Malli schema metadata is missing."
+        (throw (ex-info (missing-schema-message phase query-name)
                         {:phase phase
-                         :query-name (some-> (meta queryish) :query-name)
+                         :query-name query-name
                          :validation-mode mode}))
         (let [schema (realized-schema-form schema-form)]
           (when-not (m/validate schema value)
-            (let [explanation (m/explain schema value)]
-              (throw (ex-info "Malli validation failed."
+            (let [explanation (m/explain schema value)
+                  humanized (me/humanize explanation)]
+              (throw (ex-info (validation-failure-message phase query-name humanized)
                               {:phase phase
-                               :query-name (some-> (meta queryish) :query-name)
+                               :query-name query-name
                                :schema-form schema-form
                                :value value
                                :explanation explanation
-                               :humanized (me/humanize explanation)})))))))))
+                               :humanized humanized})))))))))
