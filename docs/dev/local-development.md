@@ -145,11 +145,12 @@ Then fetch the row again:
 
 Notes:
 
-- SQL resource paths under `test/sql/...` are loaded as `/sql/...`
+- `clj` loads generated SQL from `src/sql/...`
+- `clj -M:test-repl` also makes `test/sql/...` available as `/sql/...`
 - `user_devices` becomes `user-devices` in the generated namespace
 - Use `java.time.*` values for timestamp columns in REPL tests
 - Missing parameters now include the parameter name, for example:
-  `Missing query parameter: inserting.device-type`
+  `Missing query parameter: inserts.device-type`
 
 ## Related Docs
 
