@@ -106,8 +106,6 @@ The source of truth is still the SQL file itself.
 Generated CRUD SQL and handwritten SQL follow the same model.
 Once a SQL file exists under `sql/...`, Bisql can generate matching Clojure functions for it.
 
-See also:
-
-- [SQL File Layout](05-sql-file-layout.md)
-- [CRUD Generation](09-crud-generation.md)
-- [SQL Rendering](06-sql-rendering.md)
+When a SQL declaration includes metadata such as `:cardinality`, `:malli/in`, or
+`:malli/out`, `gen-functions` carries that metadata onto the generated Clojure
+vars as well.

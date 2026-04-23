@@ -86,17 +86,18 @@ pages-dev        Start the shadow-cljs pages dev server on http://localhost:8000
 
 ## REPL Check
 
-Start a REPL with the test classpath:
+Start a REPL:
 
 ```sh
-clj -M:test-repl
+clj
 ```
 
 Then define a datasource and load generated queries:
 
 ```clojure
-(ns user.demo
+(ns sql
   (:require [bisql.core :as bisql]
+            [bisql.validation :as validation]
             [next.jdbc :as jdbc]))
 
 (def ds
@@ -108,7 +109,9 @@ Then define a datasource and load generated queries:
     :user "bisql"
     :password "bisql"}))
 
-(bisql/defquery "/sql/postgresql/public/user_devices/crud.sql")
+(bisql/defquery)
+
+(bisql/set-malli-validation-mode! {:in :strict :out :strict})
 ```
 
 Simple example:
@@ -122,12 +125,13 @@ More advanced example:
 ```clojure
 (sql.postgresql.public.user-devices.crud/upsert-by-user-id-and-device-identifier
  ds
- {:inserting {:user-id 1
-              :device-type "browser"
-              :device-identifier "browser-1"
-              :status "active"
-              :last-seen-at (java.time.OffsetDateTime/parse "2026-04-14T00:00:00Z")}
-  :non-updating-cols {:status true}})
+ {:inserts {:user-id 1
+            :device-type "browser"
+            :device-identifier "browser-1"
+            :status "active"
+            :last-seen-at (java.time.OffsetDateTime/parse "2026-04-14T00:00:00Z")}
+  :updates {:status "active"
+            :last-seen-at (java.time.OffsetDateTime/parse "2026-04-14T00:00:00Z")}})
 ```
 
 Then fetch the row again:
@@ -141,11 +145,12 @@ Then fetch the row again:
 
 Notes:
 
-- SQL resource paths under `test/sql/...` are loaded as `/sql/...`
+- `clj` loads generated SQL from `src/sql/...`
+- `clj -M:test-repl` also makes `test/sql/...` available as `/sql/...`
 - `user_devices` becomes `user-devices` in the generated namespace
 - Use `java.time.*` values for timestamp columns in REPL tests
 - Missing parameters now include the parameter name, for example:
-  `Missing query parameter: inserting.device-type`
+  `Missing query parameter: inserts.device-type`
 
 ## Related Docs
 

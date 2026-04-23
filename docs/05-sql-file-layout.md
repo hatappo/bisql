@@ -27,8 +27,3 @@ This keeps:
 - SQL files easy to find
 - generated CRUD files aligned with schema structure
 - handwritten queries and generated queries in the same shape
-
-See also:
-
-- [Getting Started](03-getting-started.md)
-- [CRUD Generation](09-crud-generation.md)

@@ -89,6 +89,17 @@
     (is (= "SELECT * FROM users WHERE id = /*$id*/1"
            (str/trim (:sql-template result))))))
 
+(deftest analyze-template-supports-namespaced-declarations
+  (let [result (bisql/analyze-template
+                {:query-name "core.example"
+                 :sql-template (str "/*:malli/in [:map {:closed true} [:id int?]] */\n"
+                                    "/*:malli/out [:maybe sql.postgresql.public.users.schema/row] */\n"
+                                    "SELECT * FROM users WHERE id = /*$id*/1")})]
+    (is (= [:map {:closed true} [:id 'int?]]
+           (get-in result [:meta :malli/in])))
+    (is (= [:maybe 'sql.postgresql.public.users.schema/row]
+           (get-in result [:meta :malli/out])))))
+
 (deftest defrender-defines-a-render-function
   (let [result ((query-fn 'sql.core 'example-declarations-valid) {:id 42})]
     (is (= "SELECT * FROM users WHERE id = ?" (:sql result)))
@@ -1142,8 +1153,8 @@
                                           "/*%end */"
                                           "WHERE id = /*$id*/1"])}
                 {:id 42
-                 :items [{:name "display_name" :value "Alice"}
-                         {:name "status" :value "active"}]})]
+                 :items {:display-name "Alice"
+                         :status "active"}})]
     (is (= (str/join "\n"
                      ["UPDATE users"
                       "SET"
@@ -1163,7 +1174,7 @@
                                           "/*%end */"
                                           "WHERE id = /*$id*/1"])}
                 {:id 42
-                 :items [{:name "display_name" :value "Alice"}]})]
+                 :items {:display-name "Alice"}})]
     (is (= (str/join "\n"
                      ["UPDATE users"
                       "SET"
@@ -1183,7 +1194,7 @@
                                           "  /*!item.name*/column_name = /*$item.value*/'sample' AND"
                                           "/*%end */"
                                           "status = /*$status*/'active'"])}
-                {:items [{:name "display_name" :value "Alice"}]
+                {:items {:display-name "Alice"}
                  :status "active"})]
     (is (= (str/join "\n"
                      ["SELECT *"
@@ -1205,12 +1216,12 @@
                                 "WHERE id = /*$id*/1"])
         parsed-template (bisql/parse-template sql-template)
         rendered (bisql/evaluate-renderer parsed-template {:id 42
-                                        :items [{:name "display_name" :value "Alice"}
-                                                {:name "status" :value "active"}]})
+                                                           :items {:display-name "Alice"
+                                                                   :status "active"}})
         result (bisql/render-query {:sql-template sql-template}
                                    {:id 42
-                                    :items [{:name "display_name" :value "Alice"}
-                                            {:name "status" :value "active"}]})]
+                                    :items {:display-name "Alice"
+                                            :status "active"}})]
     (is (= (:sql result) (str/trim (:sql rendered))))
     (is (= (:params result) (:bind-params rendered)))))
 
@@ -1224,12 +1235,12 @@
                                 "WHERE id = /*$id*/1"])
         plan (bisql/renderer-plan (bisql/parse-template sql-template))
         rendered (bisql/evaluate-renderer-plan plan {:id 42
-                                                     :items [{:name "display_name" :value "Alice"}
-                                                             {:name "status" :value "active"}]})
+                                                     :items {:display-name "Alice"
+                                                             :status "active"}})
         result (bisql/render-query {:sql-template sql-template}
                                    {:id 42
-                                    :items [{:name "display_name" :value "Alice"}
-                                            {:name "status" :value "active"}]})]
+                                    :items {:display-name "Alice"
+                                            :status "active"}})]
     (is (= (:sql result) (str/trim (:sql rendered))))
     (is (= (:params result) (:bind-params rendered)))))
 
@@ -1244,12 +1255,12 @@
         parsed-template (bisql/parse-template sql-template)
         renderer (bisql/compile-renderer parsed-template)
         rendered (renderer {:id 42
-                            :items [{:name "display_name" :value "Alice"}
-                                    {:name "status" :value "active"}]})
+                            :items {:display-name "Alice"
+                                    :status "active"}})
         result (bisql/render-query {:sql-template sql-template}
                                    {:id 42
-                                    :items [{:name "display_name" :value "Alice"}
-                                            {:name "status" :value "active"}]})]
+                                    :items {:display-name "Alice"
+                                            :status "active"}})]
     (is (= (:sql result) (str/trim (:sql rendered))))
     (is (= (:params result) (:bind-params rendered)))))
 
@@ -1348,6 +1359,60 @@
            (ex-message error)))
     (is (= :rows (:parameter (ex-data error))))
     (is (= :row (:item (ex-data error))))))
+
+(deftest render-query-upsert-can-fall-back-to-do-nothing-when-updates-is-nil
+  (let [result (bisql/render-query
+                {:sql-template (str/join "\n"
+                                         ["INSERT INTO users (email, status)"
+                                          "VALUES (/*$inserts.email*/'a@example.com', /*$inserts.status*/'active')"
+                                          "ON CONFLICT ON CONSTRAINT users_email_key"
+                                          "/*%if updates */"
+                                          "DO UPDATE"
+                                          "SET"
+                                          "  /*%for item in updates separating , */"
+                                          "    /*!item.name*/column_name = /*$item.value*/'sample'"
+                                          "  /*%end */"
+                                          "/*%else => DO NOTHING */"
+                                          "/*%end */"
+                                          "RETURNING *"])}
+                {:inserts {:email "alice@example.com"
+                           :status "active"}
+                 :updates nil})]
+    (is (= (str/join "\n"
+                     ["INSERT INTO users (email, status)"
+                      "VALUES (?, ?)"
+                      "ON CONFLICT ON CONSTRAINT users_email_key"
+                      "DO NOTHING"
+                      "RETURNING *"])
+           (:sql result)))
+    (is (= ["alice@example.com" "active"] (:params result)))))
+
+(deftest render-query-upsert-still-rejects-empty-updates-map
+  (let [error (try
+                (bisql/render-query
+                 {:sql-template (str/join "\n"
+                                          ["INSERT INTO users (email, status)"
+                                           "VALUES (/*$inserts.email*/'a@example.com', /*$inserts.status*/'active')"
+                                           "ON CONFLICT ON CONSTRAINT users_email_key"
+                                           "/*%if updates */"
+                                           "DO UPDATE"
+                                           "SET"
+                                           "  /*%for item in updates separating , */"
+                                           "    /*!item.name*/column_name = /*$item.value*/'sample'"
+                                           "  /*%end */"
+                                           "/*%else => DO NOTHING */"
+                                           "/*%end */"
+                                           "RETURNING *"])}
+                 {:inserts {:email "alice@example.com"
+                            :status "active"}
+                  :updates {}})
+                nil
+                (catch clojure.lang.ExceptionInfo ex
+                  ex))]
+    (is (= "Empty for block is not allowed in SET clause."
+           (ex-message error)))
+    (is (= :updates (:parameter (ex-data error))))
+    (is (= :item (:item (ex-data error))))))
 (deftest render-query-supports-elseif-branch
   (let [result (bisql/render-query
                 {:sql-template (str/join "\n"

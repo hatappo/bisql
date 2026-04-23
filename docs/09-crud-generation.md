@@ -3,6 +3,10 @@
 Bisql can generate typical index-friendly CRUD SQL from the database schema with
 `gen-crud`.
 
+Alongside `crud.sql`, Bisql also generates a sibling `schema.clj` file for each
+table. These generated schema namespaces are currently used to attach
+`:malli/in` and `:malli/out` declarations to generated CRUD queries.
+
 > [!TIP]+
 > In practice, you will usually also want the corresponding function namespace
 > files, so `gen-crud-and-functions` is typically the more convenient command.
@@ -38,6 +42,23 @@ Generated `*-starting-with` queries are intentionally conservative:
 
 This keeps the generated queries aligned with ordinary index-friendly prefix search.
 
+## Generated Schema Files
+
+For each generated CRUD SQL file, Bisql also writes a colocated schema namespace:
+
+- `src/sql/postgresql/public/users/crud.sql`
+- `src/sql/postgresql/public/users/schema.clj`
+
+The schema file contains table-level base schemas such as:
+
+- `row`
+- `insert`
+- `update`
+
+Generated CRUD SQL then refers to those definitions through declaration comments
+like `/*:malli/in ... */` and `/*:malli/out ... */`, composing simple Malli
+forms inline where that keeps the generated schema file smaller.
+
 ## Why This Exists
 
 The goal is not to hide SQL.
@@ -53,28 +74,41 @@ That means:
 
 Generated upserts use PostgreSQL `ON CONFLICT ... DO UPDATE`.
 
-Bisql also supports generated update policy control via:
+Generated update and upsert templates now use map-shaped params:
 
-- `:inserting`
-- `:non-updating-cols`
+- `update-by-*`
+  - `:where`
+  - `:updates`
+- `upsert-by-*`
+  - `:inserts`
+  - `:updates`
 
-This allows templates such as:
+For example, a generated update template uses a `for` block in `SET`:
 
 ```sql
-SET status = /*%if non-updating-cols.status */ t.status /*%else => EXCLUDED.status */ /*%end */
+UPDATE users
+SET
+/*%for item in updates separating , */
+  /*!item.name*/created_at = /*$item.value*/CURRENT_TIMESTAMP
+/*%end */
+WHERE id = /*$where.id*/1
+RETURNING *
 ```
 
-In practice:
+This allows:
 
-- `:inserting` lists the values you want to provide for the insert path
-- `:non-updating-cols` names columns that should be used on insert, but should not be updated on conflict
+- partial updates without supplying every updatable column
+- updating columns that also appear in the predicate
+- generated SQL that still remains ordinary executable SQL templates
 
-When a column is listed in `:non-updating-cols`, the generated upsert keeps the
-existing table value on `DO UPDATE` instead of taking the value from
-`EXCLUDED`. A typical example is `created_at`, which is usually set on insert
-but should remain unchanged on later updates.
+Generated upserts follow the same idea:
 
-See also:
+- `:inserts` contains the insert path values
+- `:updates` contains the conflict update assignments
 
-- [Getting Started](03-getting-started.md)
-- [Bisql Adapters](12-bisql-adapters.md)
+If `:updates` is `nil`, the generated upsert renders `DO NOTHING`.
+If `:updates` is an empty map, rendering still fails because an empty `SET`
+clause is not allowed.
+
+If you need special `EXCLUDED` expressions or more unusual conflict behavior,
+write a custom SQL template instead.

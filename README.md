@@ -42,6 +42,16 @@ The full Installation guide lives here:
 - [docs/02-installation.md](docs/02-installation.md)
 - [https://hatappo.github.io/bisql/docs/installation/](https://hatappo.github.io/bisql/docs/installation/)
 
+## Malli Validation
+
+- Generated CRUD SQL carries `:malli/in` and `:malli/out` declaration metadata.
+- When generated query functions keep `:malli/in` and `:malli/out` metadata, Bisql can run Malli validation transparently during query execution.
+
+The full guide lives here:
+
+- [docs/12-malli-validation.md](docs/12-malli-validation.md)
+- [https://hatappo.github.io/bisql/docs/malli-validation/](https://hatappo.github.io/bisql/docs/malli-validation/)
+
 ## Quick Example
 
 See the end-to-end sample project here:
@@ -62,9 +72,14 @@ For local setup, tasks, and dev workflow, see:
 
 - [docs/dev-local-development.md](docs/dev-local-development.md)
 
-## Roadmap
+## Ideas Under Consideration
 
-- Add Malli integration.
+- ✅️ ~~Support a very small expression language to improve expressiveness in `if` conditions.~~
+- ✅️ ~~Add Malli integration.~~
+- Split Malli validation dependencies out from the main runtime package.
+- Add sentinels for SQL time literals such as `CURRENT_DATE`, `CURRENT_TIME`, and `CURRENT_TIMESTAMP`.
+- Split the CLI into a separate package.
+  - Add `rewrite-clj` as a CLI-side dependency and implement pruning for unused generated vars.
 - Support databases beyond PostgreSQL.
 - Compile analyzed SQL templates into reusable renderer functions for lower runtime overhead.
   - Simplify emitted renderer forms further, especially around branch and loop body handling.

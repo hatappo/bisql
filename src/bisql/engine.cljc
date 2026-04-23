@@ -100,7 +100,7 @@
 
 (defn- parse-declaration-block
   [sql]
-  (let [pattern #"(?s)^/\*:([A-Za-z0-9\-]+)\s*\n?(.*?)\*/"
+  (let [pattern #"(?s)^/\*:([A-Za-z0-9\-/]+)\s*\n?(.*?)\*/"
         matcher (volatile! (regex-matcher pattern sql))]
     (when (regex-find @matcher)
       {:directive (some-> (regex-group @matcher 1) keyword)
@@ -397,6 +397,44 @@
       (throw (ex-info (str "Missing query parameter: " parameter-name)
                       {:parameter (parameter-key parameter-name)})))
     value))
+
+(def ^:private sql-identifier-pattern
+  #"[A-Za-z_][A-Za-z0-9_]*")
+
+(defn- map-key->sql-identifier
+  [collection-name k]
+  (let [raw-name (cond
+                   (keyword? k) (name k)
+                   (symbol? k) (name k)
+                   (string? k) k
+                   :else (throw (ex-info "For block map keys must be keywords, symbols, or strings."
+                                         {:parameter (parameter-key collection-name)
+                                          :key k
+                                          :type (type k)})))
+        sql-name (str/replace raw-name "-" "_")]
+    (when-not (re-matches sql-identifier-pattern sql-name)
+      (throw (ex-info "For block map keys must normalize to valid SQL identifiers."
+                      {:parameter (parameter-key collection-name)
+                       :key k
+                       :normalized sql-name})))
+    sql-name))
+
+(defn normalize-for-items
+  [collection-name items]
+  (cond
+    (sequential? items)
+    items
+
+    (map? items)
+    (mapv (fn [[k v]]
+            {:name (map-key->sql-identifier collection-name k)
+             :value v})
+          items)
+
+    :else
+    (throw (ex-info "For block requires a sequential or map value."
+                    {:parameter (parameter-key collection-name)
+                     :value items}))))
 
 (defn- default-value?
   [value]
@@ -1035,11 +1073,8 @@
   (let [collection-name (:collection-name step)
         item-name (:item-name step)
         separator (:separator step)
-        items (parameter-value template-params collection-name)]
-    (when-not (sequential? items)
-      (throw (ex-info "For block requires a sequential value."
-                      {:parameter (parameter-key collection-name)
-                       :value items})))
+        items (normalize-for-items collection-name
+                                   (parameter-value template-params collection-name))]
     (if (seq items)
       [(reduce (fn [current-state [idx item]]
                  (let [body-params (assoc template-params (keyword item-name) item)
@@ -1303,10 +1338,7 @@
                                                     body-bind-params-sym
                                                     body-params-sym)]
     `(let [~items-sym (~(var parameter-value) ~params-sym ~collection-name)]
-       (when-not (sequential? ~items-sym)
-         (throw (ex-info "For block requires a sequential value."
-                         {:parameter (~(var parameter-key) ~collection-name)
-                          :value ~items-sym})))
+       (let [~items-sym (~(var normalize-for-items) ~collection-name ~items-sym)]
        (if (seq ~items-sym)
          (do
            (doseq [[~idx-sym ~item-sym] (map-indexed vector ~items-sym)]
@@ -1339,7 +1371,7 @@
              (throw (ex-info "Empty for block is not allowed in VALUES clause."
                              {:parameter (~(var parameter-key) ~collection-name)
                               :item (keyword ~item-name)})))
-           true)))))
+           true))))))
 
 (defn- emit-render-plan-step-form
   [step out-sym bind-params-sym params-sym skip-leading-operator-sym]

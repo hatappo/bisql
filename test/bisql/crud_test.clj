@@ -108,15 +108,16 @@
       (is (contains? names "crud.update-by-user-id-and-role-code"))
       (is (contains? names "crud.delete-by-user-id-and-device-identifier"))
       (is (contains? names "crud.delete-by-user-id-and-role-code"))
-      (testing "insert template excludes identity columns"
+      (testing "insert template includes primary key columns"
         (let [template (some #(when (and (= "orders" (:table %))
                                          (= "crud.insert" (:name %)))
                                 %)
                              templates)]
           (is (= "crud.insert" (:query-name template)))
-          (is (= ["user_id" "order_number" "state" "total_amount" "created_at"]
+          (is (= ["id" "user_id" "order_number" "state" "total_amount" "created_at"]
                  (:columns template)))
           (is (= (str "INSERT INTO orders (\n"
+                      "  id,\n"
                       "  user_id,\n"
                       "  order_number,\n"
                       "  state,\n"
@@ -124,6 +125,7 @@
                       "  created_at\n"
                       ")\n"
                       "VALUES (\n"
+                      "  /*$id*/1,\n"
                       "  /*$user-id*/1,\n"
                       "  /*$order-number*/'sample',\n"
                       "  /*$state*/'sample',\n"
@@ -138,10 +140,15 @@
                                 %)
                              templates)]
           (is (= "crud.insert-many" (:query-name template)))
-          (is (= {:cardinality :many} (:meta template)))
-          (is (= ["user_id" "order_number" "state" "total_amount" "created_at"]
+          (is (= :many (get-in template [:meta :cardinality])))
+          (is (= [:map {:closed true} [:rows [:sequential 'sql.postgresql.public.orders.schema/insert]]]
+                 (get-in template [:meta :malli/in])))
+          (is (= [:sequential 'sql.postgresql.public.orders.schema/row]
+                 (get-in template [:meta :malli/out])))
+          (is (= ["id" "user_id" "order_number" "state" "total_amount" "created_at"]
                  (:columns template)))
           (is (= (str "INSERT INTO orders (\n"
+                      "  id,\n"
                       "  user_id,\n"
                       "  order_number,\n"
                       "  state,\n"
@@ -151,6 +158,7 @@
                       "VALUES\n"
                       "/*%for row in rows separating , */\n"
                       "(\n"
+                      "  /*$row.id*/1,\n"
                       "  /*$row.user-id*/1,\n"
                       "  /*$row.order-number*/'sample',\n"
                       "  /*$row.state*/'sample',\n"
@@ -160,65 +168,90 @@
                       "/*%end */\n"
                       "RETURNING *")
                  (:sql-template template)))))
-      (testing "upsert template uses inserting bindings and non-updating-cols guards"
+      (testing "upsert template uses inserts and updates maps"
         (let [template (some #(when (and (= "users" (:table %))
                                          (= "crud.upsert-by-id" (:name %)))
                                 %)
                              templates)]
-          (is (= {:cardinality :one} (:meta template)))
-          (is (= ["email" "display_name" "status"] (:set-columns template)))
-          (is (= (str "INSERT INTO users AS t (\n"
+          (is (= :one (get-in template [:meta :cardinality])))
+          (is (= [:map
+                  {:closed true}
+                  [:inserts 'sql.postgresql.public.users.schema/insert]
+                  [:updates [:maybe 'sql.postgresql.public.users.schema/update]]]
+                 (get-in template [:meta :malli/in])))
+          (is (= 'sql.postgresql.public.users.schema/row
+                 (get-in template [:meta :malli/out])))
+          (is (= ["id" "email" "display_name" "status"] (:set-columns template)))
+          (is (= (str "INSERT INTO users (\n"
+                      "  id,\n"
                       "  email,\n"
                       "  display_name,\n"
                       "  status\n"
                       ")\n"
                       "VALUES (\n"
-                      "  /*$inserting.email*/'user@example.com',\n"
-                      "  /*$inserting.display-name*/'sample',\n"
-                      "  /*$inserting.status*/'sample'\n"
+                      "  /*$inserts.id*/1,\n"
+                      "  /*$inserts.email*/'user@example.com',\n"
+                      "  /*$inserts.display-name*/'sample',\n"
+                      "  /*$inserts.status*/'sample'\n"
                       ")\n"
                       "ON CONFLICT ON CONSTRAINT users_pkey\n"
+                      "/*%if updates */\n"
                       "DO UPDATE\n"
-                      "SET email        = /*%if non-updating-cols.email */        t.email        /*%else => EXCLUDED.email */ /*%end*/\n"
-                      "  , display_name = /*%if non-updating-cols.display-name */ t.display_name /*%else => EXCLUDED.display_name */ /*%end*/\n"
-                      "  , status       = /*%if non-updating-cols.status */       t.status       /*%else => EXCLUDED.status */ /*%end*/\n"
+                      "SET\n"
+                      "  /*%for item in updates separating , */\n"
+                      "    /*!item.name*/status = /*$item.value*/'sample'\n"
+                      "  /*%end */\n"
+                      "/*%else => DO NOTHING */\n"
+                      "/*%end */\n"
                       "RETURNING *")
                  (:sql-template template)))))
-      (testing "upsert uses the same non-updating-cols guard for composite keys"
+      (testing "upsert uses the same inserts and updates shape for composite keys"
         (let [template (some #(when (and (= "user_roles" (:table %))
                                          (= "crud.upsert-by-user-id-and-role-code" (:name %)))
                                 %)
                              templates)]
-          (is (= ["granted_at" "granted_by"] (:set-columns template)))
-          (is (= (str "INSERT INTO user_roles AS t (\n"
+          (is (= ["user_id" "role_code" "granted_at" "granted_by"]
+                 (:set-columns template)))
+          (is (= (str "INSERT INTO user_roles (\n"
                       "  user_id,\n"
                       "  role_code,\n"
                       "  granted_at,\n"
                       "  granted_by\n"
                       ")\n"
                       "VALUES (\n"
-                      "  /*$inserting.user-id*/1,\n"
-                      "  /*$inserting.role-code*/'sample',\n"
-                      "  /*$inserting.granted-at*/CURRENT_TIMESTAMP,\n"
-                      "  /*$inserting.granted-by*/1\n"
+                      "  /*$inserts.user-id*/1,\n"
+                      "  /*$inserts.role-code*/'sample',\n"
+                      "  /*$inserts.granted-at*/CURRENT_TIMESTAMP,\n"
+                      "  /*$inserts.granted-by*/1\n"
                       ")\n"
                       "ON CONFLICT ON CONSTRAINT user_roles_pkey\n"
+                      "/*%if updates */\n"
                       "DO UPDATE\n"
-                      "SET granted_at = /*%if non-updating-cols.granted-at */ t.granted_at /*%else => EXCLUDED.granted_at */ /*%end*/\n"
-                      "  , granted_by = /*%if non-updating-cols.granted-by */ t.granted_by /*%else => EXCLUDED.granted_by */ /*%end*/\n"
+                      "SET\n"
+                      "  /*%for item in updates separating , */\n"
+                      "    /*!item.name*/granted_by = /*$item.value*/1\n"
+                      "  /*%end */\n"
+                      "/*%else => DO NOTHING */\n"
+                      "/*%end */\n"
                       "RETURNING *")
                  (:sql-template template)))))
-      (testing "update template uses plain bind variables"
+      (testing "update template uses where and updates maps"
         (let [template (some #(when (and (= "users" (:table %))
                                          (= "crud.update-by-id" (:name %)))
                                 %)
                              templates)]
-          (is (= ["email" "display_name" "status"] (:set-columns template)))
+          (is (= ["id" "email" "display_name" "status"] (:set-columns template)))
+          (is (= [:map
+                  {:closed true}
+                  [:where [:map {:closed true} [:id 'int?]]]
+                  [:updates 'sql.postgresql.public.users.schema/update]]
+                 (get-in template [:meta :malli/in])))
           (is (= (str "UPDATE users\n"
-                      "SET email = /*$email*/'user@example.com'\n"
-                      "  , display_name = /*$display-name*/'sample'\n"
-                      "  , status = /*$status*/'sample'\n"
-                      "WHERE id = /*$id*/1\n"
+                      "SET\n"
+                      "/*%for item in updates separating , */\n"
+                      "  /*!item.name*/status = /*$item.value*/'sample'\n"
+                      "/*%end */\n"
+                      "WHERE id = /*$where.id*/1\n"
                       "RETURNING *")
                  (:sql-template template)))))
       (testing "left-prefix list query keeps natural order and limit"
@@ -236,7 +269,7 @@
                                                (= "crud.count" (:name %)))
                                       %)
                                    templates)
-              count-by-state-template (some #(when (and (= "orders" (:table %))
+          count-by-state-template (some #(when (and (= "orders" (:table %))
                                                         (= "crud.count-by-state" (:name %)))
                                                %)
                                             templates)
@@ -246,7 +279,11 @@
                                                            templates)]
           (is (= "crud.count" (:query-name count-template)))
           (is (= [] (:columns count-template)))
-          (is (= {:cardinality :one} (:meta count-template)))
+          (is (= :one (get-in count-template [:meta :cardinality])))
+          (is (= [:map {:closed true}]
+                 (get-in count-template [:meta :malli/in])))
+          (is (= [:map {:closed true} [:count 'int?]]
+                 (get-in count-template [:meta :malli/out])))
           (is (= "SELECT COUNT(*) AS count FROM user_roles"
                  (:sql-template count-template)))
           (is (= (str "SELECT COUNT(*) AS count FROM orders\n"
@@ -331,13 +368,15 @@
                       "WHERE user_id = /*$user-id*/1\n"
                       "  AND device_identifier = /*$device-identifier*/'sample'")
                  (:sql-template get-template)))
-          (is (= ["device_type" "status" "last_seen_at"] (:set-columns update-template)))
+          (is (= ["id" "user_id" "device_type" "device_identifier" "status" "last_seen_at"]
+                 (:set-columns update-template)))
           (is (= (str "UPDATE user_devices\n"
-                      "SET device_type = /*$device-type*/'sample'\n"
-                      "  , status = /*$status*/'sample'\n"
-                      "  , last_seen_at = /*$last-seen-at*/CURRENT_TIMESTAMP\n"
-                      "WHERE user_id = /*$user-id*/1\n"
-                      "  AND device_identifier = /*$device-identifier*/'sample'\n"
+                      "SET\n"
+                      "/*%for item in updates separating , */\n"
+                      "  /*!item.name*/last_seen_at = /*$item.value*/CURRENT_TIMESTAMP\n"
+                      "/*%end */\n"
+                      "WHERE user_id = /*$where.user-id*/1\n"
+                      "  AND device_identifier = /*$where.device-identifier*/'sample'\n"
                       "RETURNING *")
                  (:sql-template update-template)))
           (is (= (str "DELETE FROM user_devices\n"
@@ -413,12 +452,15 @@
                       "WHERE user_id = /*$user-id*/1\n"
                       "  AND role_code = /*$role-code*/'sample'")
                  (:sql-template get-template)))
-          (is (= ["granted_at" "granted_by"] (:set-columns update-template)))
+          (is (= ["user_id" "role_code" "granted_at" "granted_by"]
+                 (:set-columns update-template)))
           (is (= (str "UPDATE user_roles\n"
-                      "SET granted_at = /*$granted-at*/CURRENT_TIMESTAMP\n"
-                      "  , granted_by = /*$granted-by*/1\n"
-                      "WHERE user_id = /*$user-id*/1\n"
-                      "  AND role_code = /*$role-code*/'sample'\n"
+                      "SET\n"
+                      "/*%for item in updates separating , */\n"
+                      "  /*!item.name*/granted_by = /*$item.value*/1\n"
+                      "/*%end */\n"
+                      "WHERE user_id = /*$where.user-id*/1\n"
+                      "  AND role_code = /*$where.role-code*/'sample'\n"
                       "RETURNING *")
                  (:sql-template update-template)))
           (is (= (str "DELETE FROM user_roles\n"
@@ -519,19 +561,116 @@
                        (System/nanoTime))
         crud-result {:dialect "postgresql"
                      :schema "public"
+                     :columns-by-table {"users" [{:column_name "id"
+                                                  :data_type "bigint"
+                                                  :is_identity "YES"
+                                                  :is_nullable "NO"
+                                                  :column_default nil}
+                                                 {:column_name "email"
+                                                  :data_type "text"
+                                                  :is_identity "NO"
+                                                  :is_nullable "NO"
+                                                  :column_default nil}
+                                                 {:column_name "created_at"
+                                                  :data_type "timestamp with time zone"
+                                                  :is_identity "NO"
+                                                  :is_nullable "NO"
+                                                  :column_default "CURRENT_TIMESTAMP"}]}
                      :templates [{:table "users"
                                   :name "crud.get-by-id"
-                                  :meta {:cardinality :one}
+                                  :kind :get
+                                  :columns ["id"]
+                                  :meta {:cardinality :one
+                                         :malli/in [:map {:closed true} [:id 'int?]]
+                                         :malli/out [:maybe 'sql.postgresql.public.users.schema/row]}
                                   :sql-template "SELECT * FROM users WHERE id = /*$id*/1"}]}
         result (crud/write-crud-files! crud-result {:output-root temp-root})
-        output-file (io/file temp-root "postgresql/public/users/crud.sql")]
+        output-file (io/file temp-root "postgresql/public/users/crud.sql")
+        schema-file (io/file temp-root "postgresql/public/users/schema.clj")]
     (is (.exists output-file))
+    (is (.exists schema-file))
     (is (= (str "/*:name crud.get-by-id */\n"
                 "/*:cardinality :one */\n"
+                "/*:malli/in [:map {:closed true} [:id int?]] */\n"
+                "/*:malli/out [:maybe sql.postgresql.public.users.schema/row] */\n"
                 "SELECT * FROM users WHERE id = /*$id*/1")
            (slurp output-file)))
-    (is (= "postgresql/public/users/crud.sql"
-           (:path (first (:files result)))))))
+    (is (str/includes? (slurp schema-file) "(ns sql.postgresql.public.users.schema"))
+    (is (str/includes? (slurp schema-file)
+                       "(bisql.schema/malli-map-all-entries-strip-default-sentinel insert)"))
+    (is (str/includes? (slurp schema-file) "(def row"))
+    (is (str/includes? (slurp schema-file) "(def insert"))
+    (is (str/includes? (slurp schema-file) "(def update"))
+    (is (str/includes? (slurp schema-file)
+                       "(bisql.schema/malli-map-all-entries-optional insert)"))
+    (is (not (str/includes? (slurp schema-file) "(def get-by-id-in")))
+    (is (= ["postgresql/public/users/crud.sql"
+            "postgresql/public/users/schema.clj"]
+           (mapv :path (:files result))))))
+
+(deftest write-crud-files-can-materialize-derived-schemas
+  (let [temp-root (str (System/getProperty "java.io.tmpdir")
+                       "/bisql-crud-test-no-derive-"
+                       (System/nanoTime))
+        crud-result {:dialect "postgresql"
+                     :schema "public"
+                     :columns-by-table {"users" [{:column_name "id"
+                                                  :data_type "bigint"
+                                                  :is_identity "YES"
+                                                  :is_nullable "NO"
+                                                  :column_default nil}
+                                                 {:column_name "email"
+                                                  :data_type "text"
+                                                  :is_identity "NO"
+                                                  :is_nullable "NO"
+                                                  :column_default nil}
+                                                 {:column_name "created_at"
+                                                  :data_type "timestamp with time zone"
+                                                  :is_identity "NO"
+                                                  :is_nullable "NO"
+                                                  :column_default "CURRENT_TIMESTAMP"}]}
+                     :templates [{:table "users"
+                                  :name "crud.get-by-id"
+                                  :kind :get
+                                  :columns ["id"]
+                                  :meta {:cardinality :one
+                                         :malli/in [:map {:closed true} [:id 'int?]]
+                                         :malli/out [:maybe 'sql.postgresql.public.users.schema/row]}
+                                  :sql-template "SELECT * FROM users WHERE id = /*$id*/1"}]}
+        _result (crud/write-crud-files! crud-result {:output-root temp-root
+                                                     :derive-schemas? false})
+        schema-file (io/file temp-root "postgresql/public/users/schema.clj")
+        schema-text (slurp schema-file)]
+    (is (not (str/includes? schema-text
+                            "malli-map-all-entries-strip-default-sentinel")))
+    (is (not (str/includes? schema-text
+                            "malli-map-all-entries-optional insert")))
+    (is (str/includes? schema-text "(def row"))
+    (is (str/includes? schema-text "(def insert"))
+    (is (str/includes? schema-text "(def update"))))
+
+(deftest write-crud-files-always-suppresses-unused-public-var-in-generated-schemas
+  (let [temp-root (str (System/getProperty "java.io.tmpdir")
+                       "/bisql-crud-test-suppress-"
+                       (System/nanoTime))
+        crud-result {:dialect "postgresql"
+                     :schema "public"
+                     :columns-by-table {"users" [{:column_name "id"
+                                                  :data_type "bigint"
+                                                  :is_identity "YES"
+                                                  :is_nullable "NO"
+                                                  :column_default nil}
+                                                 {:column_name "email"
+                                                  :data_type "text"
+                                                  :is_identity "NO"
+                                                 :is_nullable "NO"
+                                                  :column_default nil}]}
+                     :templates []}
+        _result (crud/write-crud-files! crud-result {:output-root temp-root})
+        schema-file (io/file temp-root "postgresql/public/users/schema.clj")
+        schema-text (slurp schema-file)]
+    (is (str/includes? schema-text
+                       "#_{:clojure-lsp/ignore [:clojure-lsp/unused-public-var]}"))))
 
 (deftest render-declaration-files-groups-queries-into-namespaces
   (let [rendered (define/render-declaration-files {:output-root "test/sql/postgresql/public"})

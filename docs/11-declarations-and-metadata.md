@@ -26,6 +26,17 @@ FROM users
 WHERE id = /*$id*/1
 ```
 
+Namespaced declaration keys are also supported.
+For example:
+
+```sql
+/*:malli/in [:map [:id int?]] */
+/*:malli/out [:maybe sql.postgresql.public.users.schema/row] */
+SELECT *
+FROM users
+WHERE id = /*$id*/1
+```
+
 Rendered result:
 
 ```clojure
@@ -40,6 +51,7 @@ Rendered result:
 - documentation
 - tags
 - cardinality hints
+- `:malli/in` and `:malli/out`
 - project-specific metadata
 
 ## Notes
@@ -52,8 +64,3 @@ This metadata is useful both in rendering output and in generated declaration
 namespaces. Generated query vars also include `:sql/file` and `:sql/line`
 metadata so tooling can keep the SQL source location separate from the generated
 Clojure file location.
-
-See also:
-
-- [SQL Rendering](06-sql-rendering.md)
-- [Rendering Examples](07-rendering-examples.md)

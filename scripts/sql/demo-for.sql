@@ -1,6 +1,6 @@
 UPDATE users
 SET
 /*%for item in items separating , */
-  /*!item.name*/column_name = /*$item.value*/'sample'
+  /*!item.name*/display_name = /*$item.value*/'sample'
 /*%end */
 WHERE id = /*$id*/1

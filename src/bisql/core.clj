@@ -2,6 +2,7 @@
   (:require [bisql.crud :as crud]
             [bisql.define :as define]
             [bisql.query :as query]
+            [bisql.validation :as validation]
             [bisql.adapter.next-jdbc]))
 
 (def load-query
@@ -72,6 +73,15 @@
 
 (def query-function-definitions
   define/query-function-definitions)
+
+(def validation-mode
+  validation/validation-mode)
+
+(def set-malli-validation-mode!
+  validation/set-malli-validation-mode!)
+
+(def phase-validation-mode
+  validation/phase-mode)
 
 (defmacro defrender
   "Defines one rendering function per query found under the current query namespace path,
