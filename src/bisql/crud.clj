@@ -704,12 +704,12 @@
     ("numeric" "real" "double precision") 'number?
     ("text" "character varying" "character") 'string?
     "boolean" 'boolean?
-    "uuid" 'bisql.schema/uuid-value?
-    "date" 'bisql.schema/local-date?
-    "time without time zone" 'bisql.schema/local-time?
-    "time with time zone" 'bisql.schema/offset-time?
-    "timestamp without time zone" 'bisql.schema/local-date-time?
-    "timestamp with time zone" 'bisql.schema/offset-date-time?
+    "uuid" [:fn 'bisql.schema/uuid-value?]
+    "date" [:fn 'bisql.schema/local-date?]
+    "time without time zone" [:fn 'bisql.schema/local-time?]
+    "time with time zone" [:fn 'bisql.schema/offset-time?]
+    "timestamp without time zone" [:fn 'bisql.schema/local-date-time?]
+    "timestamp with time zone" [:fn 'bisql.schema/offset-date-time?]
     "bytea" 'bytes?
     'any?))
 
@@ -734,7 +734,7 @@
 
 (defn- map-schema-form
   [entries]
-  (into [:map] entries))
+  (into [:map {:closed true}] entries))
 
 (defn- schema-var-symbol
   [dialect schema table var-name]
@@ -841,7 +841,7 @@
     (cond
       (= (:kind template) :get) [:maybe row-symbol]
       (= (:kind template) :list) [:sequential row-symbol]
-      (= (:kind template) :count) [:map [:count 'int?]]
+      (= (:kind template) :count) [:map {:closed true} [:count 'int?]]
       (= (:name template) "crud.insert-many") [:sequential row-symbol]
       :else row-symbol)))
 

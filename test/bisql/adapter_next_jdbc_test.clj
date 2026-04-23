@@ -1,5 +1,6 @@
 (ns bisql.adapter-next-jdbc-test
   (:require [bisql.adapter.next-jdbc :as adapter]
+            [bisql.validation :as validation]
             [bisql.core :as bisql]
             [clojure.test :refer [deftest is]]
             [next.jdbc :as jdbc]
@@ -26,6 +27,26 @@
        {:sql-template "SELECT * FROM users WHERE id = /*$id*/1"}
        template-params))
     {:cardinality :many}))
+
+(def example-exec-one-with-malli
+  (with-meta
+    (fn [template-params]
+      (bisql/render-query
+       {:sql-template "SELECT * FROM users WHERE id = /*$id*/1"}
+       template-params))
+    {:cardinality :one
+     :query-name "example.get-by-id"
+     :malli/in '[:map [:id int?]]
+     :malli/out '[:map [:id int?]]}))
+
+(def example-exec-one-without-malli
+  (with-meta
+    (fn [template-params]
+      (bisql/render-query
+       {:sql-template "SELECT * FROM users WHERE id = /*$id*/1"}
+       template-params))
+    {:cardinality :one
+     :query-name "example.get-by-id"}))
 
 (defn- query-fn
   [ns-sym sym]
@@ -86,6 +107,46 @@
       (is (= {:statement ["SELECT * FROM users\nWHERE id = ?" 42]
               :options {:builder-fn rs/as-unqualified-kebab-maps}}
              @captured)))))
+
+(deftest exec-validates-input-when-present
+  (with-redefs [jdbc/execute-one! (fn [_ds _statement _options]
+                                    {:id 42})]
+    (binding [validation/*bisql-malli-validation-mode* :when-present]
+      (is (thrown-with-msg?
+           clojure.lang.ExceptionInfo
+           #"Malli validation failed"
+           (adapter/exec! ::datasource
+                          (query-fn 'bisql.adapter-next-jdbc-test 'example-exec-one-with-malli)
+                          {:id "42"}))))))
+
+(deftest exec-validates-output-when-present
+  (with-redefs [jdbc/execute-one! (fn [_ds _statement _options]
+                                    {:id "42"})]
+    (binding [validation/*bisql-malli-validation-mode* :when-present]
+      (is (thrown-with-msg?
+           clojure.lang.ExceptionInfo
+           #"Malli validation failed"
+           (adapter/exec! ::datasource
+                          (query-fn 'bisql.adapter-next-jdbc-test 'example-exec-one-with-malli)
+                          {:id 42}))))))
+
+(deftest exec-skips-validation-when-schema-is-missing-in-when-present-mode
+  (with-redefs [jdbc/execute-one! (fn [_ds _statement _options]
+                                    {:id 42})]
+    (binding [validation/*bisql-malli-validation-mode* :when-present]
+      (is (= {:id 42}
+             (adapter/exec! ::datasource
+                            (query-fn 'bisql.adapter-next-jdbc-test 'example-exec-one-without-malli)
+                            {:id 42}))))))
+
+(deftest exec-requires-schema-in-strict-mode
+  (binding [validation/*bisql-malli-validation-mode* :strict]
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo
+         #"Required Malli schema metadata is missing"
+         (adapter/exec! ::datasource
+                        (query-fn 'bisql.adapter-next-jdbc-test 'example-exec-one-without-malli)
+                        {:id 42})))))
 
 (deftest core-defquery-facade-defines-executable-functions
   (let [captured (atom nil)]

@@ -62,9 +62,10 @@ For local setup, tasks, and dev workflow, see:
 
 - [docs/dev-local-development.md](docs/dev-local-development.md)
 
-## Roadmap
+## Ideas Under Consideration
 
 - Add Malli integration.
+- Split Malli validation dependencies out from the main runtime package.
 - Add sentinels for SQL time literals such as `CURRENT_DATE`, `CURRENT_TIME`, and `CURRENT_TIMESTAMP`.
 - Split the CLI into a separate package.
   - Add `rewrite-clj` as a CLI-side dependency and implement pruning for unused generated vars.

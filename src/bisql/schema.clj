@@ -7,23 +7,30 @@
 
 (defn local-date?
   [value]
-  (instance? java.time.LocalDate value))
+  (or (instance? java.time.LocalDate value)
+      (instance? java.sql.Date value)))
 
 (defn local-time?
   [value]
-  (instance? java.time.LocalTime value))
+  (or (instance? java.time.LocalTime value)
+      (instance? java.sql.Time value)))
 
 (defn offset-time?
   [value]
-  (instance? java.time.OffsetTime value))
+  (or (instance? java.time.OffsetTime value)
+      (instance? java.sql.Time value)))
 
 (defn local-date-time?
   [value]
-  (instance? java.time.LocalDateTime value))
+  (or (instance? java.time.LocalDateTime value)
+      (instance? java.sql.Timestamp value)
+      (instance? java.util.Date value)))
 
 (defn offset-date-time?
   [value]
-  (instance? java.time.OffsetDateTime value))
+  (or (instance? java.time.OffsetDateTime value)
+      (instance? java.sql.Timestamp value)
+      (instance? java.util.Date value)))
 
 (def malli-default-sentinel
   [:fn #(identical? % query/DEFAULT)])
@@ -37,13 +44,22 @@
 (def malli-offset
   int?)
 
+(defn- split-map-schema-form
+  [schema-form error-message]
+  (let [[tag maybe-opts & rest] schema-form]
+    (when-not (= :map tag)
+      (throw (ex-info error-message
+                      {:schema schema-form})))
+    (if (map? maybe-opts)
+      [tag maybe-opts rest]
+      [tag {} (cons maybe-opts rest)])))
+
 (defn malli-map-all-entries-optional
   [schema-form]
-  (let [[tag & entries] schema-form]
-    (when-not (= :map tag)
-      (throw (ex-info "malli-map-all-entries-optional requires a :map schema form."
-                      {:schema schema-form})))
-    (into [tag]
+  (let [[tag opts entries]
+        (split-map-schema-form schema-form
+                               "malli-map-all-entries-optional requires a :map schema form.")]
+    (into [tag opts]
           (map (fn [entry]
                  (let [[k maybe-opts schema] entry]
                    (if (map? maybe-opts)
@@ -71,11 +87,10 @@
 
 (defn malli-map-all-entries-strip-default-sentinel
   [schema-form]
-  (let [[tag & entries] schema-form]
-    (when-not (= :map tag)
-      (throw (ex-info "malli-map-all-entries-strip-default-sentinel requires a :map schema form."
-                      {:schema schema-form})))
-    (into [tag]
+  (let [[tag opts entries]
+        (split-map-schema-form schema-form
+                               "malli-map-all-entries-strip-default-sentinel requires a :map schema form.")]
+    (into [tag opts]
           (map (fn [entry]
                  (let [[k maybe-opts schema] entry]
                    (if (map? maybe-opts)

@@ -92,10 +92,10 @@
 (deftest analyze-template-supports-namespaced-declarations
   (let [result (bisql/analyze-template
                 {:query-name "core.example"
-                 :sql-template (str "/*:malli/in [:map [:id int?]] */\n"
+                 :sql-template (str "/*:malli/in [:map {:closed true} [:id int?]] */\n"
                                     "/*:malli/out [:maybe sql.postgresql.public.users.schema/row] */\n"
                                     "SELECT * FROM users WHERE id = /*$id*/1")})]
-    (is (= [:map [:id 'int?]]
+    (is (= [:map {:closed true} [:id 'int?]]
            (get-in result [:meta :malli/in])))
     (is (= [:maybe 'sql.postgresql.public.users.schema/row]
            (get-in result [:meta :malli/out])))))

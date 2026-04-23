@@ -1,5 +1,6 @@
 (ns bisql.db-test
   (:require [bisql.adapter.next-jdbc :as adapter]
+            [bisql.core :as bisql]
             [bisql.crud :as crud]
             [clojure.string :as str]
             [clojure.test :refer [deftest is]]
@@ -90,11 +91,13 @@
     (is (not (contains? row :created_at)))))
 
 (deftest adapter-supports-insert-many-with-separating-for-block
-  (let [rows [{:email "separating-1@example.com"
+  (let [rows [{:id bisql/DEFAULT
+               :email "separating-1@example.com"
                :display-name "Separating One"
                :status "active"
                :created-at (java.time.OffsetDateTime/parse "2025-01-01T00:00:00Z")}
-              {:email "separating-2@example.com"
+              {:id bisql/DEFAULT
+               :email "separating-2@example.com"
                :display-name "Separating Two"
                :status "inactive"
                :created-at (java.time.OffsetDateTime/parse "2025-01-02T00:00:00Z")}]

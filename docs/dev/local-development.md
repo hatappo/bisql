@@ -86,17 +86,18 @@ pages-dev        Start the shadow-cljs pages dev server on http://localhost:8000
 
 ## REPL Check
 
-Start a REPL with the test classpath:
+Start a REPL:
 
 ```sh
-clj -M:test-repl
+clj
 ```
 
 Then define a datasource and load generated queries:
 
 ```clojure
-(ns user.demo
+(ns sql
   (:require [bisql.core :as bisql]
+            [bisql.validation :as validation]
             [next.jdbc :as jdbc]))
 
 (def ds
@@ -108,7 +109,9 @@ Then define a datasource and load generated queries:
     :user "bisql"
     :password "bisql"}))
 
-(bisql/defquery "/sql/postgresql/public/user_devices/crud.sql")
+(bisql/defquery)
+
+(bisql/set-malli-validation-mode! {:in :strict :out :strict})
 ```
 
 Simple example:

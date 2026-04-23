@@ -141,7 +141,7 @@
                              templates)]
           (is (= "crud.insert-many" (:query-name template)))
           (is (= :many (get-in template [:meta :cardinality])))
-          (is (= [:map [:rows [:sequential 'sql.postgresql.public.orders.schema/insert]]]
+          (is (= [:map {:closed true} [:rows [:sequential 'sql.postgresql.public.orders.schema/insert]]]
                  (get-in template [:meta :malli/in])))
           (is (= [:sequential 'sql.postgresql.public.orders.schema/row]
                  (get-in template [:meta :malli/out])))
@@ -175,6 +175,7 @@
                              templates)]
           (is (= :one (get-in template [:meta :cardinality])))
           (is (= [:map
+                  {:closed true}
                   [:inserts 'sql.postgresql.public.users.schema/insert]
                   [:updates [:maybe 'sql.postgresql.public.users.schema/update]]]
                  (get-in template [:meta :malli/in])))
@@ -241,7 +242,8 @@
                              templates)]
           (is (= ["id" "email" "display_name" "status"] (:set-columns template)))
           (is (= [:map
-                  [:where [:map [:id 'int?]]]
+                  {:closed true}
+                  [:where [:map {:closed true} [:id 'int?]]]
                   [:updates 'sql.postgresql.public.users.schema/update]]
                  (get-in template [:meta :malli/in])))
           (is (= (str "UPDATE users\n"
@@ -278,9 +280,9 @@
           (is (= "crud.count" (:query-name count-template)))
           (is (= [] (:columns count-template)))
           (is (= :one (get-in count-template [:meta :cardinality])))
-          (is (= [:map]
+          (is (= [:map {:closed true}]
                  (get-in count-template [:meta :malli/in])))
-          (is (= [:map [:count 'int?]]
+          (is (= [:map {:closed true} [:count 'int?]]
                  (get-in count-template [:meta :malli/out])))
           (is (= "SELECT COUNT(*) AS count FROM user_roles"
                  (:sql-template count-template)))
@@ -579,7 +581,7 @@
                                   :kind :get
                                   :columns ["id"]
                                   :meta {:cardinality :one
-                                         :malli/in [:map [:id 'int?]]
+                                         :malli/in [:map {:closed true} [:id 'int?]]
                                          :malli/out [:maybe 'sql.postgresql.public.users.schema/row]}
                                   :sql-template "SELECT * FROM users WHERE id = /*$id*/1"}]}
         result (crud/write-crud-files! crud-result {:output-root temp-root})
@@ -589,7 +591,7 @@
     (is (.exists schema-file))
     (is (= (str "/*:name crud.get-by-id */\n"
                 "/*:cardinality :one */\n"
-                "/*:malli/in [:map [:id int?]] */\n"
+                "/*:malli/in [:map {:closed true} [:id int?]] */\n"
                 "/*:malli/out [:maybe sql.postgresql.public.users.schema/row] */\n"
                 "SELECT * FROM users WHERE id = /*$id*/1")
            (slurp output-file)))
@@ -632,7 +634,7 @@
                                   :kind :get
                                   :columns ["id"]
                                   :meta {:cardinality :one
-                                         :malli/in [:map [:id 'int?]]
+                                         :malli/in [:map {:closed true} [:id 'int?]]
                                          :malli/out [:maybe 'sql.postgresql.public.users.schema/row]}
                                   :sql-template "SELECT * FROM users WHERE id = /*$id*/1"}]}
         _result (crud/write-crud-files! crud-result {:output-root temp-root

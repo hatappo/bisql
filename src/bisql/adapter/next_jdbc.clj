@@ -1,6 +1,7 @@
 (ns bisql.adapter.next-jdbc
   (:require [bisql.define :as define]
             [bisql.query :as query]
+            [bisql.validation :as validation]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs])
   (:import [java.sql Time Timestamp]
@@ -134,15 +135,18 @@
   ([datasource queryish]
    (exec! datasource queryish {}))
   ([datasource queryish template-params]
+   (validation/validate-query-data! :in queryish template-params)
    (let [{:keys [sql params] :as rendered} (rendered-query queryish template-params)
          cardinality (result-cardinality queryish rendered)
-         statement (into [sql] params)]
-     (case cardinality
-       :one (jdbc/execute-one! datasource statement result-set-options)
-       :many (jdbc/execute! datasource statement result-set-options)
-       (throw (ex-info "Unsupported result cardinality."
-                       {:cardinality cardinality
-                        :query queryish}))))))
+         statement (into [sql] params)
+         result (case cardinality
+                  :one (jdbc/execute-one! datasource statement result-set-options)
+                  :many (jdbc/execute! datasource statement result-set-options)
+                  (throw (ex-info "Unsupported result cardinality."
+                                  {:cardinality cardinality
+                                   :query queryish})))]
+     (validation/validate-query-data! :out queryish result)
+     result)))
 
 (defmacro defquery
   "Defines one executable query function per query found in a SQL file or directory."
