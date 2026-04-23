@@ -22,9 +22,3 @@ The minimal intended workflow is:
 
 1. write or generate SQL templates
 2. add a single macro call to your code to turn those SQL templates into Clojure functions
-
-See also:
-
-- [Installation](02-installation.md)
-- [Getting Started](03-getting-started.md)
-- [What is 2-way-SQL](04-what-is-2-way-sql.md)

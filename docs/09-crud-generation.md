@@ -112,8 +112,3 @@ clause is not allowed.
 
 If you need special `EXCLUDED` expressions or more unusual conflict behavior,
 write a custom SQL template instead.
-
-See also:
-
-- [Getting Started](03-getting-started.md)
-- [Bisql Adapters](12-bisql-adapters.md)

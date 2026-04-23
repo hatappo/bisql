@@ -136,8 +136,3 @@ Typical user-facing APIs are:
 
 - `bisql.core/defrender`
 - `bisql.core/defquery`
-
-For lower-level examples, see:
-
-- [Conditional Expressions](08-conditional-expressions.md)
-- [Rendering Examples](07-rendering-examples.md)

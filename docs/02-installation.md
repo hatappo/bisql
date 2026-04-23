@@ -43,8 +43,3 @@ Current assumptions:
 
 - PostgreSQL is the primary target database
 - `next.jdbc` is the default execution adapter
-
-See also:
-
-- [Getting Started](03-getting-started.md)
-- [Bisql Adapters](12-bisql-adapters.md)

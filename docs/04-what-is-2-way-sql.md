@@ -50,8 +50,3 @@ It supports:
 - declaration metadata
 
 Bisql does **not** try to become a full templating language.
-
-See also:
-
-- [SQL Rendering](06-sql-rendering.md)
-- [SQL File Layout](05-sql-file-layout.md)

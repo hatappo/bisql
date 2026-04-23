@@ -129,8 +129,3 @@ Instead, compare parameters:
 > The same reasoning applies to the language itself. It is intentionally much
 > smaller than a general-purpose expression language so that templates stay
 > readable, predictable, and close to executable SQL.
-
-See also:
-
-- [SQL Rendering](06-sql-rendering.md)
-- [Rendering Examples](07-rendering-examples.md)

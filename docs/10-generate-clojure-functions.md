@@ -109,9 +109,3 @@ Once a SQL file exists under `sql/...`, Bisql can generate matching Clojure func
 When a SQL declaration includes metadata such as `:cardinality`, `:malli/in`, or
 `:malli/out`, `gen-functions` carries that metadata onto the generated Clojure
 vars as well.
-
-See also:
-
-- [SQL File Layout](05-sql-file-layout.md)
-- [CRUD Generation](09-crud-generation.md)
-- [SQL Rendering](06-sql-rendering.md)
