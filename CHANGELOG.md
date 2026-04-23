@@ -1,6 +1,8 @@
 # Changelog
 
-## 0.4.0 - Unreleased
+## Unreleased
+
+## 0.4.0 - 2026-04-24
 
 - Added generated Malli schema metadata for CRUD SQL and adjacent schema files.
 - Added runtime Malli validation for query execution with configurable validation modes.
