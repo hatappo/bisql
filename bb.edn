@@ -13,7 +13,7 @@
           (defn required-version-arg [args]
             (or (first args)
                 (throw (ex-info "Version argument is required."
-                                {:example "bb release-check 0.3.0"}))))
+                                {:example "bb release-check 0.4.0"}))))
           (defn build-task [subcommand]
             (apply clojure "-T:build" subcommand (normalize-build-args *command-line-args*))))
 
