@@ -29,6 +29,9 @@
 (def github-url
   "https://github.com/hatappo/bisql")
 
+(def deepwiki-url
+  "https://deepwiki.com/hatappo/bisql")
+
 (declare example-by-id
          load-example!
          rerender!
@@ -619,8 +622,19 @@
     [:a.site-link
      {:href github-url
       :target "_blank"
-      :rel "noreferrer"}
-     "GitHub"]]])
+      :rel "noreferrer"
+      :aria-label "GitHub"
+      :title "GitHub"}
+     [:img.site-link-icon {:src (str (root-path) "img/share/github.svg")
+                           :alt ""}]]
+    [:a.site-link
+     {:href deepwiki-url
+      :target "_blank"
+      :rel "noreferrer"
+      :aria-label "Deepwiki"
+      :title "Deepwiki"}
+     [:img.site-link-icon {:src (str (root-path) "img/share/deepwiki.png")
+                           :alt ""}]]]])
 
 (defn pager-nav
   [{:keys [previous next previous-value next-value action finished-top finished-bottom finished-aria-label]}]

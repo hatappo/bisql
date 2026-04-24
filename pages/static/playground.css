@@ -91,6 +91,12 @@ body {
   outline-offset: 1px;
 }
 
+.site-link-icon {
+  display: block;
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
 .hero,
 .sidebar,
 .toolbar,
