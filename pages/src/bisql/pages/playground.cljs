@@ -340,12 +340,27 @@
     (when-not (= current text)
       (.setValue view text))))
 
+(defn- docs-code-language
+  [^js code-node ^js pre-node]
+  (let [code-class (or (some-> code-node .-className str) "")
+        pre-class (or (some-> pre-node .-className str) "")
+        code-data-lang (some-> code-node (.getAttribute "data-lang"))
+        pre-data-lang (some-> pre-node (.getAttribute "data-lang"))
+        language (or (some->> (re-find #"language-([A-Za-z0-9_-]+)" code-class)
+                              second)
+                     (some->> (re-find #"language-([A-Za-z0-9_-]+)" pre-class)
+                              second)
+                     (some->> (re-find #"(?:^|\s)lang-([A-Za-z0-9_-]+)(?:\s|$)" code-class)
+                              second)
+                     (some->> (re-find #"(?:^|\s)lang-([A-Za-z0-9_-]+)(?:\s|$)" pre-class)
+                              second)
+                     code-data-lang
+                     pre-data-lang)]
+    (some-> language str/lower-case)))
+
 (defn docs-code-mode
-  [^js code-node]
-  (let [class-name (or (.-className code-node) "")
-        language (some->> (re-find #"language-([A-Za-z0-9_-]+)" class-name)
-                          second
-                          str/lower-case)]
+  [^js code-node ^js pre-node]
+  (let [language (docs-code-language code-node pre-node)]
     (case language
       ("clj" "clojure" "edn") "clojure"
       ("sql") "text/x-sql"
@@ -354,11 +369,12 @@
 
 (defn highlight-docs-code-blocks!
   [host]
-  (when-let [^js run-mode (some-> js/window .-CodeMirror .-runMode)]
+  (when-let [^js run-mode (some-> (aget js/window "CodeMirror")
+                                  (aget "runMode"))]
     (doseq [^js code-node (array-seq (.querySelectorAll host "pre code"))]
       (let [source (or (.-textContent code-node) "")
             pre-node (.-parentNode code-node)
-            mode (docs-code-mode code-node)]
+            mode (docs-code-mode code-node pre-node)]
         (when mode
           (.add (.-classList code-node) "cm-s-default")
           (when pre-node
