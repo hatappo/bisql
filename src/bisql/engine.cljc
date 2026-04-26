@@ -398,6 +398,10 @@
                       {:parameter (parameter-key parameter-name)})))
     value))
 
+(defn parameter-missing?
+  [template-params parameter-name]
+  (= missing (resolved-parameter-value template-params parameter-name)))
+
 (def ^:private sql-identifier-pattern
   #"[A-Za-z_][A-Za-z0-9_]*")
 
@@ -550,11 +554,18 @@
    :params []})
 
 (defn render-variable
-  [template-params sigil parameter-name collection?]
-  (case sigil
-    "$" (render-bind-variable template-params parameter-name collection?)
-    "^" (render-literal-variable template-params parameter-name)
-    "!" (render-raw-variable template-params parameter-name)))
+  ([template-params sigil parameter-name collection?]
+   (render-variable template-params sigil parameter-name collection? nil))
+  ([template-params sigil parameter-name collection? default-sql]
+   (if (and (= sigil "$")
+            (some? default-sql)
+            (parameter-missing? template-params parameter-name))
+     {:sql default-sql
+      :params []}
+     (case sigil
+       "$" (render-bind-variable template-params parameter-name collection?)
+       "^" (render-literal-variable template-params parameter-name)
+       "!" (render-raw-variable template-params parameter-name)))))
 
 (defn variable-context
   [parameter-name sigil collection?]
@@ -904,6 +915,7 @@
      :sigil (:sigil node)
      :parameter-name (:parameter-name node)
      :collection? (:collection? node)
+     :default-sql (:default-sql node)
      :context (:context node)
      :statement-kind (:statement-kind node)}
 
@@ -941,9 +953,35 @@
             branch))
         branches))
 
+(defn- parse-variable-directive
+  [matcher]
+  (let [sigil (regex-group matcher 1)
+        raw-body (str/trim (regex-group matcher 2))
+        parts (str/split raw-body #"\s+")
+        parameter-name (first parts)
+        modifiers (set (rest parts))]
+    (when (str/blank? raw-body)
+      (throw (ex-info "Variable comment requires a parameter name."
+                      {})))
+    (when-not (re-matches #"[A-Za-z0-9\-\.]+" parameter-name)
+      (throw (ex-info "Invalid variable parameter name."
+                      {:parameter-name parameter-name})))
+    (when-let [unsupported (first (remove #{"default-to"} modifiers))]
+      (throw (ex-info "Unsupported variable comment modifier."
+                      {:parameter (parameter-key parameter-name)
+                       :modifier unsupported})))
+    (when (and (contains? modifiers "default-to")
+               (not= sigil "$"))
+      (throw (ex-info "default-to is only supported for bind variables."
+                      {:parameter (parameter-key parameter-name)
+                       :sigil sigil})))
+    {:sigil sigil
+     :parameter-name parameter-name
+     :default-to? (contains? modifiers "default-to")}))
+
 (defn- parse-variable-nodes
   [sql]
-  (let [matcher (volatile! (regex-matcher #"/\*([\$\^\!])([A-Za-z0-9\-\.]+)\*/" sql))
+  (let [matcher (volatile! (regex-matcher #"/\*([\$\^\!])([^*]*?)\*/" sql))
         length (count sql)]
     (loop [cursor 0
            nodes []]
@@ -954,8 +992,6 @@
                  :sql (subs sql cursor)}))
         (let [start (regex-start @matcher)
               end (regex-end @matcher)
-              sigil (regex-group @matcher 1)
-              parameter-name (regex-group @matcher 2)
               sample-start end
               nodes (cond-> nodes
                       (< cursor start)
@@ -967,7 +1003,8 @@
                    (conj nodes
                          {:op :text
                           :sql (subs sql start end)}))
-            (let [collection? (and (= sigil "$")
+            (let [{:keys [sigil parameter-name default-to?]} (parse-variable-directive @matcher)
+                  collection? (and (= sigil "$")
                                    (= (.charAt sql sample-start) \())
                   sample-end (cond
                                (= sigil "!")
@@ -979,7 +1016,9 @@
                            {:op :variable
                             :sigil sigil
                             :parameter-name parameter-name
-                            :collection? collection?})))))))))
+                            :collection? collection?
+                            :default-sql (when default-to?
+                                           (subs sql sample-start sample-end))})))))))))
 
 (defn append-fragment!
   [out accumulated-bind-params {:keys [sql bind-params]}]
@@ -1039,6 +1078,7 @@
   (let [parameter-name (:parameter-name step)
         sigil (:sigil step)
         collection? (:collection? step)
+        default-sql (:default-sql step)
         context (variable-context parameter-name sigil collection?)
         state (if skip-leading-operator?
                 (update state :sql remove-trailing-clause-keyword-from-sql)
@@ -1046,7 +1086,7 @@
     (try
       [(append-render-fragment state
                                (bind-fragment
-                                (render-variable template-params sigil parameter-name collection?)))
+                                (render-variable template-params sigil parameter-name collection? default-sql)))
        false]
       (catch #?(:clj clojure.lang.ExceptionInfo :cljs :default) ex
         (throw (ex-info (ex-message ex)
@@ -1175,64 +1215,70 @@
        false)))
 
 (defn- emit-bind-variable-step-form
-  [parameter-name collection? out-sym bind-params-sym params-sym]
-  (if collection?
-    `(let [value# (~(var parameter-value) ~params-sym ~parameter-name)]
-       (when (identical? value# DEFAULT)
-         (throw (ex-info "DEFAULT is not allowed in collection binding."
-                         {:parameter (~(var parameter-key) ~parameter-name)
-                          :value value#})))
-       (when (identical? value# ALL)
-         (throw (ex-info "ALL is not allowed in collection binding."
-                         {:parameter (~(var parameter-key) ~parameter-name)
-                          :value value#})))
-       (when-not (sequential? value#)
-         (throw (ex-info "Collection binding requires a sequential value."
-                         {:parameter (~(var parameter-key) ~parameter-name)
-                          :value value#})))
-       (when (some #(identical? % DEFAULT) value#)
-         (throw (ex-info "DEFAULT is not allowed inside collection binding."
-                         {:parameter (~(var parameter-key) ~parameter-name)
-                          :value value#})))
-       (when (some #(identical? % ALL) value#)
-         (throw (ex-info "ALL is not allowed inside collection binding."
-                         {:parameter (~(var parameter-key) ~parameter-name)
-                          :value value#})))
-       (when (some #(~(var like-pattern?) %) value#)
-         (throw (ex-info "LIKE helpers are not allowed inside collection binding."
-                         {:parameter (~(var parameter-key) ~parameter-name)
-                          :value value#})))
-       (when (empty? value#)
-         (throw (ex-info "Collection binding does not allow empty values."
-                         {:parameter (~(var parameter-key) ~parameter-name)})))
-       (.append ~out-sym "(")
-       (.append ~out-sym ^String (str/join ", " (repeat (count value#) "?")))
-       (.append ~out-sym ")")
-       (reduce conj! ~bind-params-sym value#)
-       false)
-    `(let [value# (~(var parameter-value) ~params-sym ~parameter-name)]
-       (cond
-         (identical? value# DEFAULT)
-         (do
-           (.append ~out-sym "DEFAULT")
-           false)
+  [parameter-name collection? default-sql out-sym bind-params-sym params-sym]
+  (if default-sql
+    `(if (~(var parameter-missing?) ~params-sym ~parameter-name)
+       (do
+         (.append ~out-sym ^String ~default-sql)
+         false)
+       ~(emit-bind-variable-step-form parameter-name collection? nil out-sym bind-params-sym params-sym))
+    (if collection?
+      `(let [value# (~(var parameter-value) ~params-sym ~parameter-name)]
+         (when (identical? value# DEFAULT)
+           (throw (ex-info "DEFAULT is not allowed in collection binding."
+                           {:parameter (~(var parameter-key) ~parameter-name)
+                            :value value#})))
+         (when (identical? value# ALL)
+           (throw (ex-info "ALL is not allowed in collection binding."
+                           {:parameter (~(var parameter-key) ~parameter-name)
+                            :value value#})))
+         (when-not (sequential? value#)
+           (throw (ex-info "Collection binding requires a sequential value."
+                           {:parameter (~(var parameter-key) ~parameter-name)
+                            :value value#})))
+         (when (some #(identical? % DEFAULT) value#)
+           (throw (ex-info "DEFAULT is not allowed inside collection binding."
+                           {:parameter (~(var parameter-key) ~parameter-name)
+                            :value value#})))
+         (when (some #(identical? % ALL) value#)
+           (throw (ex-info "ALL is not allowed inside collection binding."
+                           {:parameter (~(var parameter-key) ~parameter-name)
+                            :value value#})))
+         (when (some #(~(var like-pattern?) %) value#)
+           (throw (ex-info "LIKE helpers are not allowed inside collection binding."
+                           {:parameter (~(var parameter-key) ~parameter-name)
+                            :value value#})))
+         (when (empty? value#)
+           (throw (ex-info "Collection binding does not allow empty values."
+                           {:parameter (~(var parameter-key) ~parameter-name)})))
+         (.append ~out-sym "(")
+         (.append ~out-sym ^String (str/join ", " (repeat (count value#) "?")))
+         (.append ~out-sym ")")
+         (reduce conj! ~bind-params-sym value#)
+         false)
+      `(let [value# (~(var parameter-value) ~params-sym ~parameter-name)]
+         (cond
+           (identical? value# DEFAULT)
+           (do
+             (.append ~out-sym "DEFAULT")
+             false)
 
-         (identical? value# ALL)
-         (do
-           (.append ~out-sym "ALL")
-           false)
+           (identical? value# ALL)
+           (do
+             (.append ~out-sym "ALL")
+             false)
 
-         (~(var like-pattern?) value#)
-         (do
-           (.append ~out-sym "?")
-           (conj! ~bind-params-sym (~(var render-like-pattern-value) value# ~parameter-name))
-           false)
+           (~(var like-pattern?) value#)
+           (do
+             (.append ~out-sym "?")
+             (conj! ~bind-params-sym (~(var render-like-pattern-value) value# ~parameter-name))
+             false)
 
-         :else
-         (do
-           (.append ~out-sym "?")
-           (conj! ~bind-params-sym value#)
-           false)))))
+           :else
+           (do
+             (.append ~out-sym "?")
+             (conj! ~bind-params-sym value#)
+             false))))))
 
 (defn- emit-literal-variable-step-form
   [parameter-name out-sym params-sym]
@@ -1269,13 +1315,14 @@
   (let [parameter-name (:parameter-name step)
         sigil (:sigil step)
         collection? (:collection? step)
+        default-sql (:default-sql step)
         context (variable-context parameter-name sigil collection?)]
     `(do
        (when ~skip-leading-operator-sym
          (~(var remove-trailing-clause-keyword) ~out-sym))
        (try
          ~(case sigil
-            "$" (emit-bind-variable-step-form parameter-name collection? out-sym bind-params-sym params-sym)
+            "$" (emit-bind-variable-step-form parameter-name collection? default-sql out-sym bind-params-sym params-sym)
             "^" (emit-literal-variable-step-form parameter-name out-sym params-sym)
             "!" (emit-raw-variable-step-form parameter-name out-sym params-sym))
          (catch #?(:clj clojure.lang.ExceptionInfo :cljs :default) ex#

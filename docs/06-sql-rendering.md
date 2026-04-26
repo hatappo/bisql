@@ -58,6 +58,32 @@ WHERE id = /*$id*/1
  :params [42]}
 ```
 
+## Bind Defaults
+
+`default-to` lets a `$` bind variable fall back to the sample SQL fragment when
+the parameter is missing:
+
+```sql
+VALUES (/*$id default-to */DEFAULT)
+```
+
+With `{:id 42}`, this renders as a normal bind:
+
+```clojure
+{:sql "VALUES (?)"
+ :params [42]}
+```
+
+With no `:id`, the sample SQL fragment is kept:
+
+```clojure
+{:sql "VALUES (DEFAULT)"
+ :params []}
+```
+
+Passing `nil` is still explicit and renders as a bind param, not as the fallback.
+`default-to` currently applies only to `$` bind variables.
+
 ## Collection Binding
 
 ```sql

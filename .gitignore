@@ -1,9 +1,14 @@
 .DS_Store
 
+tmp/
+
 target/
 
+# Clojure
 .cpcache/
+.lsp/.cache/
 .clj-kondo/.cache/
+.clj-kondo/imports/
 
 # Bisql generated files
 src/sql/**/*.sql
@@ -12,7 +17,6 @@ src/sql/**/*.clj
 # Bisql config file
 bisql.edn
 
-tmp/
 
 # Playground build outputs
 pages/generated/

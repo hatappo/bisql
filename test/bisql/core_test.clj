@@ -236,6 +236,39 @@
     (is (= "SELECT * FROM users WHERE id = ?" (:sql result)))
     (is (= [42] (:params result)))))
 
+(deftest render-query-supports-bind-default-to
+  (testing "missing parameter leaves the sample SQL fragment in place"
+    (let [result (bisql/render-query
+                  {:sql-template "INSERT INTO users (id) VALUES (/*$id default-to */DEFAULT)"}
+                  {})]
+      (is (= "INSERT INTO users (id) VALUES (DEFAULT)" (:sql result)))
+      (is (= [] (:params result)))))
+  (testing "present parameter still uses a bind variable"
+    (let [result (bisql/render-query
+                  {:sql-template "INSERT INTO users (id) VALUES (/*$id default-to */DEFAULT)"}
+                  {:id 42})]
+      (is (= "INSERT INTO users (id) VALUES (?)" (:sql result)))
+      (is (= [42] (:params result)))))
+  (testing "nil parameter is explicit and does not fall back"
+    (let [result (bisql/render-query
+                  {:sql-template "INSERT INTO users (id) VALUES (/*$id default-to */DEFAULT)"}
+                  {:id nil})]
+      (is (= "INSERT INTO users (id) VALUES (?)" (:sql result)))
+      (is (= [nil] (:params result)))))
+  (testing "fallback can be any sample SQL fragment"
+    (let [result (bisql/render-query
+                  {:sql-template "SELECT * FROM users WHERE created_at < /*$created-at default-to */CURRENT_TIMESTAMP"}
+                  {})]
+      (is (= "SELECT * FROM users WHERE created_at < CURRENT_TIMESTAMP" (:sql result)))
+      (is (= [] (:params result))))))
+
+(deftest render-query-supports-collection-bind-default-to
+  (let [result (bisql/render-query
+                {:sql-template "SELECT * FROM users WHERE id IN /*$ids default-to */(1,2,3)"}
+                {})]
+    (is (= "SELECT * FROM users WHERE id IN (1,2,3)" (:sql result)))
+    (is (= [] (:params result)))))
+
 (deftest evaluate-renderer-matches-render-query-for-scalar-bind
   (let [sql-template "SELECT * FROM users WHERE id = /*$id*/1"
         parsed-template (bisql/parse-template sql-template)
@@ -259,6 +292,16 @@
         renderer (bisql/compile-renderer parsed-template)
         rendered (renderer {:id 42})
         result (bisql/render-query {:sql-template sql-template} {:id 42})]
+    (is (fn? renderer))
+    (is (= (:sql result) (str/trim (:sql rendered))))
+    (is (= (:params result) (:bind-params rendered)))))
+
+(deftest compile-renderer-matches-render-query-for-bind-default-to
+  (let [sql-template "INSERT INTO users (id) VALUES (/*$id default-to */DEFAULT)"
+        parsed-template (bisql/parse-template sql-template)
+        renderer (bisql/compile-renderer parsed-template)
+        rendered (renderer {})
+        result (bisql/render-query {:sql-template sql-template} {})]
     (is (fn? renderer))
     (is (= (:sql result) (str/trim (:sql rendered))))
     (is (= (:params result) (:bind-params rendered)))))
@@ -453,6 +496,13 @@
     (is (= "SELECT * FROM users ORDER BY /*!order-by*/ column_name" (:sql result)))
     (is (= [] (:params result)))))
 
+(deftest render-query-does-not-recognize-bind-default-to-without-adjacent-sample
+  (let [result (bisql/render-query
+                {:sql-template "INSERT INTO users (id) VALUES (/*$id default-to */ DEFAULT)"}
+                {})]
+    (is (= "INSERT INTO users (id) VALUES (/*$id default-to */ DEFAULT)" (:sql result)))
+    (is (= [] (:params result)))))
+
 (deftest render-query-reports-missing-query-parameter-name
   (let [error (try
                 (bisql/render-query
@@ -503,6 +553,19 @@
            (ex-message error)))
     (is (= :type (:parameter (ex-data error))))
     (is (= :book (:value (ex-data error))))))
+
+(deftest render-query-rejects-default-to-for-literal-and-raw-variables
+  (doseq [[sql-template parameter]
+          [["SELECT * FROM users WHERE type = /*^type default-to */'BOOK'" :type]
+           ["SELECT * FROM users ORDER BY /*!order-by default-to */created_at" :order-by]]]
+    (let [error (try
+                  (bisql/render-query {:sql-template sql-template} {})
+                  nil
+                  (catch clojure.lang.ExceptionInfo ex
+                    ex))]
+      (is (= "default-to is only supported for bind variables."
+             (ex-message error)))
+      (is (= parameter (:parameter (ex-data error)))))))
 
 (deftest render-query-adds-variable-context-to-collection-errors
   (let [error (try
