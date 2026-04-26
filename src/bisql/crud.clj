@@ -31,17 +31,27 @@
         (str/includes? column_name "state")) "'sample'"
     :else "'sample'"))
 
+(defn- defaultable-column?
+  [column]
+  (or (some? (:column_default column))
+      (= "YES" (:is_identity column))))
+
 (defn- bind-comment
   ([column]
    (bind-comment nil column))
   ([parameter-prefix column]
+   (bind-comment parameter-prefix column nil))
+  ([parameter-prefix column {:keys [default-to?]}]
    (let [segments (cond-> []
                     parameter-prefix (conj parameter-prefix)
                     true (conj (kebab-name (:column_name column))))]
      (str "/*$"
           (str/join "." segments)
+          (when default-to? " default-to ")
           "*/"
-          (sample-token column)))))
+          (if default-to?
+            "DEFAULT"
+            (sample-token column))))))
 
 (defn- bind-comment-with-sample
   [parameter-path sample-column]
@@ -384,7 +394,7 @@
     "VALUES ("
     (str/join "\n" (map-indexed (fn [idx column]
                                   (str "  "
-                                       (bind-comment column)
+                                       (bind-comment nil column {:default-to? (:insert-default-to? column)})
                                        (when (< idx (dec (count columns))) ",")))
                                 columns))
     ")"
@@ -406,8 +416,7 @@
     "("
     (str/join "\n" (map-indexed (fn [idx column]
                                   (str "  "
-                                       "/*$row." (kebab-name (:column_name column)) "*/"
-                                       (sample-token column)
+                                       (bind-comment "row" column {:default-to? (:insert-default-to? column)})
                                        (when (< idx (dec (count columns))) ",")))
                                 columns))
     ")"
@@ -471,8 +480,9 @@
                              :meta {:cardinality :many})])))
 
 (defn- upsert-template
-  [table constraint-name insert-columns update-columns]
-  (let [update-lines (when (seq update-columns)
+  [table constraint-name conflict-column-names insert-columns update-columns]
+  (let [conflict-column-names (set conflict-column-names)
+        update-lines (when (seq update-columns)
                        [(nested-dynamic-set-clause (last update-columns))])]
     (str/join
      "\n"
@@ -487,7 +497,11 @@
        "VALUES ("
        (str/join "\n" (map-indexed (fn [idx column]
                                      (str "  "
-                                          (bind-comment "inserts" column)
+                                          (bind-comment "inserts"
+                                                        column
+                                                        {:default-to? (and (:insert-default-to? column)
+                                                                           (not (contains? conflict-column-names
+                                                                                           (:column_name column))))})
                                           (when (< idx (dec (count insert-columns))) ",")))
                                    insert-columns))
        ")"
@@ -512,7 +526,11 @@
                                         :upsert
                                         (str "upsert-by-" (joined-name column_names))
                                         column_names
-                                        (upsert-template table constraint_name insert-columns update-columns)
+                                        (upsert-template table
+                                                         constraint_name
+                                                         column_names
+                                                         insert-columns
+                                                         update-columns)
                                         :meta {:cardinality :one}
                                         :set-columns (mapv :column_name update-columns)))))
          vec)))
@@ -692,11 +710,6 @@
   [column]
   (= "YES" (:is_nullable column)))
 
-(defn- defaultable-column?
-  [column]
-  (or (some? (:column_default column))
-      (= "YES" (:is_identity column))))
-
 (defn- column-schema-leaf
   [{:keys [data_type]}]
   (case data_type
@@ -745,7 +758,8 @@
   [columns derive?]
   (if derive?
     ['row
-     '(bisql.schema/malli-map-all-entries-strip-default-sentinel insert)]
+     '(bisql.schema/malli-map-all-entries-required
+       (bisql.schema/malli-map-all-entries-strip-default-sentinel insert))]
     ['row
      (map-schema-form
       (mapv (fn [column]
@@ -753,14 +767,23 @@
                               (column-value-schema-form column)))
             columns))]))
 
+(defn- insert-schema-form
+  ([columns]
+   (insert-schema-form columns nil))
+  ([columns required-column-names]
+   (let [required-column-names (set required-column-names)]
+     (map-schema-form
+      (mapv (fn [column]
+              (map-entry-form (column-keyword (:column_name column))
+                              (column-value-schema-form column :allow-default? true)
+                              (and (:insert-default-to? column)
+                                   (not (contains? required-column-names
+                                                   (:column_name column))))))
+            (filterv insertable-column? columns))))))
+
 (defn- insert-schema-definition
   [columns]
-  ['insert
-   (map-schema-form
-    (mapv (fn [column]
-            (map-entry-form (column-keyword (:column_name column))
-                            (column-value-schema-form column :allow-default? true)))
-          (filterv insertable-column? columns)))])
+  ['insert (insert-schema-form columns)])
 
 (defn- update-schema-definition
   [_columns derive?]
@@ -799,10 +822,19 @@
     [:updates (schema-var-symbol dialect schema table 'update)]]))
 
 (defn- upsert-params-schema-form
-  [dialect schema table set-column-names]
-  (cond-> (map-schema-form [[:inserts (schema-var-symbol dialect schema table 'insert)]])
-    (seq set-column-names)
-    (conj [:updates [:maybe (schema-var-symbol dialect schema table 'update)]])))
+  [dialect schema table columns conflict-column-names set-column-names]
+  (let [conflict-column-names (set conflict-column-names)
+        conflict-needs-required-insert-schema?
+        (some (fn [column]
+                (and (:insert-default-to? column)
+                     (contains? conflict-column-names (:column_name column))))
+              columns)
+        inserts-schema (if conflict-needs-required-insert-schema?
+                         (insert-schema-form columns conflict-column-names)
+                         (schema-var-symbol dialect schema table 'insert))]
+    (cond-> (map-schema-form [[:inserts inserts-schema]])
+      (seq set-column-names)
+      (conj [:updates [:maybe (schema-var-symbol dialect schema table 'update)]]))))
 
 (defn- query-schema-definitions
   [columns {:keys [derive-schemas?]
@@ -823,7 +855,7 @@
              definitions))))
 
 (defn- template-input-schema-form
-  [dialect schema table columns-by-name template]
+  [dialect schema table columns columns-by-name template]
   (case (:kind template)
     :insert (if (= (:name template) "crud.insert-many")
               (map-schema-form [[:rows [:sequential (schema-var-symbol dialect schema table 'insert)]]])
@@ -833,7 +865,7 @@
     :delete (simple-params-schema-form columns-by-name (:columns template))
     :list (list-params-schema-form columns-by-name (:columns template))
     :update (update-params-schema-form dialect schema table columns-by-name (:columns template))
-    :upsert (upsert-params-schema-form dialect schema table (:set-columns template))))
+    :upsert (upsert-params-schema-form dialect schema table columns (:columns template) (:set-columns template))))
 
 (defn- template-output-schema-form
   [dialect schema table template]
@@ -849,13 +881,14 @@
   [dialect schema columns-by-table templates]
   (mapv (fn [template]
           (let [table (:table template)
+                columns (get columns-by-table table)
                 columns-by-name (into {} (map (juxt :column_name identity)
-                                              (get columns-by-table table)))]
+                                              columns))]
             (update template
                     :meta
                     (fn [meta]
                       (assoc (or meta {})
-                             :malli/in (template-input-schema-form dialect schema table columns-by-name template)
+                             :malli/in (template-input-schema-form dialect schema table columns columns-by-name template)
                              :malli/out (template-output-schema-form dialect schema table template))))))
         templates))
 
@@ -995,6 +1028,23 @@
                             (remove :is_unique)
                             (group-by :table_name))}))
 
+(defn- primary-key-column-name-set
+  [constraints]
+  (->> constraints
+       (filter #(= "PRIMARY KEY" (:constraint_type %)))
+       (mapcat :column_names)
+       set))
+
+(defn- annotate-insert-default-to-columns
+  [columns constraints]
+  (let [primary-key-column-names (primary-key-column-name-set constraints)]
+    (mapv (fn [column]
+            (cond-> column
+              (and (contains? primary-key-column-names (:column_name column))
+                   (defaultable-column? column))
+              (assoc :insert-default-to? true)))
+          columns)))
+
 (defn generate-crud
   "Generates minimal SQL templates from PostgreSQL schema metadata.
    Initial implementation generates get-by-* and list-by-* templates."
@@ -1004,6 +1054,12 @@
               schema "public"}} options
         {:keys [columns-by-table constraints-by-table indexes-by-table]}
         (load-schema-metadata datasource schema)
+        columns-by-table (into {}
+                               (map (fn [[table columns]]
+                                      [table (annotate-insert-default-to-columns
+                                              columns
+                                              (get constraints-by-table table []))]))
+                               columns-by-table)
         generated-templates
         (->> columns-by-table
              (mapcat

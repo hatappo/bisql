@@ -125,7 +125,7 @@
                       "  created_at\n"
                       ")\n"
                       "VALUES (\n"
-                      "  /*$id*/1,\n"
+                      "  /*$id default-to */DEFAULT,\n"
                       "  /*$user-id*/1,\n"
                       "  /*$order-number*/'sample',\n"
                       "  /*$state*/'sample',\n"
@@ -158,7 +158,7 @@
                       "VALUES\n"
                       "/*%for row in rows separating , */\n"
                       "(\n"
-                      "  /*$row.id*/1,\n"
+                      "  /*$row.id default-to */DEFAULT,\n"
                       "  /*$row.user-id*/1,\n"
                       "  /*$row.order-number*/'sample',\n"
                       "  /*$row.state*/'sample',\n"
@@ -176,7 +176,12 @@
           (is (= :one (get-in template [:meta :cardinality])))
           (is (= [:map
                   {:closed true}
-                  [:inserts 'sql.postgresql.public.users.schema/insert]
+                  [:inserts [:map
+                             {:closed true}
+                             [:id [:or 'int? 'bisql.schema/malli-default-sentinel]]
+                             [:email 'string?]
+                             [:display-name 'string?]
+                             [:status 'string?]]]
                   [:updates [:maybe 'sql.postgresql.public.users.schema/update]]]
                  (get-in template [:meta :malli/in])))
           (is (= 'sql.postgresql.public.users.schema/row
@@ -195,6 +200,39 @@
                       "  /*$inserts.status*/'sample'\n"
                       ")\n"
                       "ON CONFLICT ON CONSTRAINT users_pkey\n"
+                      "/*%if updates */\n"
+                      "DO UPDATE\n"
+                      "SET\n"
+                      "  /*%for item in updates separating , */\n"
+                      "    /*!item.name*/status = /*$item.value*/'sample'\n"
+                      "  /*%end */\n"
+                      "/*%else => DO NOTHING */\n"
+                      "/*%end */\n"
+                      "RETURNING *")
+                 (:sql-template template)))))
+      (testing "upsert allows defaultable primary key fallback outside the conflict target"
+        (let [template (some #(when (and (= "users" (:table %))
+                                         (= "crud.upsert-by-email" (:name %)))
+                                %)
+                             templates)]
+          (is (= [:map
+                  {:closed true}
+                  [:inserts 'sql.postgresql.public.users.schema/insert]
+                  [:updates [:maybe 'sql.postgresql.public.users.schema/update]]]
+                 (get-in template [:meta :malli/in])))
+          (is (= (str "INSERT INTO users (\n"
+                      "  id,\n"
+                      "  email,\n"
+                      "  display_name,\n"
+                      "  status\n"
+                      ")\n"
+                      "VALUES (\n"
+                      "  /*$inserts.id default-to */DEFAULT,\n"
+                      "  /*$inserts.email*/'user@example.com',\n"
+                      "  /*$inserts.display-name*/'sample',\n"
+                      "  /*$inserts.status*/'sample'\n"
+                      ")\n"
+                      "ON CONFLICT ON CONSTRAINT users_email_key\n"
                       "/*%if updates */\n"
                       "DO UPDATE\n"
                       "SET\n"
@@ -597,7 +635,7 @@
            (slurp output-file)))
     (is (str/includes? (slurp schema-file) "(ns sql.postgresql.public.users.schema"))
     (is (str/includes? (slurp schema-file)
-                       "(bisql.schema/malli-map-all-entries-strip-default-sentinel insert)"))
+                       "(bisql.schema/malli-map-all-entries-required\n   (bisql.schema/malli-map-all-entries-strip-default-sentinel insert))"))
     (is (str/includes? (slurp schema-file) "(def row"))
     (is (str/includes? (slurp schema-file) "(def insert"))
     (is (str/includes? (slurp schema-file) "(def update"))

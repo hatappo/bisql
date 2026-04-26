@@ -67,6 +67,22 @@
                      [k {:optional true} maybe-opts]))))
           entries)))
 
+(defn malli-map-all-entries-required
+  [schema-form]
+  (let [[tag opts entries]
+        (split-map-schema-form schema-form
+                               "malli-map-all-entries-required requires a :map schema form.")]
+    (into [tag opts]
+          (map (fn [entry]
+                 (let [[k maybe-opts schema] entry]
+                   (if (map? maybe-opts)
+                     (let [entry-opts (dissoc maybe-opts :optional)]
+                       (if (seq entry-opts)
+                         [k entry-opts schema]
+                         [k schema]))
+                     entry))))
+          entries)))
+
 (defn- malli-strip-default-sentinel
   [schema-form]
   (if (and (vector? schema-form)

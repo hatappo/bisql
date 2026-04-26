@@ -106,6 +106,18 @@ Generated upserts follow the same idea:
 - `:inserts` contains the insert path values
 - `:updates` contains the conflict update assignments
 
+For insert-style generated templates, defaultable primary key columns use
+`default-to` with `DEFAULT`:
+
+```sql
+/*$id default-to */DEFAULT
+```
+
+This applies to `insert`, `insert-many`, and upserts where the defaultable primary
+key is not part of the conflict target. In an upsert such as `upsert-by-id`, the
+conflict target column remains a required bind value because it defines what the
+upsert is matching.
+
 If `:updates` is `nil`, the generated upsert renders `DO NOTHING`.
 If `:updates` is an empty map, rendering still fails because an empty `SET`
 clause is not allowed.

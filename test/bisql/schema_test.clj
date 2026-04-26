@@ -29,6 +29,28 @@
          (schema/malli-map-all-entries-optional
           [:vector int?])))))
 
+(deftest malli-map-all-entries-required-removes-optional-flags
+  (testing "optional flags are removed from existing options maps"
+    (is (= [:map {:closed true}
+            [:id {:title "ID"} int?]
+            [:email string?]]
+           (schema/malli-map-all-entries-required
+            [:map {:closed true}
+             [:id {:title "ID" :optional true} int?]
+             [:email {:optional true} string?]]))))
+  (testing "entries without options are preserved"
+    (is (= [:map {:closed true}
+            [:id int?]]
+           (schema/malli-map-all-entries-required
+            [:map {:closed true}
+             [:id int?]]))))
+  (testing "non-map schemas are rejected"
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo
+         #"requires a :map schema form"
+         (schema/malli-map-all-entries-required
+          [:vector int?])))))
+
 (deftest malli-map-all-entries-strip-default-sentinel-removes-default-sentinel-branches
   (testing "two-element map entries drop default sentinel from :or"
     (is (= [:map {:closed true}
