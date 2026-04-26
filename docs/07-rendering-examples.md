@@ -8,7 +8,7 @@
 
 ## 1. Variables
 
-### 1-1: bind values 
+### 1-1: bind values
 
 1. Input Form:
 ```clj
@@ -31,7 +31,7 @@ SELECT * FROM users WHERE id = ?
 
 `/*$ */` comments become bind variables. The sample value must be written immediately after the comment, as in `/*$id*/1`.
 
-### 1-2: literal values 
+### 1-2: literal values
 
 1. Input Form:
 ```clj
@@ -54,7 +54,7 @@ SELECT * FROM users WHERE type = 'BOOK'
 
 `^` is rendered as a SQL literal. Strings are quoted with `'`.
 
-### 1-3: raw values 
+### 1-3: raw values
 
 1. Input Form:
 ```clj
@@ -77,7 +77,7 @@ SELECT * FROM users ORDER BY created_at DESC
 
 `!` is inserted into SQL as-is. It is useful for cases like `ORDER BY`, but it must not be fed directly from user input.
 
-### 1-4: DEFAULT bind value 
+### 1-4: DEFAULT bind value
 
 1. Input Form:
 ```clj
@@ -102,7 +102,30 @@ VALUES (?, DEFAULT)
 
 `bisql/DEFAULT` is rendered as the SQL keyword `DEFAULT` instead of a bind parameter. This is useful in `VALUES` clauses.
 
-### 1-5: ALL bind value 
+### 1-5: default-to fallback
+
+1. Input Form:
+```clj
+(render {:sql-template "INSERT INTO users (id, email) VALUES (/*$id default-to */DEFAULT, /*$email*/'user@example.com')"} {:email "alice@example.com"})
+```
+
+2. Input SQL:
+```sql
+INSERT INTO users (id, email) VALUES (/*$id default-to */DEFAULT, /*$email*/'user@example.com')
+```
+
+3. Output SQL and Params:
+```sql
+INSERT INTO users (id, email) VALUES (DEFAULT, ?)
+```
+
+```clj
+{:params ["alice@example.com"]}
+```
+
+`default-to` lets a missing `$` parameter fall back to the sample SQL fragment. Passing `nil` is still explicit and does not use the fallback.
+
+### 1-6: ALL bind value
 
 1. Input Form:
 ```clj
@@ -129,7 +152,7 @@ LIMIT ALL
 
 `bisql/ALL` is rendered as the SQL keyword `ALL` instead of a bind parameter. This is useful in clauses such as `LIMIT ALL`.
 
-### 1-6: LIKE contains helper 
+### 1-7: LIKE contains helper
 
 1. Input Form:
 ```clj
@@ -158,7 +181,7 @@ WHERE name LIKE ? ESCAPE '\'
 
 ## 2. Control flow
 
-### 2-1: if 
+### 2-1: if
 
 1. Input Form:
 ```clj
@@ -180,7 +203,7 @@ SELECT * FROM users  WHERE id = ?
 ```
 
 
-### 2-2: remove WHERE for falsy if 
+### 2-2: remove WHERE for falsy if
 
 1. Input Form:
 ```clj
@@ -209,7 +232,7 @@ FROM users
 
 When the condition is false, the preceding `WHERE` or `HAVING` keyword is removed automatically.
 
-### 2-3: remove following AND for falsy if 
+### 2-3: remove following AND for falsy if
 
 1. Input Form:
 ```clj
@@ -241,7 +264,7 @@ status = ?
 
 When the condition is false, a following `AND` is removed automatically. In this case, the preceding `WHERE` or `HAVING` remains in place.
 
-### 2-4: elseif and else 
+### 2-4: elseif and else
 
 1. Input Form:
 ```clj
@@ -275,7 +298,7 @@ WHERE
 ```
 
 
-### 2-5: inline elseif and else 
+### 2-5: inline elseif and else
 
 1. Input Form:
 ```clj
@@ -308,7 +331,7 @@ status = 'pending'
 
 `else` and `elseif` bodies can also be written inline inside the directive comment by using `=>`. This keeps the template closer to executable SQL.
 
-### 2-6: conditional expressions 
+### 2-6: conditional expressions
 
 1. Input Form:
 ```clj
@@ -341,7 +364,7 @@ WHERE
 
 `if` and `elseif` conditions can use a small expression language with `and`, `or`, parentheses, and comparison operators. Operands are parameter references.
 
-### 2-7: for 
+### 2-7: for
 
 1. Input Form:
 ```clj
@@ -375,7 +398,7 @@ WHERE id = ?
 
 ## 3. Declarations
 
-### 3-1: docstring and metadata 
+### 3-1: docstring and metadata
 
 1. Input Form:
 ```clj
@@ -410,7 +433,7 @@ SELECT * FROM users WHERE id = ?
 
 `/*: */` defines metadata entries for the generated Clojure function, keyed by keywords. `/*:doc */` is a special case: unlike other declarations, it can be written as inline text instead of EDN.
 
-### 3-2: multiple SQL templates in one file 
+### 3-2: multiple SQL templates in one file
 
 1. Input Form:
 ```clj
@@ -436,7 +459,7 @@ A single SQL file can contain multiple templates. Each template starts with a `/
 
 ## 4. Others
 
-### 4-1: join 
+### 4-1: join
 
 1. Input Form:
 ```clj
@@ -481,7 +504,7 @@ LIMIT ?
 
 Templates can use ordinary `JOIN` clauses. Bisql only replaces the parameterized parts and leaves the SQL structure intact.
 
-### 4-2: render query by passing a SQL template directly 
+### 4-2: render query by passing a SQL template directly
 
 1. Input Form:
 ```clj
@@ -504,7 +527,7 @@ SELECT * FROM users WHERE id = ?
 
 You can also pass a SQL template directly from Clojure code. This is useful for debugging or learning, but application queries should generally live in SQL files.
 
-### 4-3: Errors: missing bind parameter 
+### 4-3: Errors: missing bind parameter
 
 1. Input Form:
 ```clj

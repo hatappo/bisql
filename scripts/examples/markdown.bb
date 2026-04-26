@@ -125,7 +125,9 @@
 (defn show-example
   [{:keys [title description] :as example}]
   (let [result (execute-example example)]
-    (println (str "\n### " title) "\n")
+    (println)
+    (println (str "### " title))
+    (println)
     (print-code-block "1. Input Form" "clj" (call-form-lines example))
     (when-let [lines (seq (input-sql-lines example))]
       (print-code-block "2. Input SQL" "sql" lines))
@@ -154,7 +156,9 @@
                 nil
                 (catch clojure.lang.ExceptionInfo ex
                   ex))]
-    (println (str "\n### " title) "\n")
+    (println)
+    (println (str "### " title))
+    (println)
     (print-code-block "1. Input Form" "clj" (call-form-lines example))
     (when-let [lines (seq (input-sql-lines example))]
       (print-code-block "2. Input SQL" "sql" lines))

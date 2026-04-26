@@ -28,14 +28,20 @@
              :resource "demo-variables-default.sql"
              :params {:email "alice@example.com"
                       :status bisql/DEFAULT}}}
+    {:id "default-to"
+     :title "1-5: default-to fallback"
+     :description "`default-to` lets a missing `$` parameter fall back to the sample SQL fragment. Passing `nil` is still explicit and does not use the fallback."
+     :input {:kind :direct-template
+             :sql-template "INSERT INTO users (id, email) VALUES (/*$id default-to */DEFAULT, /*$email*/'user@example.com')"
+             :params {:email "alice@example.com"}}}
     {:id "all-value"
-     :title "1-5: ALL bind value"
+     :title "1-6: ALL bind value"
      :description "`bisql/ALL` is rendered as the SQL keyword `ALL` instead of a bind parameter. This is useful in clauses such as `LIMIT ALL`."
      :input {:kind :resource
              :resource "demo-variables-all.sql"
              :params {:limit bisql/ALL}}}
     {:id "like-contains"
-     :title "1-6: LIKE contains helper"
+     :title "1-7: LIKE contains helper"
      :description "`bisql/LIKE_CONTAINS` adds surrounding `%` characters and escapes `%`, `_`, and `\\`. Write `ESCAPE '\\'` in SQL when you want the behavior to be explicit."
      :input {:kind :resource
              :resource "demo-variables-like.sql"
